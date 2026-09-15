@@ -15,6 +15,11 @@ const SFX_SAMPLES = {
   crowd: 'crowd.mp3',         // 관중 앰비언스 (경기 중 루프)
   lightning: 'lightning.mp3', // 뎀프시롤 좌우 훅마다 터지는 번개
   block: 'block.mp3',         // 가드로 막았을 때
+  dodge: 'dodge.mp3',         // 회피 (주먹이 허공을 가름)
+  beep: 'beep.mp3',           // 카운트다운 3·2·1·FIGHT
+  riser: 'riser.mp3',         // 뎀프시 게이지 단계 상승 · 가드 브레이크
+  charge: 'charge.mp3',       // 필살기 차지
+  engine: 'engine.mp3',       // 오토바이 필살 (뼈석원)
 };
 
 export class AudioManager {
@@ -64,6 +69,26 @@ export class AudioManager {
     if (p) { p.pan.value = Math.max(-1, Math.min(1, pan * 0.5)); src.connect(g); g.connect(p); p.connect(this.master); }
     else { src.connect(g); g.connect(this.master); }
     src.start(t);
+    return true;
+  }
+
+  /**
+   * 단발 샘플 재생 공용 헬퍼. 합성음을 샘플로 갈아끼운 메서드들이 공통으로 쓴다.
+   * @returns 샘플을 재생했으면 true (false 면 호출부가 기존 합성음으로 대체)
+   */
+  _play(key, { gain = 1, rate = 1, jitter = 0, pan = 0 } = {}) {
+    const buf = this.sfx && this.sfx[key];
+    if (!this.ctx || !buf) return false;
+    const ctx = this.ctx;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = rate * (jitter ? 1 - jitter / 2 + Math.random() * jitter : 1);
+    const g = ctx.createGain();
+    g.gain.value = gain;
+    const p = pan && ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    if (p) { p.pan.value = Math.max(-1, Math.min(1, pan)); src.connect(g); g.connect(p); p.connect(this.master); }
+    else { src.connect(g); g.connect(this.master); }
+    src.start(ctx.currentTime);
     return true;
   }
 
@@ -246,19 +271,13 @@ export class AudioManager {
     pan.pan.linearRampToValueAtTime(dir * 0.85, t + dur);
     src.connect(bp); bp.connect(g); g.connect(pan); pan.connect(this.master);
     src.start(t); src.stop(t + dur + 0.05);
-    if (max) {
-      // MAX SPEED: 날카로운 고역 휘슬 추가
-      const o = ctx.createOscillator();
-      o.type = 'sine';
-      o.frequency.setValueAtTime(900 * pitch, t);
-      o.frequency.exponentialRampToValueAtTime(2200 * pitch, t + dur * 0.5);
-      const og = ctx.createGain();
-      og.gain.setValueAtTime(0.0001, t);
-      og.gain.exponentialRampToValueAtTime(0.12, t + 0.03);
-      og.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-      o.connect(og); og.connect(pan);
-      o.start(t); o.stop(t + dur);
-    }
+    // (제거됨) MAX SPEED 고역 휘슬 — 호루라기처럼 들려 뺐다. 바람소리만으로 속도감을 낸다.
+  }
+
+  /** 회피: 상대 주먹이 허공을 가를 때 */
+  dodge(dir = 0) {
+    if (this._play('dodge', { gain: 0.8, rate: 1, jitter: 0.12, pan: dir * 0.45 })) return;
+    this.whoosh(dir, 1.6, 0.8, false);   // 샘플 없으면 기존 바람소리
   }
 
   /** 펀치 휘두름 */
@@ -389,6 +408,8 @@ export class AudioManager {
   /** 상승음 (자막 마일스톤 동기) */
   riser(dur = 0.4, vol = 0.3) {
     if (!this.ctx) return;
+    // 샘플은 길이가 고정이라 dur 은 무시하고 vol 만 반영한다
+    if (this._play('riser', { gain: Math.min(1, vol * 2.2) })) return;
     const ctx = this.ctx, t = ctx.currentTime;
     const o = ctx.createOscillator();
     o.type = 'sawtooth';
@@ -419,6 +440,7 @@ export class AudioManager {
   /** 차지 스택 상승음 */
   chargeUp(level = 1) {
     if (!this.ctx) return;
+    if (this._play('charge', { gain: Math.min(1, 0.55 + 0.3 * level), rate: 0.95 + 0.1 * level })) return;
     const ctx = this.ctx, t = ctx.currentTime;
     const o = ctx.createOscillator();
     o.type = 'square';
@@ -515,6 +537,8 @@ export class AudioManager {
   /** 카운트다운 비프 */
   beep(high = false) {
     if (!this.ctx) return;
+    // FIGHT! 은 같은 샘플을 높게 재생해 구분한다
+    if (this._play('beep', { gain: high ? 0.75 : 0.5, rate: high ? 1.5 : 1 })) return;
     const ctx = this.ctx, t = ctx.currentTime;
     const o = ctx.createOscillator(); o.type = 'square'; o.frequency.value = high ? 1320 : 880;
     const g = ctx.createGain(); g.gain.setValueAtTime(0.18, t); g.gain.exponentialRampToValueAtTime(0.001, t + (high ? 0.35 : 0.15));
@@ -555,6 +579,8 @@ export class AudioManager {
   /** 오토바이 엔진 소음 (뼈석원 필살) */
   engine(dur = 1.6) {
     if (!this.ctx) return;
+    // 샘플 길이(1.7초)에 맞춰 재생 속도로 대략 dur 을 맞춘다
+    if (this._play('engine', { gain: 0.8, rate: Math.max(0.7, Math.min(1.6, 1.7 / Math.max(0.6, dur))) })) return;
     const ctx = this.ctx, t = ctx.currentTime;
     const out = ctx.createGain();
     out.gain.setValueAtTime(0.0001, t);

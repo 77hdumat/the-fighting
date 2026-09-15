@@ -16,6 +16,11 @@
 | `crowd.mp3` | Crowd Clapping and Cheering Effect (11325622) | 경기 중 관중 앰비언스 루프 | https://pixabay.com/ko/sound-effects/crowd-clapping-and-cheering-effect-272056/ |
 | `lightning.mp3` | Lightning Strike (DRAGON-STUDIO) | 뎀프시롤 좌우 훅 | https://pixabay.com/ko/sound-effects/lightning-strike-386161/ |
 | `block.mp3` | Slap Hurt Pain Sound Effect (Homemade_SFX) | 가드로 막았을 때 | https://pixabay.com/ko/sound-effects/slap-hurt-pain-sound-effect-262618/ |
+| `dodge.mp3` | Whoosh Blow Flutter Short (freesound_community) | 회피 (주먹이 허공을 가름) | https://pixabay.com/ko/sound-effects/whoosh-blow-flutter-shortwav-14678/ |
+| `beep.mp3` | CountDown Beep (freesound_community) | 카운트다운 3·2·1·FIGHT | https://pixabay.com/sound-effects/id-104007/ |
+| `riser.mp3` | Tension buildup riser v1 HD (MIGHTUSER) | 뎀프시 게이지 단계 상승 · 가드브레이크 | https://pixabay.com/sound-effects/id-270305/ |
+| `charge.mp3` | Energy Charge-Up Full Power (humordome) | 필살기 차지 | https://pixabay.com/sound-effects/id-452848/ |
+| `engine.mp3` | Motorcycle Engine Rev (TanwerAman) | 오토바이 필살 (뼈석원) | https://pixabay.com/sound-effects/id-337867/ |
 
 ## 가공
 
@@ -50,3 +55,15 @@ mp3 인코더 패딩(앞뒤 무음)을 루프 구간에서 제외한다.
 
 6.75초 한 버퍼를 재생 속도 1.0 / 0.873 두 겹으로, 시작 위치를 2.6초 어긋나게 깔아
 반복 주기가 귀에 띄지 않게 만든다. 좌우로도 갈라 놓는다(pan ∓0.35).
+
+
+## 제거한 합성음
+
+- **뎀프시 지속음(드론)** — '위이이잉' 하는 저음. 스웨이 바람소리(whoosh)만 남겼다.
+- **MAX SPEED 휘슬** — `whoosh()` 안의 사인파 1440→3520Hz 스윕. 호루라기처럼 들려서 제거.
+
+## 남은 합성음
+
+`swoosh`(펀치 휘두름), `whoosh`(스웨이 바람), `bassHit`, `stagger`, `ko`, `clang`, `nyang`,
+`shutter`, `cheer`, `maxSpeed`, `guardHeavy`, `finisherWind` — 전부 노이즈/사인/삼각파 계열이라
+'도트음'으로 들리지 않는다. 사각파(square)·톱니파(sawtooth)를 쓰던 것은 모두 샘플로 교체됐다.

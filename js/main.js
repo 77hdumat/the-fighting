@@ -1053,7 +1053,7 @@ class Game {
     }
     if (res.evaded) {
       // ---- 회피: 상대 주먹이 허공을 가른다. 뎀프시롤 회피는 「피함!」 팝업 ----
-      this.audio.whoosh(1, 1.6, 0.8, true);
+      this.audio.dodge(1);
       this.sparks.burst(pos, dir, 6, new THREE.Color(0.7, 0.9, 1), 0.6, 0.3);
       if (target) target.blockGhost = 0.35;
       if (res.roll) {

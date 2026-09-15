@@ -484,7 +484,7 @@ export class UltimateFx {
       b.position.copy(base).add(new THREE.Vector3(0, 1.25 - 0.25 * k * k, 0)).addScaledVector(fwd, 0.62 + 0.5 * k);
       b.rotation.z += dt * (1.2 + 3 * k);
       b.rotation.x += dt * 0.8 * k;
-      if (!it.slipped) { it.slipped = true; this.audio.whoosh(0, 0.6, 0.8, true); }
+      if (!it.slipped) { it.slipped = true; this.audio.dodge(0); }
     } else if (!it.crashed) {
       // ④ 포물선으로 날아가 상대에게 충돌
       const k = Math.min(1, (u - 1.35) / 0.42);
