@@ -431,7 +431,7 @@ export class Fighter {
       if (this.hp <= 0) this._die();
       const heavy = ev.dempsey || ev.heavy || ev.finisher || ev.counter || counter || P >= 0.75;
       this.react.headX = -0.1 - 0.15 * P; this.react.waistX = -0.08 - 0.1 * P;
-      this.knock.copy(ev.dir).multiplyScalar((1.6 + 3.2 * P) * (ev.finisher ? 2.1 : 1));   // 가드해도 크게 밀린다
+      this.knock.copy(ev.dir).multiplyScalar((0.9 + 1.5 * P) * (ev.finisher ? 2.0 : 1));   // 가드는 밀리되 과하지 않게
       this.block = Math.max(this.block, 0.3);
       this.blockShock = Math.max(this.blockShock, heavy ? 1 : 0.4);
       if (heavy) this.blockGhost = 0.4;
@@ -455,9 +455,10 @@ export class Fighter {
       r.headX = -(0.7 + 0.5 * P) * k; r.waistX = -0.45 * k; r.headY = sgn * 0.28;
     }
     // 맞은 충격으로 뒷발이 밀리는 스텝백 (0.22초 동안)
-    this.hitStep = Math.min(1.2, (this.hitStep || 0) + (0.35 + 0.7 * P) * (counter ? 1.6 : 1));
     this.hitStepT = 0.22;
-    this.knock.copy(ev.dir).multiplyScalar((1.9 + 3.4 * P) * (body ? 1.25 : 1) * (counter ? 2.4 : ev.finisher ? 3.6 : 1));
+    const comboScale = 1 / (1 + 0.45 * Math.min(4, this.hitCount));   // 맞을수록 덜 밀린다 → 연타가 이어진다
+    this.hitStep = Math.min(0.7, (this.hitStep || 0) + (0.18 + 0.32 * P) * (counter ? 1.5 : 1) * comboScale);
+    this.knock.copy(ev.dir).multiplyScalar((0.8 + 1.45 * P) * (body ? 1.2 : 1) * (counter ? 1.9 : ev.finisher ? 3.0 : 1) * comboScale);
     this.punch = null; this.queue.length = 0; this.bufferedHook = null;
 
     // ---- 뎀프시 연타 그로기: 롤 훅을 연속으로 맞으면 누적, 4 스택이면 그로기(2초 무방비) ----
@@ -591,7 +592,7 @@ export class Fighter {
     // (자동 전진/거리 유지 제거 — 제자리에서도 롤/스탠스 가능, 이동은 전부 WASD)
     if (this.backstep > 0) { this.backstep -= dt; this.pos.addScaledVector(this.forward, -4.2 * dt); }
     this.pos.addScaledVector(this.knock, dt);
-    this.knock.multiplyScalar(Math.exp(-dt * 6));
+    this.knock.multiplyScalar(Math.exp(-dt * (this.stagger > 0 ? 9 : 6.5)));
     // 띄워짐
     if (this.airY > 0 || this.airV > 0) {
       this.airV -= 14 * dt; this.airY += this.airV * dt;
@@ -831,18 +832,19 @@ export class Fighter {
         const reach = this.reach;
         const stepSpd = pu.step || 3.2;
         if (info.p < 0.28) {
-          // 예비동작: 뒷발로 체중 싣기 (아주 살짝 뒤로)
-          this.pos.addScaledVector(this.forward, -0.5 * dt);
-        } else if (info.p < 0.56 && dist > reach) {
-          // 도움닫기: 거리가 멀수록 크게 파고든다
-          this.pos.addScaledVector(this.forward, Math.min(stepSpd * 1.35, (dist - reach) * 15) * dt);
+          // 예비동작: 뒷발로 체중 싣기 (거의 제자리 — 연타 거리 유지)
+          this.pos.addScaledVector(this.forward, -0.15 * dt);
+        } else if (info.p < 0.7 && dist > reach * 0.8) {
+          // 도움닫기: 거리가 멀수록 크게 파고든다 (경직된 상대는 더 바싹 따라붙는다)
+          const chase = tgt.stagger > 0 || tgt.downT > 0 ? 2.2 : 1.6;
+          this.pos.addScaledVector(this.forward, Math.min(stepSpd * chase, (dist - reach) * 18 * chase) * dt);
         }
       }
       if (pu.t >= pu.dur) { this.punch = null; this.events.push({ type: 'punchEnd', hit: !!pu.hit }); }
       if (!d.active) this.bufferedHook = null;
       if (!pu.hit && info.p > (pu.kind ? 0.24 : 0.3) && info.p < 0.66) {
         this._applyNow(p);
-        const radius = 0.7 * (pu.hitRadius || (pu.type === 'flicker' ? (st === 'flicker' && d.active ? 0.55 : 0.48) : pu.kind ? 0.62 : 0.42));
+        const radius = 0.85 * (pu.hitRadius || (pu.type === 'flicker' ? (st === 'flicker' && d.active ? 0.55 : 0.48) : pu.kind ? 0.62 : 0.42));
         hitEvent = tryHit(pu.side, radius, (tg, h) => { pu.hit = true; return { attacker: this, target: tg, side: pu.side, type: pu.type, power: pu.power, pos: h.point.clone(), zone: pu.zoneForce || h.zone, dir: this.forward.clone(), maxSpeed: d.maxSpeed, dempsey: d.active, finisher: !!pu.rollFinish, roll: !!pu.roll, charge: pu.rollFinish ? d.charge : 0, heavy: !!pu.heavy, counter: !!pu.counter || !!pu.forceCounter, counterMul: pu.counterMul || 1, launch: pu.launch || 0, liver: !!pu.liver, staggerT: pu.staggerT || 0, kind: pu.kind || null, fromU: !!pu.fromU }; }, !!pu.kick);
       }
     }
@@ -1186,7 +1188,7 @@ export class Fighter {
     if (this.hitStepT > 0) {
       this.hitStepT -= dt;
       const k2 = Math.max(0, this.hitStepT / 0.22);
-      this.pos.addScaledVector(this.forward, -this.hitStep * 2.6 * dt * k2);
+      this.pos.addScaledVector(this.forward, -this.hitStep * 0.55 * dt * k2);
       p.thighLX += -0.22 * this.hitStep * k2; p.thighRX += 0.18 * this.hitStep * k2;
       p.shinL += 0.3 * this.hitStep * k2; p.hipsY += -0.05 * this.hitStep * k2;
       if (this.hitStepT <= 0) this.hitStep = 0;
