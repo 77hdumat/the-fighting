@@ -19,9 +19,10 @@ import { HitSparks } from './HitSparks.js';
 import { CoachBubble, CoachBrain } from './Coach.js';
 import { Coaches } from './Coaches.js';
 import { Intro } from './Intro.js';
-import { CHARACTERS, CHARACTER_ORDER } from './Rig.js';
+import { CHARACTERS, CHARACTER_ORDER, HIDDEN_ORDER } from './Rig.js';
 import { KITS, SPECIALS } from './Specials.js';
 import { TouchControls, isTouchDevice } from './Touch.js';
+import { Music } from './Music.js';
 
 const _v = new THREE.Vector3();
 const _prevHead = new THREE.Vector3();
@@ -29,7 +30,7 @@ const _camF = new THREE.Vector3();
 const _camR = new THREE.Vector3();
 const _sep = new THREE.Vector3();
 const SPAWNS = [[0, 1.6], [0, -1.6], [1.6, 0], [-1.6, 0]];
-const AUDIO_FWD = ['whoosh', 'swoosh', 'impact', 'bassHit', 'riser', 'maxSpeedHit', 'stagger', 'ko', 'block', 'chargeUp', 'finisherWind', 'finisherHit', 'counter', 'cheer'];
+const AUDIO_FWD = ['whoosh', 'swoosh', 'impact', 'bassHit', 'riser', 'maxSpeedHit', 'stagger', 'ko', 'block', 'chargeUp', 'finisherWind', 'finisherHit', 'counter', 'cheer', 'engine', 'clang', 'nyang', 'shutter'];
 const SNAP_HZ = 20;
 
 class Game {
@@ -52,6 +53,7 @@ class Game {
     if (this.isTouch) document.body.classList.add('touch');
     window.addEventListener('contextmenu', (e) => { if (!(e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA'))) e.preventDefault(); });
     this.audio = new AudioManager();
+    this.music = new Music(this.audio);
     this.subs = new SubtitleManager(document.getElementById('subtitle'));
     this.hud = new HUD();
     this.fx = new FxOverlay(document.getElementById('fx'));
@@ -103,7 +105,7 @@ class Game {
     window.addEventListener('resize', () => this.onResize());
     window.addEventListener('error', (e) => this.showError(e.message || String(e.error)));
     window.addEventListener('unhandledrejection', (e) => this.showError(String(e.reason)));
-    window.addEventListener('pointerdown', () => this.audio.init(), { once: true });
+    window.addEventListener('pointerdown', () => { this.audio.init(); this.music.resumePending(); this.music.play(this.started ? 'battle' : 'menu'); }, { once: true });
     // 포커스 진단: 마지막 키 입력 시각/코드 기록, 캔버스 클릭 시 입력창 포커스 해제
     this.lastKeyT = -99; this.lastKey = '';
     window.addEventListener('keydown', (e) => { this.lastKeyT = this.realTime; this.lastKey = e.code; }, true);
@@ -167,7 +169,10 @@ class Game {
       ippo: { style: '인파이터', st: '<b>SPACE</b> 뎀프시롤 · <b>U</b> 가젤 펀치(띄움) · <b>I</b> 리버 블로(주저앉힘) · <b>L</b> 필살 훅' , pw: 3, sp: 3, hp: 3 },
       mashiba: { style: '히트맨 · 최장 리치', st: '<b>SPACE</b> 플리커 러시 · <b>U</b> 플리커 3연(무예비) · <b>I</b> 초핑 라이트 · <b>L</b> 초핑 라이트 강', pw: 3, sp: 4, hp: 3 },
       miyata: { style: '아웃복서 · 카운터', st: '<b>SPACE</b> 카운터 스탠스(피격 시 자동 회피→졸트) · <b>U</b> 졸트 · <b>I</b> 백스텝 잽 · <b>L</b> 졸트 블로', pw: 2, sp: 5, hp: 2 },
-      sendo: { style: '파워 슬러거 · 느리지만 한 방', st: '<b>SPACE</b> 스매시 차지(급속) · <b>U</b> 스매시(띄움) · <b>I</b> 러시 3연 · <b>L</b> 스매시 강', pw: 5, sp: 1, hp: 4 },
+      sendo: { style: '파워 슬러거 · 느리지만 한 방', st: '<b>U</b> 스매시(띄움) · <b>I</b> 러시 3연 · <b>L</b> 스매시 강', pw: 5, sp: 1, hp: 4 },
+      chaechae: { style: '히든 · 문화생활 인플루언서', st: '<b>기본</b> 냥냥펀치(초고속·경량) · <b>U</b> 냥냥 4연타 · <b>I</b> 고양이 할퀴기 · <b>L</b> <b>릴스</b>(상대를 붙잡고 같이 춤 → 다운)<br><i>기 게이지 15% 빨리 참</i>', pw: 1, sp: 5, hp: 2 },
+      jjeonghyo: { style: '히든 · 3대 500', st: '<b>기본</b> 덤벨 펀치(무겁고 느림) · <b>U</b> 덤벨 훅 · <b>I</b> 데드리프트 업(띄움) · <b>L</b> <b>바벨 내려찍기</b><br><i>기 게이지 20% 느림 · 체력 최고</i>', pw: 5, sp: 2, hp: 5 },
+      ppyeo: { style: '히든 · 오토바이 라이더', st: '<b>기본</b> 뼈펀치(리치 최장) · <b>U</b> 뼈 찌르기 · <b>I</b> 회전 팔꿈치 · <b>L</b> <b>오토바이 돌진</b>(소음공해·날려버림)<br><i>몸이 얇아 맷집 약함</i>', pw: 3, sp: 4, hp: 2 },
     };
     this.charDesc = DESC;
     this.buildCharSel($('charsel'));
@@ -180,7 +185,7 @@ class Game {
     $('intro').addEventListener('input', () => { try { localStorage.setItem('dr-intro', $('intro').value); } catch (e) {} });
     $('intro').addEventListener('keydown', (e) => e.stopPropagation());
     // 인트로 스킵: 클릭 / Space / Enter
-    const skip = () => { if (this.phase === 'intro') { if (this.mode === 'client') this.net.send({ t: 'skip' }); else this.endIntro(); } };
+    const skip = () => { if (this.phase === 'intro') { if (this.mode === 'client') this.net.send({ t: 'skip' }); else this.voteSkip(this.localFighter ? this.localFighter.netSlot : 0); } };
     window.addEventListener('pointerdown', (e) => { if (this.started && !(e.target && e.target.tagName === 'INPUT')) skip(); });
     window.addEventListener('keydown', (e) => { if ((e.code === 'Space' || e.code === 'Enter') && this.started && !(e.target && e.target.tagName === 'INPUT')) skip(); });
     window.addEventListener('keydown', (e) => {
@@ -217,19 +222,37 @@ class Game {
     return v || (this.net.role === 'client' ? 'P' + (this.net.mySlot + 1) : 'HOST');
   }
   nickOf(netSlot) { return (this.names && this.names[netSlot]) || (netSlot === 0 ? 'HOST' : 'P' + (netSlot + 1)); }
+  get hiddenShown() { try { return localStorage.getItem('dr-hidden') === 'on'; } catch (e) { return false; } }
+  set hiddenShown(v) { try { localStorage.setItem('dr-hidden', v ? 'on' : 'off'); } catch (e) {} }
+
   buildCharSel(container) {
     const DESC = this.charDesc;
     container.innerHTML = '';
-    for (const key of CHARACTER_ORDER) {
+    const keys = CHARACTER_ORDER.concat(this.hiddenShown ? HIDDEN_ORDER : []);
+    for (const key of keys) {
       const c = CHARACTERS[key], dsc = DESC[key];
       const card = document.createElement('div');
-      card.className = 'card' + (key === this.myChar ? ' sel' : '');
+      card.className = 'card' + (key === this.myChar ? ' sel' : '') + (c.hidden ? ' hidden-char' : '');
       card.dataset.key = key;
       const bar = (v) => `<i style="width:${v * 20}%"></i>`;
       card.innerHTML = `<div class="nm">${c.name}</div><div class="st">${dsc.style}<br>${dsc.st}</div><div class="bars"><span>HP</span>${bar(dsc.hp)}<span>PWR</span>${bar(dsc.pw)}<span>SPD</span>${bar(dsc.sp)}</div>`;
       card.addEventListener('click', () => this.pickChar(key));
       container.appendChild(card);
     }
+    // 기존 캐릭터 오른쪽 끝: 히든 버튼
+    const btn = document.createElement('div');
+    btn.className = 'card hidden-btn' + (this.hiddenShown ? ' open' : '');
+    btn.innerHTML = this.hiddenShown
+      ? '<div class="q">×</div><div class="lbl">히든 닫기</div>'
+      : '<div class="q">?</div><div class="lbl">히든</div>';
+    btn.addEventListener('click', () => {
+      this.hiddenShown = !this.hiddenShown;
+      if (!this.hiddenShown && CHARACTERS[this.myChar] && CHARACTERS[this.myChar].hidden) this.pickChar('ippo');
+      this.buildCharSel(document.getElementById('charsel'));
+      this.buildCharSel(document.getElementById('charsel2'));
+      if (this.hiddenShown) { try { this.audio.init(); this.audio.chargeUp(3); } catch (e) {} }
+    });
+    container.appendChild(btn);
   }
 
   /** 경기 종료 후 캐릭터 재선택 패널 */
@@ -315,6 +338,7 @@ class Game {
 
   returnToLobby() {
     this.teardownMatch();
+    this.music.pendingTrack = 'menu'; this.music.play('menu');
     document.getElementById('start-overlay').classList.remove('hidden');
     document.getElementById('menu').classList.add('hidden');
     document.getElementById('lobby').classList.remove('hidden');
@@ -324,6 +348,7 @@ class Game {
   }
 
   showMenu() {
+    this.music.pendingTrack = 'menu'; this.music.play('menu');
     document.getElementById('start-overlay').classList.remove('hidden');
     document.getElementById('lobby').classList.add('hidden');
     document.getElementById('menu').classList.remove('hidden');
@@ -456,7 +481,7 @@ class Game {
     net.onMessage = (m, slot) => {
       if (m.t === 'in' && this.netInputs[slot]) this.netInputs[slot].set(m.d[0], m.d[1], m.d[2]);
       else if (m.t === 'chat' && typeof m.text === 'string') { const text = m.text.slice(0, 120); this.addChat(slot, text); this.net.broadcast({ t: 'chat', from: slot, text }); }
-      else if (m.t === 'skip') { if (this.phase === 'intro') this.endIntro(); }
+      else if (m.t === 'skip') { this.voteSkip(slot); }
       else if (m.t === 'wantlobby') { this.addChat(0, `${this.chatName(slot)} 님이 대기실로 가자고 합니다 (경기 종료 후 '대기실로' 버튼)`, true); }
       else if (m.t === 'pick') {
         if (CHARACTERS[m.char]) { this.chars[slot] = m.char; if (this.roster[slot]) this.roster[slot].char = m.char; this.renderRoster(this.roster); this.broadcastLobby(); }
@@ -511,6 +536,7 @@ class Game {
       else if (m.t === 'full') this.lobbyMsg('방이 가득 찼거나 이미 시작됨');
       else if (m.t === 'start') { this.names = []; m.cfg.forEach((c) => { this.names[c.netSlot] = c.name; }); this.localSlot = Math.max(0, m.cfg.findIndex((c) => c.netSlot === net.mySlot)); this.startMatch('client', m.cfg); }
       else if (m.t === 'snap') { if (this.phase === 'fight') this.onSnapshot(m); }
+      else if (m.t === 'skipv') { this.showSkipHint(m.n, m.total); }
       else if (m.t === 'phase') { if (m.p === 'countdown') this.endIntro(); else if (m.p === 'fight') { this.phase = 'fight'; document.getElementById('countdown').classList.add('hidden'); } }
       else if (m.t === 'chat') this.addChat(m.from, String(m.text).slice(0, 120), !!m.sys);
       else if (m.t === 'over') this.showWinner(m.winner);
@@ -563,6 +589,7 @@ class Game {
     this.input.down.clear();
     document.getElementById('netinfo').textContent = mode === 'solo' ? this.soloLabel() : `ROOM ${this.net.code} · ${mode.toUpperCase()} · Enter = 채팅`;
     if (mode !== 'solo') { this.showChat(true); this.addChat(0, '시합 개시. Enter 로 채팅', true); }
+    this.music.pendingTrack = 'battle'; this.music.play('battle');
     this.beginIntro();
   }
 
@@ -600,13 +627,39 @@ class Game {
     this.camCtl.initialized = false;
   }
 
-  resetMatch() { this.buildFighters(this.cfg); this.over = false; if (this.mode === 'solo') document.getElementById('netinfo').textContent = this.soloLabel(); document.getElementById('next-overlay').classList.add('hidden'); this.hud.showKO(false); this.beginIntro(); }
+  resetMatch() { this.buildFighters(this.cfg); this.over = false; this.music.setDuck(1); this.music.play('battle'); if (this.mode === 'solo') document.getElementById('netinfo').textContent = this.soloLabel(); document.getElementById('next-overlay').classList.add('hidden'); this.hud.showKO(false); this.beginIntro(); }
+
+  // ================= 인트로 스킵 (전원 동의) =================
+  /** 사람 참가자 전원이 스킵을 눌러야 인트로가 끝난다 */
+  voteSkip(netSlot) {
+    if (this.phase !== 'intro' || this.mode === 'client') return;
+    if (!this.skipVotes) this.skipVotes = new Set();
+    this.skipVotes.add(netSlot);
+    const humans = this.fighters.filter((f) => !f.isAI).map((f) => f.netSlot);
+    const n = humans.filter((sl) => this.skipVotes.has(sl)).length;
+    const total = Math.max(1, humans.length);
+    this.showSkipHint(n, total);
+    if (this.mode === 'host') this.net.broadcast({ t: 'skipv', n, total });
+    if (n >= total) this.endIntro();
+  }
+
+  showSkipHint(n, total) {
+    const el = document.getElementById('skip-hint');
+    if (!el || el.classList.contains('hidden')) return;
+    el.textContent = total > 1
+      ? `스킵 ${n}/${total} — 전원이 눌러야 넘어갑니다 (SPACE / 클릭)`
+      : 'SPACE / 클릭 = 스킵';
+    el.classList.toggle('voted', n > 0);
+  }
 
   // ================= 인트로 / 카운트다운 =================
   beginIntro() {
     this.phase = 'intro';
+    this.skipVotes = new Set();
     this.intro.start();
     document.getElementById('skip-hint').classList.remove('hidden');
+    const humans = this.fighters.filter((f) => !f.isAI).length;
+    this.showSkipHint(0, Math.max(1, humans));
     document.getElementById('countdown').classList.add('hidden');
   }
   introName(f) {
@@ -710,6 +763,30 @@ class Game {
     const body = ev.zone === 'body';
     if (attacker) attacker.squash[ev.side] = 1;
     if (res.ignore) return;
+    if (res.dance) {
+      // ---- 릴스: 셔터 + 하트 + 자막 ----
+      this.audio.shutter(); this.audio.cheer(0.8);
+      this.fx.addPopup(px, py, '릴스 촬영!', 'groggy');
+      this.fx.addImpact(px, py, 0.9, true, [255, 120, 200]);
+      this.sparks.burst(pos, dir, 22, new THREE.Color(1, 0.5, 0.8), 1.2, 0.8);
+      this.camCtl.onHit(dir, 0.5);
+      if (mine) this.subs.show('찍는다~ 하나 둘!', { duration: 1.6, mid: true });
+      else if (hurt) this.subs.show('뭐, 뭐야 이거…!', { duration: 1.6, mid: true, speaker: 'opp' });
+      setTimeout(() => { this.audio.shutter(); }, 700);
+      setTimeout(() => { this.audio.shutter(); }, 1500);
+      this.stopPair(ev, 0.12, 0.5, 0.35);
+      return;
+    }
+    if (ev.kind === 'bike' && !res.blocked) {
+      this.audio.engine(1.2);
+      this.fx.addPopup(px, py, '부아아앙!!', 'groggy');
+      this.fx.addSpeedBurst(1);
+      this.camCtl.onHit(dir, 1.2);
+    } else if (ev.kind === 'barbell' && !res.blocked) {
+      this.audio.clang(1.2);
+      this.fx.addPopup(px, py, '3대 500!', 'groggy');
+      this.camCtl.onHit(dir, 0.9);
+    }
     if (res.evaded) {
       // ---- 회피: 상대 주먹이 허공을 가른다. 뎀프시롤 회피는 「피함!」 팝업 ----
       this.audio.whoosh(1, 1.6, 0.8, true);
@@ -858,6 +935,7 @@ class Game {
 
   showWinner(slot) {
     this.over = true;
+    this.music.setDuck(0.45);
     const w = this.fighters[slot];
     const me = slot === this.localSlot;
     const canRestart = this.mode !== 'client';
@@ -910,6 +988,7 @@ class Game {
     }
     const input = this.input;
     if (input.justPressed('KeyQ')) { this.autoQuality = false; this.setQuality((this.quality + 2) % 3); this.qualityCool = 999; }
+    if (input.justPressed('KeyB')) { const on = this.music.toggle(); this.subs.show(`BGM: ${on ? 'ON' : 'OFF'}`, { duration: 0.8, voice: false }); }
     if (input.justPressed('KeyV')) { const m = this.voice.toggle(); this.subs.show(`VOICE: ${m.toUpperCase()}`, { duration: 0.8, voice: false }); }
     if (this.localFighter) { this.subs.myChar = this.localFighter.defKey; const tg = this.localFighter.target; if (tg) this.subs.oppChar = tg.defKey; }
     // R = 다음 경기: 경기가 끝난 뒤에만 (경기 중 오입력으로 리셋되지 않게)
@@ -979,7 +1058,7 @@ class Game {
         if (e.type === 'special') continue;
         const type = e.type === 'finisherStart' ? 'finisher' : (e.punchType === 'special' ? 'hook' : e.punchType);
         for (const o of fs) if (o.brain && o !== f && (o.target === f || f.target === o)) o.brain.onEnemyPunch(type, f);
-        if (e.type === 'finisherStart') { this.applySlow(f.slot, 0.5, 0.2); if (f.slot === this.localSlot) this.finisherWindFx(); }
+        if (e.type === 'finisherStart') { this.applySlow(f.slot, 0.5, 0.2); if (f.slot === this.localSlot) { this.finisherWindFx(); this.music.setDuck(0.35); setTimeout(() => this.music.setDuck(1), 2200); } }
         if (e.type === 'finisherStart' && this.mode === 'host') this.pendingEvents.push({ t: 'fin', s: f.slot });
       }
       if (inp !== this.localInput) inp.endFrame();
@@ -997,9 +1076,10 @@ class Game {
       // 기(氣) 충전: 때릴수록 찬다. 막혀도 조금, 맞은 쪽도 조금
       if (!res.ignore && !res.downed && !h.finisher && h.attacker.rollT <= 0) {
         const base = h.kind ? 12 : h.type === 'hook' ? 8 : h.type === 'flicker' ? 4 : 6;
+        const gm = h.attacker.def.gaugeMul || 1, tm = h.target.def.gaugeMul || 1;
         if (res.evaded) { /* 회피됨 */ }
-        else if (res.blocked) { h.attacker.dempsey.addGauge(base * 0.4); h.target.dempsey.addGauge(2); }
-        else { h.attacker.dempsey.addGauge(base * ((counter || h.counter) ? 1.5 : 1), true); if (h.target.rollT <= 0) h.target.dempsey.addGauge(2.5); }
+        else if (res.blocked) { h.attacker.dempsey.addGauge(base * 0.4 * gm); h.target.dempsey.addGauge(2 * tm); }
+        else { h.attacker.dempsey.addGauge(base * ((counter || h.counter) ? 1.5 : 1) * gm, true); if (h.target.rollT <= 0) h.target.dempsey.addGauge(2.5 * tm); }
       }
       if (res.perfect) { h.attacker.punch = null; h.attacker.queue.length = 0; h.attacker.bufferedHook = null; h.attacker.stagger = Math.max(h.attacker.stagger, 0.5); h.attacker.knock.addScaledVector(h.dir, -1.2); }
       if (h.finisher && !res.armored && !res.blocked && !res.downed && !res.ignore) {
@@ -1008,7 +1088,7 @@ class Game {
         if (!res.down) h.target.stagger = Math.max(h.target.stagger, 2.6);
         if (h.target.hp <= 0 && !h.target.ko) { h.target._die(); res.ko = true; }
       }
-      const ev = { t: 'hit', a: h.attacker.slot, b: h.target.slot, side: h.side, type: h.type, zone: h.zone || 'head', kind: h.kind || null, launch: h.launch || 0, liver: !!h.liver, power: +h.power.toFixed(2), pos: [h.pos.x, h.pos.y, h.pos.z], dir: [h.dir.x, h.dir.z], maxSpeed: !!h.maxSpeed, finisher: !!h.finisher, charge: h.charge || 0, counter: !!(counter || h.counter), dempsey: !!h.dempsey, res: { dmg: +res.dmg.toFixed(1), blocked: !!res.blocked, perfect: !!res.perfect, heavy: !!res.heavy, evaded: !!res.evaded, roll: !!res.roll, down: !!res.down, groggy: h.target.staggerKind === 'groggy' && !!res.staggered, guardBreak: !!res.guardBreak, armored: !!res.armored, staggered: !!res.staggered, interrupted: !!res.interrupted, ko: !!res.ko, downed: !!res.downed, ignore: !!res.ignore } };
+      const ev = { t: 'hit', a: h.attacker.slot, b: h.target.slot, side: h.side, type: h.type, zone: h.zone || 'head', kind: h.kind || null, launch: h.launch || 0, liver: !!h.liver, power: +h.power.toFixed(2), pos: [h.pos.x, h.pos.y, h.pos.z], dir: [h.dir.x, h.dir.z], maxSpeed: !!h.maxSpeed, finisher: !!h.finisher, charge: h.charge || 0, counter: !!(counter || h.counter), dempsey: !!h.dempsey, res: { dmg: +res.dmg.toFixed(1), dance: !!res.dance, blocked: !!res.blocked, perfect: !!res.perfect, heavy: !!res.heavy, evaded: !!res.evaded, roll: !!res.roll, down: !!res.down, groggy: h.target.staggerKind === 'groggy' && !!res.staggered, guardBreak: !!res.guardBreak, armored: !!res.armored, staggered: !!res.staggered, interrupted: !!res.interrupted, ko: !!res.ko, downed: !!res.downed, ignore: !!res.ignore } };
       this.hitFx(ev);
       if (this.mode === 'host') this.pendingEvents.push(ev);
     }

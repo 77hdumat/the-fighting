@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { defaultPose, applyPose, copyPose } from './Rig.js';
 import { easeOutCubic, easeInOut } from './Punch.js';
+import { HIDDEN_LINES } from './Specials.js';
 
 const PER = 3.6;          // 선수 1명당 연출 시간
 const WALK = 1.3;         // 걸어 나오는 시간
@@ -24,7 +25,7 @@ export class Intro {
 
   start() {
     const fs = this.g.fighters;
-    this.active = true; this.done = false; this.t = 0; this.idx = -1; this.spoken = new Set();
+    this.active = true; this.done = false; this.t = 0; this.idx = -1; this.spoken = new Set(); this.threw = false; this.revved = false;
     this.spawns = fs.map((f) => f.pos.clone());
     this.starts = fs.map((f, i) => new THREE.Vector3(CORNERS[i % 4][0], 0, CORNERS[i % 4][1]));
     // 전원 코너로 (링 밖) 이동시켜 대기
@@ -65,7 +66,39 @@ export class Intro {
           f.pos.copy(end);
           f.forward.copy(toC);
           const u = local - WALK;                 // 0 .. PER-WALK (2.3s)
-          if (u < 1.0) {
+          const key = f.defKey;
+          if (key === 'chaechae') {
+            // 채채더킴: 브이 + 살짝 기울인 고개 → 셀카 찍듯 손 뻗기
+            const k = easeOutCubic(Math.min(1, u / 0.4));
+            p.shRX += (-2.25 - p.shRX) * k; p.shRY += (0.35 - p.shRY) * k; p.shRZ += (-0.25 - p.shRZ) * k; p.elR += (-1.5 - p.elR) * k;
+            p.headZ += 0.3 * k; p.headY += 0.18 * k; p.waistY += 0.2 * k; p.hipsX += 0.05 * k;
+            p.hipsY += Math.abs(Math.sin(u * 7)) * 0.05 * k;
+            if (u > 1.1) { const k2 = easeOutCubic(Math.min(1, (u - 1.1) / 0.35)); p.shLX += (-1.9 - p.shLX) * k2; p.elL += (-0.9 - p.elL) * k2; p.shLY += (-0.35) * k2; }
+          } else if (key === 'jjeonghyo') {
+            // 쩡효: 바벨을 머리 위로 들었다가 앞으로 내던짐
+            if (u < 1.0) {
+              const k = easeOutCubic(Math.min(1, u / 0.45));
+              p.shLX += (-2.9 - p.shLX) * k; p.shRX += (-2.9 - p.shRX) * k; p.elL += (-0.3 - p.elL) * k; p.elR += (-0.3 - p.elR) * k;
+              p.shLZ += 0.5 * k; p.shRZ += -0.5 * k; p.waistX += -0.22 * k; p.thighLX += -0.25 * k; p.thighRX += -0.25 * k; p.shinL += 0.4 * k; p.shinR += 0.4 * k;
+            } else {
+              const k = easeOutCubic(Math.min(1, (u - 1.0) / 0.25));
+              p.shLX += (-1.0 - p.shLX) * k; p.shRX += (-1.0 - p.shRX) * k; p.elL += (-0.2 - p.elL) * k; p.elR += (-0.2 - p.elR) * k;
+              p.waistX += 0.45 * k; p.chestX += 0.2 * k; p.headX += 0.2 * k; p.hipsY += -0.12 * k;
+              if (!this.threw) { this.threw = true; try { g.audio.clang(1.1); } catch (e) {} }
+            }
+          } else if (key === 'ppyeo') {
+            // 뼈석원: 한 손으로 배를 문지르며 씩 웃기 → 시동 거는 손목 스냅
+            const k = easeOutCubic(Math.min(1, u / 0.4));
+            p.shRX += (-0.35 - p.shRX) * k; p.elR += (-2.3 - p.elR) * k; p.shRY += (0.5 - p.shRY) * k;
+            p.chestZ += Math.sin(u * 5) * 0.06 * k; p.waistY += Math.sin(u * 3) * 0.12 * k;
+            p.headX += -0.12 * k; p.hipsX += Math.sin(u * 2.2) * 0.04 * k;
+            if (u > 1.2) {
+              const k2 = easeOutCubic(Math.min(1, (u - 1.2) / 0.3));
+              p.shLX += (-1.5 - p.shLX) * k2; p.elL += (-1.7 - p.elL) * k2;
+              p.shLZ += Math.sin(u * 26) * 0.12 * k2;   // 부릉부릉 손목
+              if (!this.revved) { this.revved = true; try { g.audio.engine(1.1); } catch (e) {} }
+            }
+          } else if (u < 1.0) {
             // 삿대질: 오른팔을 앞으로 쭉 뻗어 상대를 가리킨다, 턱 들기
             const k = easeOutCubic(Math.min(1, u / 0.35));
             p.shRX += (-1.7 - p.shRX) * k; p.shRY += (0.05 - p.shRY) * k; p.shRZ += (0.0 - p.shRZ) * k; p.elR += (-0.05 - p.elR) * k;
@@ -99,7 +132,8 @@ export class Intro {
     if (!this.spoken.has(idx) && local >= WALK * 0.7) {
       this.spoken.add(idx);
       const f = fs[idx];
-      const line = f.intro || ({ ippo: '…やります。全力で！', mashiba: '…殺す気で来い。', miyata: '見切ってやる。', sendo: 'ぶっ飛ばしたるわ！' })[f.defKey] || '…';
+      const hid = HIDDEN_LINES[f.defKey];
+      const line = f.intro || (hid && hid.intro) || ({ ippo: '…やります。全力で！', mashiba: '…殺す気で来い。', miyata: '見切ってやる。', sendo: 'ぶっ飛ばしたるわ！' })[f.defKey] || '…';
       g.subs.show(line, { duration: PER - WALK * 0.7, mid: true, speaker: f.slot === g.localSlot ? 'player' : 'opp', charKey: f.defKey, voice: true });
       g.introName(f);
       g.coaches.shout(f.slot, 1.2);

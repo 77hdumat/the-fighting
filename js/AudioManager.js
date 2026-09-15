@@ -415,6 +415,79 @@ export class AudioManager {
     }
   }
 
+  /** 오토바이 엔진 소음 (뼈석원 필살) */
+  engine(dur = 1.6) {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const out = ctx.createGain();
+    out.gain.setValueAtTime(0.0001, t);
+    out.gain.exponentialRampToValueAtTime(0.5, t + 0.12);
+    out.gain.setValueAtTime(0.5, t + dur * 0.7);
+    out.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    out.connect(this.shaper);
+    // 저음 톱니 2개 + 럼블 노이즈 → 배기음
+    for (const [mul, det] of [[1, 0], [1.005, 9], [0.5, -7]]) {
+      const o = ctx.createOscillator(); o.type = 'sawtooth';
+      o.frequency.setValueAtTime(58 * mul, t);
+      o.frequency.linearRampToValueAtTime(190 * mul, t + dur * 0.55);
+      o.frequency.linearRampToValueAtTime(120 * mul, t + dur);
+      o.detune.value = det;
+      const g = ctx.createGain(); g.gain.value = 0.32;
+      // 배기 펄스 (부릉부릉)
+      const lfo = ctx.createOscillator(); lfo.type = 'square'; lfo.frequency.setValueAtTime(11, t); lfo.frequency.linearRampToValueAtTime(28, t + dur);
+      const lg = ctx.createGain(); lg.gain.value = 0.22;
+      lfo.connect(lg); lg.connect(g.gain);
+      o.connect(g); g.connect(out); o.start(t); o.stop(t + dur + 0.05); lfo.start(t); lfo.stop(t + dur + 0.05);
+    }
+    const src = ctx.createBufferSource(); src.buffer = this.noise;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.setValueAtTime(320, t); bp.frequency.linearRampToValueAtTime(900, t + dur); bp.Q.value = 0.8;
+    const ng = ctx.createGain(); ng.gain.value = 0.25;
+    src.connect(bp); bp.connect(ng); ng.connect(out); src.start(t); src.stop(t + dur + 0.05);
+  }
+
+  /** 쇳덩이 충돌 (덤벨/바벨) */
+  clang(power = 1) {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    for (const f of [520, 780, 1170, 1660]) {
+      const o = ctx.createOscillator(); o.type = 'triangle';
+      o.frequency.setValueAtTime(f * (0.96 + Math.random() * 0.08), t);
+      o.frequency.exponentialRampToValueAtTime(f * 0.82, t + 0.5);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.16 * power, t + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55 + Math.random() * 0.3);
+      o.connect(g); g.connect(this.master); o.start(t); o.stop(t + 0.95);
+    }
+    this.impact(0.7 * power);
+  }
+
+  /** 냥냥펀치: 짧고 귀여운 삑 소리 */
+  nyang(pitch = 1) {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = 'triangle';
+    o.frequency.setValueAtTime(880 * pitch, t);
+    o.frequency.exponentialRampToValueAtTime(1500 * pitch, t + 0.07);
+    o.frequency.exponentialRampToValueAtTime(700 * pitch, t + 0.16);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.16, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+    o.connect(g); g.connect(this.master); o.start(t); o.stop(t + 0.22);
+  }
+
+  /** 셔터음 (릴스 촬영) */
+  shutter() {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const src = ctx.createBufferSource(); src.buffer = this.noise;
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 3800;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.25, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+    src.connect(hp); hp.connect(g); g.connect(this.master); src.start(t); src.stop(t + 0.08);
+  }
+
   block() {
     if (!this.ctx) return;
     const ctx = this.ctx, t = ctx.currentTime;

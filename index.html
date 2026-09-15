@@ -302,6 +302,19 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
 #touch .tbtn.chat { font-family: Bangers, Impact, sans-serif; font-size: 12px; letter-spacing: 1px; }
 .btn i { display: none; }
 
+/* ---------- 히든 캐릭터 ---------- */
+.charsel .card.hidden-btn { --c: #6b21a8; flex: 0 0 96px; max-width: 96px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; background: linear-gradient(160deg, #241338, #120a1e); color: #e9d5ff; border-color: #6b21a8; cursor: pointer; }
+.charsel .card.hidden-btn .q { font-family: Bangers, Impact, sans-serif; font-size: 44px; line-height: 1; color: #d8b4fe; text-shadow: 0 0 14px #a855f7; }
+.charsel .card.hidden-btn .lbl { font-size: 12px; font-weight: 900; letter-spacing: 1px; }
+.charsel .card.hidden-btn.open { --c: #9ca3af; background: linear-gradient(160deg, #23232b, #131318); color: #d1d5db; border-color: #4b5563; }
+.charsel .card.hidden-btn:hover { filter: brightness(1.15); }
+.charsel .card.hidden-char { --c: #a855f7; box-shadow: 0 0 0 2px #a855f7 inset, 0 10px 24px rgba(168,85,247,.35); animation: hiddenIn .3s cubic-bezier(.2,1.4,.4,1) both; }
+.charsel .card.hidden-char .nm::after { content: ' ★'; color: #d8b4fe; }
+@keyframes hiddenIn { from { transform: scale(.8) translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+#next-overlay .charsel .card.hidden-btn { flex: 0 0 74px; max-width: 74px; }
+#next-overlay .charsel .card.hidden-btn .q { font-size: 30px; }
+#skip-hint.voted { color: #ffd34d; border-color: #ffd34d; }
+
 </style>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script type="importmap">
@@ -333,7 +346,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
       <div><b>기 게이지</b> 때릴수록 찬다 → MAX 에서 L</div>
       <div><b>J / K</b> 펀치 &nbsp; <b>U</b> 반격기 (아머 · 적중 시 스턴) &nbsp; <b>I</b> 고유기</div>
       <div><b>L</b> 필살기 (MAX 중 · 슈퍼아머 · 차지 ×3)</div>
-      <div><b>SHIFT</b> 가드 (필살기 포함 전부 방어) &nbsp; <b>R</b> 다음 경기 (종료 후) &nbsp; <b>V</b> 음성 &nbsp; <b>Q</b> 화질</div>
+      <div><b>SHIFT</b> 가드 (필살기 포함 전부 방어) &nbsp; <b>R</b> 다음 경기 (종료 후) &nbsp; <b>B</b> 배경음 &nbsp; <b>V</b> 음성 &nbsp; <b>Q</b> 화질</div>
       <div><b>마우스</b> 좌클릭 = 펀치 · 휠클릭 = U</div>
       <div><b>로프</b> 로프 쪽으로 계속 밀면 힘을 모았다 튕겨 나감 (속도·파워 ↑)</div>
     </div>
@@ -703,6 +716,42 @@ const SPECIALS = {
     },
   },
   rush: { name: 'ラッシュ', ko: '러시 3연 훅', burst: true, cd: 6 },
+
+  // ---- 히든: 채채더킴 ----
+  nyangRush: { name: 'にゃんにゃん連打', ko: '냥냥펀치 4연', burst: true, cd: 4 },
+  catSlap: {
+    name: 'キャットスラップ', ko: '고양이 할퀴기', side: 'R', dur: 0.3, power: 0.85, cd: 5, heavy: false, staggerT: 0.7, step: 3.0, quick: true,
+    wind: { x: -0.4, y: 0.5, z: 0.7, el: -2.1 }, strike: { x: -1.5, y: -0.5, z: 0.35, el: -0.2 },
+    body(p, w, s, sgn) { p.waistY += sgn * (0.3 * w - 0.6 * s); p.hipsY += 0.08 * w - 0.05 * s; p.headX += -0.12 * s; },
+  },
+  // ---- 히든: 쩡효 ----
+  dumbbell: {
+    name: 'ダンベルブロー', ko: '덤벨 훅', side: 'R', dur: 0.5, power: 1.55, cd: 7, heavy: true, staggerT: 1.3, step: 2.1,
+    wind: { x: 0.8, y: -0.4, z: -0.5, el: -2.0 }, strike: { x: -1.6, y: 0.5, z: -0.8, el: -0.9 },
+    body(p, w, s, sgn) {
+      p.hipsY += -0.3 * w + 0.18 * s; p.waistX += 0.45 * w - 0.2 * s; p.waistY += sgn * (0.45 * w - 0.85 * s);
+      p.thighLX += -0.4 * w + 0.25 * s; p.thighRX += -0.4 * w + 0.25 * s; p.shinL += 0.7 * w; p.shinR += 0.7 * w; p.hipsZ += 0.25 * s;
+    },
+  },
+  deadlift: {
+    name: 'デッドリフト', ko: '데드리프트 업', side: 'L', dur: 0.56, power: 1.35, cd: 8, heavy: true, launch: 0.85, staggerT: 1.4, step: 1.8,
+    wind: { x: 0.9, y: 0.3, z: 0.5, el: -2.3 }, strike: { x: -2.1, y: -0.6, z: 0.9, el: -0.6 },
+    body(p, w, s, sgn) {
+      p.hipsY += -0.5 * w + 0.4 * s; p.waistX += 0.85 * w - 0.5 * s; p.thighLX += -0.7 * w + 0.45 * s; p.thighRX += -0.7 * w + 0.45 * s;
+      p.shinL += 1.2 * w - 0.5 * s; p.shinR += 1.2 * w - 0.5 * s; p.chestX += 0.3 * w - 0.25 * s; p.headX += -0.3 * s;
+    },
+  },
+  // ---- 히든: 뼈석원 ----
+  boneJab: {
+    name: 'ボーンジャブ', ko: '뼈 찌르기', side: 'L', dur: 0.26, power: 0.7, cd: 3.5, heavy: false, quick: true, step: 3.6,
+    wind: { x: -0.5, y: -0.1, z: 0.15, el: -2.5 }, strike: { x: -1.75, y: -0.1, z: 0.0, el: 0.05 },
+    body(p, w, s, sgn) { p.waistY += sgn * (0.2 * w - 0.5 * s); p.chestX += 0.12 * s; p.hipsZ += 0.2 * s; },
+  },
+  elbowSpin: {
+    name: 'スピンエルボー', ko: '회전 팔꿈치', side: 'R', dur: 0.46, power: 1.3, cd: 7, heavy: true, staggerT: 1.2, step: 2.6,
+    wind: { x: -0.3, y: 1.3, z: 0.4, el: -2.4 }, strike: { x: -1.3, y: -1.2, z: 0.4, el: -1.6 },
+    body(p, w, s, sgn) { p.waistY += sgn * (1.1 * w - 1.6 * s); p.chestY += sgn * (0.5 * w - 0.8 * s); p.hipsRotY += sgn * (0.4 * w - 0.6 * s); p.hipsY += -0.12 * w; },
+  },
 };
 
 // 캐릭터별 키 배정 + 스탠스 + 필살
@@ -712,6 +761,10 @@ const KITS = {
   mashiba: { stance: 'flicker', finisher: 'chopping',     U: 'flickerBurst', I: 'chopping' },
   miyata:  { stance: 'counter', finisher: 'jolt',         U: 'jolt', I: 'backjab', cdU: 3.5 },
   sendo:   { stance: 'smash',   finisher: 'smash',        U: 'smash', I: 'rush', cdU: 10 },
+  // 히든
+  chaechae:  { stance: 'flicker', finisher: 'reels',   U: 'nyangRush', I: 'catSlap', cdU: 4 },
+  jjeonghyo: { stance: 'smash',   finisher: 'barbell', U: 'dumbbell',  I: 'deadlift', cdU: 6.5 },
+  ppyeo:     { stance: 'counter', finisher: 'bike',    U: 'boneJab',   I: 'elbowSpin', cdU: 3.5 },
 };
 
 const STANCE_LINES = {
@@ -720,7 +773,14 @@ const STANCE_LINES = {
   counter: ['来い…', '見えてる…', 'そこだ…！', '合わせるッ！！'],
   smash:   ['溜めろ…', 'まだ…！', 'もっとだ…！', 'スマッシュだッ！！'],
 };
-return { SPECIALS, KITS, STANCE_LINES };
+
+// 히든 캐릭터 전용 대사 (한국어 — 게이지/필살/등장)
+const HIDDEN_LINES = {
+  chaechae: { intro: '난 문화생활을 좋아해~', max: '이거 릴스각인데?', fin: '자, 같이 춤춰!', hit: ['냥!', '냥냥!', '이건 찍어야 해'] },
+  jjeonghyo: { intro: '3대 500 미만 대화 금지.', max: '무게 올린다.', fin: '데드리프트… 받아!', hit: ['하압!', '한 세트 더!', '가볍네'] },
+  ppyeo: { intro: '난 먹어도 살 안 쪄.', max: '시동 건다.', fin: '부아아앙—!!', hit: ['뼈!', '뼈뼈!', '부릉'] },
+};
+return { SPECIALS, KITS, STANCE_LINES, HIDDEN_LINES };
 })();
 // ===== Punch.js =====
 __M.Punch = (() => {
@@ -1006,8 +1066,34 @@ const CHARACTERS = {
     prop: { height: 1.06, torsoW: 1.22, torsoD: 1.15, armR: 1.22, armLen: 1.08, legR: 1.15, legLen: 1.04, headS: 1.03, headY: 1.0, neck: 1.0, muscle: 1 },
     hp: 220, powerMul: 1.75, speedMul: 0.55, style: 'power',
   },
+  // ---- 히든 캐릭터 ----
+  // 채채더킴: 작은 키, 단발머리 + 큰 눈. 냥냥펀치(빠르고 가벼움), 필살 = 릴스 (상대를 붙잡아 같이 춤)
+  chaechae: {
+    name: 'CHAECHAE', skin: 0xffdcc4, trunks: 0xff5ea8, trunksTrim: 0xfff0f6, trunksText: 'NYANG',
+    gloves: 0xff85c0, hair: 0x2a1a16, shoes: 0xff5ea8, shoesTrim: 0xffffff,
+    hairStyle: 'bob', brows: 'thin', eyes: 'big', mouth: 'grin',
+    prop: { height: 0.82, torsoW: 0.88, torsoD: 0.86, armR: 0.86, armLen: 0.88, legR: 0.9, legLen: 0.86, headS: 1.08, headY: 1.0, neck: 0.8, muscle: 0.3 },
+    hp: 120, powerMul: 0.8, speedMul: 1.8, style: 'idol', gaugeMul: 1.15, hidden: true, sfx: 'nyang',
+  },
+  // 쩡효: 중간 키, 긴 생머리 + 흰 피부. 덤벨 펀치(무겁다), 필살 = 바벨 내려찍기
+  jjeonghyo: {
+    name: 'JJEONGHYO', skin: 0xfdeade, trunks: 0x1a1a22, trunksTrim: 0xc0f000, trunksText: '500',
+    gloves: 0x2b2b33, hair: 0x241b18, shoes: 0x1a1a22, shoesTrim: 0xc0f000,
+    hairStyle: 'long', brows: 'thin', eyes: 'narrow', mouth: 'grit',
+    prop: { height: 1.0, torsoW: 1.06, torsoD: 1.0, armR: 1.12, armLen: 1.0, legR: 1.12, legLen: 0.98, headS: 0.98, headY: 1.0, neck: 1.0, muscle: 1 },
+    hp: 185, powerMul: 1.45, speedMul: 0.8, style: 'gym', gaugeMul: 0.8, hidden: true, propItem: 'dumbbell', sfx: 'clang',
+  },
+  // 뼈석원: 큰 키, 구릿빛 피부에 마른 몸. 뼈펀치(리치 최장), 필살 = 오토바이 돌진
+  ppyeo: {
+    name: 'PPYEO', skin: 0xb07848, trunks: 0x14141c, trunksTrim: 0xff2d2d, trunksText: 'BONE',
+    gloves: 0xe8e8ec, hair: 0x14100e, shoes: 0x14141c, shoesTrim: 0xff2d2d,
+    hairStyle: 'slick', brows: 'thin', eyes: 'narrow', mouth: 'grin',
+    prop: { height: 1.2, torsoW: 0.74, torsoD: 0.72, armR: 0.7, armLen: 1.32, legR: 0.72, legLen: 1.2, headS: 0.94, headY: 1.16, neck: 1.4, muscle: 0.1 },
+    hp: 125, powerMul: 1.15, speedMul: 1.4, style: 'bone', gaugeMul: 1.0, hidden: true, propItem: 'bone', sfx: 'bone',
+  },
 };
 const CHARACTER_ORDER = ['ippo', 'mashiba', 'miyata', 'sendo'];
+const HIDDEN_ORDER = ['chaechae', 'jjeonghyo', 'ppyeo'];
 
 // 코치 (링 밖 코너에 서 있는 NPC): 트레이닝복, 글러브 없음
 const COACH_DEFS = [
@@ -1254,6 +1340,20 @@ function buildBoxer(def, opts = {}) {
       seam.rotation.x = Math.PI / 2; seam.rotation.z = 0.5;
       const strap = part(new THREE.CylinderGeometry(0.1, 0.1, 0.035, 14), 0xf5f5f5, elbow, 0, -armLen * 0.86, 0, false);
     }
+    // 소품: 쩡효는 글러브에 덤벨, 뼈석원은 손등에 뼈 보호대
+    if (def.propItem === 'dumbbell') {
+      const bar = part(new THREE.CylinderGeometry(0.022, 0.022, 0.2, 8), 0x8a8a94, glove, 0, 0, 0.02);
+      bar.rotation.z = Math.PI / 2;
+      for (const sx of [-1, 1]) {
+        const pl = part(new THREE.CylinderGeometry(0.062, 0.062, 0.05, 10), 0x2e2e36, glove, sx * 0.1, 0, 0.02);
+        pl.rotation.z = Math.PI / 2;
+      }
+    } else if (def.propItem === 'bone') {
+      for (const sx of [-1, 1]) {
+        const kn = part(new THREE.SphereGeometry(0.035, 8, 6), 0xf2efe6, glove, sx * 0.055, 0.02, 0.095, false);
+        kn.scale.set(1, 0.85, 0.7);
+      }
+    }
     return { shoulder, elbow, glove };
   };
   const armL = mkArm(1);
@@ -1273,7 +1373,28 @@ function buildBoxer(def, opts = {}) {
   part(G.ear, def.skin, head, 0.165 * P.headS, hy, 0);
   part(G.ear, def.skin, head, -0.165 * P.headS, hy, 0);
   part(G.hair, def.hair, head, 0, hy + 0.03, -0.02);
-  if (def.hairStyle === 'spiky') {
+  if (def.hairStyle === 'bob') {
+    // 단발: 머리통을 감싸는 짧은 컷 + 앞머리 뱅
+    const cap = part(new THREE.SphereGeometry(0.205 * P.headS, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.72), def.hair, head, 0, hy + 0.012, -0.012);
+    cap.scale.set(1.02, 1.0, 1.04);
+    for (const sx of [-1, 1]) {   // 옆머리 (귀 아래까지)
+      const side = part(new THREE.CapsuleGeometry(0.055 * P.headS, 0.16, 4, 10), def.hair, head, sx * 0.155 * P.headS, hy - 0.06, -0.01);
+      side.scale.set(1, 1, 0.75);
+    }
+    const bang = part(new THREE.BoxGeometry(0.26 * P.headS, 0.075, 0.08), def.hair, head, 0, hy + 0.1, 0.108 * P.headS);
+    bang.rotation.x = -0.18;
+  } else if (def.hairStyle === 'long') {
+    // 긴 생머리: 뒤로 길게 흐르는 판 + 양옆 머리카락
+    const cap = part(new THREE.SphereGeometry(0.2 * P.headS, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.66), def.hair, head, 0, hy + 0.01, -0.01);
+    const back = part(new THREE.CapsuleGeometry(0.115 * P.headS, 0.42, 4, 12), def.hair, head, 0, hy - 0.3, -0.075);
+    back.scale.set(1.15, 1, 0.6);
+    for (const sx of [-1, 1]) {
+      const side = part(new THREE.CapsuleGeometry(0.05 * P.headS, 0.3, 4, 10), def.hair, head, sx * 0.15 * P.headS, hy - 0.16, 0.012);
+      side.scale.set(1, 1, 0.7);
+    }
+    const bang = part(new THREE.BoxGeometry(0.24 * P.headS, 0.06, 0.07), def.hair, head, 0, hy + 0.105, 0.1 * P.headS);
+    bang.rotation.x = -0.25;
+  } else if (def.hairStyle === 'spiky') {
     // 사방으로 뻗친 굵은 스파이크
     const n = 9;
     for (let i = 0; i < n; i++) {
@@ -1307,13 +1428,18 @@ function buildBoxer(def, opts = {}) {
   // 눈: 흰자 + 동공 (외곽선 없음)
   const eyeY = hy + 0.02 * P.headY, eyeZ = 0.14 * P.headS;
   const narrow = def.eyes === 'narrow';
+  const big = def.eyes === 'big';
   for (const sx of [-1, 1]) {
-    const sc = part(G.sclera, 0xf6f6f6, head, sx * 0.065, eyeY, eyeZ, false);
-    sc.scale.set(1, narrow ? 0.35 : 1.15, 0.5);
-    const pu = part(G.pupil, 0x101018, head, sx * 0.062, eyeY, eyeZ + 0.02, false);
-    pu.scale.set(narrow ? 0.9 : 1.1, narrow ? 0.45 : 1.4, 0.6);
-    const br = part(G.brow, 0x101018, head, sx * 0.068, eyeY + (narrow ? 0.03 : 0.06), eyeZ + 0.015, false);
-    br.rotation.z = -sx * (narrow ? 0.55 : 0.32);
+    const sc = part(G.sclera, 0xf6f6f6, head, sx * (big ? 0.072 : 0.065), eyeY, eyeZ, false);
+    sc.scale.set(big ? 1.35 : 1, narrow ? 0.35 : big ? 1.75 : 1.15, 0.5);
+    const pu = part(G.pupil, big ? 0x3a2418 : 0x101018, head, sx * (big ? 0.07 : 0.062), eyeY, eyeZ + 0.022, false);
+    pu.scale.set(narrow ? 0.9 : big ? 1.8 : 1.1, narrow ? 0.45 : big ? 2.1 : 1.4, 0.6);
+    if (big) {   // 큰 눈 하이라이트
+      const hl = part(new THREE.SphereGeometry(0.012, 8, 6), 0xffffff, head, sx * 0.078, eyeY + 0.022, eyeZ + 0.034, false);
+      hl.scale.set(1.1, 1.1, 0.5);
+    }
+    const br = part(G.brow, 0x101018, head, sx * 0.068, eyeY + (narrow ? 0.03 : big ? 0.085 : 0.06), eyeZ + 0.015, false);
+    br.rotation.z = -sx * (narrow ? 0.55 : big ? 0.12 : 0.32);
   }
   // 코
   const nose = part(new THREE.ConeGeometry(0.028, 0.06, 6), def.skin, head, 0, hy - 0.02 * P.headY, 0.165 * P.headS, false);
@@ -1336,7 +1462,7 @@ function buildBoxer(def, opts = {}) {
   applyPose(rig, defaultPose());
   return rig;
 }
-return { CHARACTERS, CHARACTER_ORDER, COACH_DEFS, POSE_KEYS, defaultPose, copyPose, lerpPose, applyPose, buildBoxer };
+return { CHARACTERS, CHARACTER_ORDER, HIDDEN_ORDER, COACH_DEFS, POSE_KEYS, defaultPose, copyPose, lerpPose, applyPose, buildBoxer };
 })();
 // ===== InputState.js =====
 __M.InputState = (() => {
@@ -1891,6 +2017,79 @@ class AudioManager {
       const ng = ctx.createGain(); ng.gain.setValueAtTime(0.35, t); ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
       src.connect(hp); hp.connect(ng); ng.connect(this.master); src.start(t); src.stop(t + 0.08);
     }
+  }
+
+  /** 오토바이 엔진 소음 (뼈석원 필살) */
+  engine(dur = 1.6) {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const out = ctx.createGain();
+    out.gain.setValueAtTime(0.0001, t);
+    out.gain.exponentialRampToValueAtTime(0.5, t + 0.12);
+    out.gain.setValueAtTime(0.5, t + dur * 0.7);
+    out.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    out.connect(this.shaper);
+    // 저음 톱니 2개 + 럼블 노이즈 → 배기음
+    for (const [mul, det] of [[1, 0], [1.005, 9], [0.5, -7]]) {
+      const o = ctx.createOscillator(); o.type = 'sawtooth';
+      o.frequency.setValueAtTime(58 * mul, t);
+      o.frequency.linearRampToValueAtTime(190 * mul, t + dur * 0.55);
+      o.frequency.linearRampToValueAtTime(120 * mul, t + dur);
+      o.detune.value = det;
+      const g = ctx.createGain(); g.gain.value = 0.32;
+      // 배기 펄스 (부릉부릉)
+      const lfo = ctx.createOscillator(); lfo.type = 'square'; lfo.frequency.setValueAtTime(11, t); lfo.frequency.linearRampToValueAtTime(28, t + dur);
+      const lg = ctx.createGain(); lg.gain.value = 0.22;
+      lfo.connect(lg); lg.connect(g.gain);
+      o.connect(g); g.connect(out); o.start(t); o.stop(t + dur + 0.05); lfo.start(t); lfo.stop(t + dur + 0.05);
+    }
+    const src = ctx.createBufferSource(); src.buffer = this.noise;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.setValueAtTime(320, t); bp.frequency.linearRampToValueAtTime(900, t + dur); bp.Q.value = 0.8;
+    const ng = ctx.createGain(); ng.gain.value = 0.25;
+    src.connect(bp); bp.connect(ng); ng.connect(out); src.start(t); src.stop(t + dur + 0.05);
+  }
+
+  /** 쇳덩이 충돌 (덤벨/바벨) */
+  clang(power = 1) {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    for (const f of [520, 780, 1170, 1660]) {
+      const o = ctx.createOscillator(); o.type = 'triangle';
+      o.frequency.setValueAtTime(f * (0.96 + Math.random() * 0.08), t);
+      o.frequency.exponentialRampToValueAtTime(f * 0.82, t + 0.5);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.16 * power, t + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55 + Math.random() * 0.3);
+      o.connect(g); g.connect(this.master); o.start(t); o.stop(t + 0.95);
+    }
+    this.impact(0.7 * power);
+  }
+
+  /** 냥냥펀치: 짧고 귀여운 삑 소리 */
+  nyang(pitch = 1) {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = 'triangle';
+    o.frequency.setValueAtTime(880 * pitch, t);
+    o.frequency.exponentialRampToValueAtTime(1500 * pitch, t + 0.07);
+    o.frequency.exponentialRampToValueAtTime(700 * pitch, t + 0.16);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.16, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+    o.connect(g); g.connect(this.master); o.start(t); o.stop(t + 0.22);
+  }
+
+  /** 셔터음 (릴스 촬영) */
+  shutter() {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const src = ctx.createBufferSource(); src.buffer = this.noise;
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 3800;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.25, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+    src.connect(hp); hp.connect(g); g.connect(this.master); src.start(t); src.stop(t + 0.08);
   }
 
   block() {
@@ -2481,6 +2680,10 @@ const FINISHERS = {
   chopping:     { side: 'R', wind: 0.5, dur: 0.5, powerBase: 1.9, powerCharge: 0.3, kind: 'chopping' },
   jolt:         { side: 'R', wind: 0.4, dur: 0.36, powerBase: 1.7, powerCharge: 0.3, kind: 'jolt', dash: 5.5 },
   smash:        { side: 'R', wind: 0.55, dur: 0.6, powerBase: 2.1, powerCharge: 0.35, kind: 'smash', launch: 1.1 },
+  // 히든 필살기
+  reels:        { side: 'L', wind: 0.35, dur: 0.4, powerBase: 1.2, powerCharge: 0.2, kind: 'reels', dash: 3.4 },        // 붙잡아 릴스 댄스
+  barbell:      { side: 'R', wind: 0.62, dur: 0.6, powerBase: 2.2, powerCharge: 0.4, kind: 'barbell', launch: 1.2 },     // 바벨 내려찍기
+  bike:         { side: 'R', wind: 0.5, dur: 0.52, powerBase: 2.3, powerCharge: 0.35, kind: 'bike', launch: 0.6, dash: 9.5 }, // 오토바이 돌진
 };
 
 class Fighter {
@@ -2525,6 +2728,7 @@ class Fighter {
     this.knock = new THREE.Vector3();
     this.hitCount = 0; this.hitTimer = 0;
     this.stagger = 0; this.staggerImmune = 0; this.staggerKind = 'normal';
+    this.danceT = 0; this.danceVictim = false; this.dancePartner = null;   // 릴스 댄스 (채채더킴 필살)
     this.groggy = 0;   // 뎀프시 연타 누적 → 4 이면 그로기
     this.downT = 0; this.downDur = 2.7;   // 필살기 피격 다운 → 넘어졌다 고개 흔들며 일어남 (무적·행동불가)
     this.rattle = 0;
@@ -2545,7 +2749,7 @@ class Fighter {
 
   get dempseyActive() { return this.dempsey.active; }
   get stanceStyle() { return this.dempsey.style; }
-  get busy() { return this.ko || this.stagger > 0 || !!this.finisher || this.airY > 0.01 || this.downT > 0; }
+  get busy() { return this.ko || this.stagger > 0 || !!this.finisher || this.airY > 0.01 || this.downT > 0 || this.danceT > 0; }
   get rolling() { return this.rollT > 0; }
   get alive() { return !this.ko; }
   get isCounterWindow() { return !!this.punch && this.punch.t / this.punch.dur < 0.55; }
@@ -2635,6 +2839,10 @@ class Fighter {
     if (opts.staggerT && !opts.kind) this.punch.staggerT = opts.staggerT;
     if (!opts.noTell) this.tell[side] = 1;
     this.audio.swoosh(side === 'L' ? -1 : 1, power, type === 'hook');
+    // 캐릭터별 펀치 효과음 (냥냥펀치 / 덤벨 / 뼈)
+    const sfx = this.def.sfx;
+    if (sfx === 'nyang') this.audio.nyang(0.9 + Math.random() * 0.3);
+    else if (sfx === 'clang' && (type === 'hook' || opts.heavy)) this.audio.clang(0.5);
     this.events.push({ type: 'punch', punchType: type, kind: opts.kind || null });
     return true;
   }
@@ -2685,7 +2893,7 @@ class Fighter {
       this.rollT = 2.8; this.rollFinal = false; this.punch = null; this.queue.length = 0;
       this.audio.finisherWind(0.6);
       this.subs.show(charge >= 3 ? 'デンプシーロールッ！！！' : 'デンプシー…ロールッ！！', { duration: 1.4, strong: true });
-      this.events.push({ type: 'finisherStart', charge, roll: true });
+      this.events.push({ type: 'finisherStart', charge, roll: true, kind: 'roll' });
       return true;
     }
     const side = F.side || (d.sway > 0 ? 'L' : 'R');
@@ -2693,9 +2901,12 @@ class Fighter {
     this.punch = null;
     d.consume();
     this.audio.finisherWind(F.wind);
-    const line = fk === 'chopping' ? 'チョッピングライトォッ！！' : fk === 'jolt' ? 'ジョルトブローッ！！' : fk === 'smash' ? 'スマッシュゥゥッ！！！' : (charge >= 3 ? 'うおおおおおっ！！！' : 'うおおおっ！！');
+    if (F.kind === 'bike') this.audio.engine(1.8);
+    else if (F.kind === 'barbell') this.audio.clang(0.8);
+    else if (F.kind === 'reels') this.audio.shutter();
+    const line = fk === 'reels' ? '자, 같이 춤춰!' : fk === 'barbell' ? '데드리프트… 받아!' : fk === 'bike' ? '부아아앙—!!' : fk === 'chopping' ? 'チョッピングライトォッ！！' : fk === 'jolt' ? 'ジョルトブローッ！！' : fk === 'smash' ? 'スマッシュゥゥッ！！！' : (charge >= 3 ? 'うおおおおおっ！！！' : 'うおおおっ！！');
     this.subs.show(line, { duration: 1.3, strong: true });
-    this.events.push({ type: 'finisherStart', charge });
+    this.events.push({ type: 'finisherStart', charge, kind: F.kind || null });
     return true;
   }
 
@@ -2846,6 +3057,16 @@ class Fighter {
     if (this.hp <= 0) this._die();
     // 필살기에 맞고 살아남으면 다운: 넘어졌다가 고개를 흔들며 일어난다 (그동안 무적 + 행동 불가)
     let down = false;
+    // 릴스 (채채더킴): 다운 대신 2.6초 강제 댄스 → 끝나고 쓰러짐
+    if (ev.finisher && !this.ko && ev.kind === 'reels') {
+      this.danceT = 2.6; this.danceVictim = true; this.dancePartner = ev.attacker;
+      this.stagger = 0; this.punch = null; this.queue.length = 0; this.finisher = null; this.dempsey.stop();
+      if (ev.attacker) { ev.attacker.danceT = 2.6; ev.attacker.danceVictim = false; ev.attacker.dancePartner = this; ev.attacker.punch = null; }
+      this.audio.stagger();
+      return { dmg, blocked: false, staggered: true, dance: true, ko: this.ko, heavy: true };
+    }
+    // 오토바이 (뼈석원): 쳐박히고 날아간다
+    if (ev.kind === 'bike' && !this.ko) { this.knock.addScaledVector(ev.dir, 6.5); this.rattle = 1; }
     if (ev.finisher && !this.ko && ev.kind !== 'jolt') {   // 속공형(미야타 졸트)은 다운 없음
       this.downT = this.downDur; this.stagger = 0; this.punch = null; this.queue.length = 0; this.finisher = null; this.dempsey.stop();
       this.airY = 0; this.airV = 0;
@@ -3152,6 +3373,38 @@ class Fighter {
       }
     }
 
+    // ---- 릴스 댄스 (둘 다 강제로 춤) ----
+    if (this.danceT > 0) {
+      this.danceT -= dt;
+      const pr = this.dancePartner;
+      if (pr && !this.danceVictim) {
+        // 촬영자: 상대를 자기 옆에 끌어다 붙인다
+        this.forward.copy(pr.pos).sub(this.pos).setY(0);
+        if (this.forward.lengthSq() < 1e-4) this.forward.set(0, 0, 1);
+        this.forward.normalize();
+        this.yaw = Math.atan2(this.forward.x, this.forward.z);
+        this.side.set(this.forward.z, 0, -this.forward.x);
+      } else if (pr) {
+        const want = pr.pos.clone().addScaledVector(pr.forward, 0.95);
+        this.pos.lerp(want, Math.min(1, dt * 8));
+        this.forward.copy(pr.pos).sub(this.pos).setY(0).normalize();
+        this.yaw = Math.atan2(this.forward.x, this.forward.z);
+      }
+      const ph = t * 9.5, sw = Math.sin(ph), sw2 = Math.sin(ph * 2);
+      p.hipsY += Math.abs(sw2) * 0.1; p.hipsX += sw * 0.1; p.hipsRotY += sw * 0.35;
+      p.waistY += sw * 0.4; p.waistZ += sw2 * 0.12; p.chestY += sw * 0.2;
+      p.headY += sw * 0.5; p.headZ += sw2 * 0.18; p.headX += -0.1;
+      p.shLX += -1.9 + sw * 0.9; p.shRX += -1.9 - sw * 0.9;
+      p.shLZ += 0.5 + sw2 * 0.2; p.shRZ += -0.5 - sw2 * 0.2;
+      p.elL += -1.0 - Math.max(0, sw) * 0.6; p.elR += -1.0 - Math.max(0, -sw) * 0.6;
+      p.thighLX += -0.25 + sw * 0.35; p.thighRX += -0.25 - sw * 0.35; p.shinL += Math.max(0, sw) * 0.7; p.shinR += Math.max(0, -sw) * 0.7;
+      this.queue.length = 0;
+      if (this.danceT <= 0) {
+        this.danceT = 0; this.dancePartner = null;
+        if (this.danceVictim && !this.ko) { this.downT = this.downDur; this.hp = Math.max(0, this.hp - 6); if (this.hp <= 0) this._die(); }
+        this.danceVictim = false;
+      }
+    }
     // ---- 스태거 ----
     if (this.stagger > 0) {
       this.stagger -= dt;
@@ -4172,6 +4425,7 @@ __M.Intro = (() => {
 // 스킵되거나 끝나면 각자 자리에서 3초 카운트다운 → 공(종) 소리와 함께 시작. 모든 클라이언트가 로컬로 동일 타임라인 재생.
 const { defaultPose, applyPose, copyPose } = __M.Rig;
 const { easeOutCubic, easeInOut } = __M.Punch;
+const { HIDDEN_LINES } = __M.Specials;
 
 const PER = 3.6;          // 선수 1명당 연출 시간
 const WALK = 1.3;         // 걸어 나오는 시간
@@ -4193,7 +4447,7 @@ class Intro {
 
   start() {
     const fs = this.g.fighters;
-    this.active = true; this.done = false; this.t = 0; this.idx = -1; this.spoken = new Set();
+    this.active = true; this.done = false; this.t = 0; this.idx = -1; this.spoken = new Set(); this.threw = false; this.revved = false;
     this.spawns = fs.map((f) => f.pos.clone());
     this.starts = fs.map((f, i) => new THREE.Vector3(CORNERS[i % 4][0], 0, CORNERS[i % 4][1]));
     // 전원 코너로 (링 밖) 이동시켜 대기
@@ -4234,7 +4488,39 @@ class Intro {
           f.pos.copy(end);
           f.forward.copy(toC);
           const u = local - WALK;                 // 0 .. PER-WALK (2.3s)
-          if (u < 1.0) {
+          const key = f.defKey;
+          if (key === 'chaechae') {
+            // 채채더킴: 브이 + 살짝 기울인 고개 → 셀카 찍듯 손 뻗기
+            const k = easeOutCubic(Math.min(1, u / 0.4));
+            p.shRX += (-2.25 - p.shRX) * k; p.shRY += (0.35 - p.shRY) * k; p.shRZ += (-0.25 - p.shRZ) * k; p.elR += (-1.5 - p.elR) * k;
+            p.headZ += 0.3 * k; p.headY += 0.18 * k; p.waistY += 0.2 * k; p.hipsX += 0.05 * k;
+            p.hipsY += Math.abs(Math.sin(u * 7)) * 0.05 * k;
+            if (u > 1.1) { const k2 = easeOutCubic(Math.min(1, (u - 1.1) / 0.35)); p.shLX += (-1.9 - p.shLX) * k2; p.elL += (-0.9 - p.elL) * k2; p.shLY += (-0.35) * k2; }
+          } else if (key === 'jjeonghyo') {
+            // 쩡효: 바벨을 머리 위로 들었다가 앞으로 내던짐
+            if (u < 1.0) {
+              const k = easeOutCubic(Math.min(1, u / 0.45));
+              p.shLX += (-2.9 - p.shLX) * k; p.shRX += (-2.9 - p.shRX) * k; p.elL += (-0.3 - p.elL) * k; p.elR += (-0.3 - p.elR) * k;
+              p.shLZ += 0.5 * k; p.shRZ += -0.5 * k; p.waistX += -0.22 * k; p.thighLX += -0.25 * k; p.thighRX += -0.25 * k; p.shinL += 0.4 * k; p.shinR += 0.4 * k;
+            } else {
+              const k = easeOutCubic(Math.min(1, (u - 1.0) / 0.25));
+              p.shLX += (-1.0 - p.shLX) * k; p.shRX += (-1.0 - p.shRX) * k; p.elL += (-0.2 - p.elL) * k; p.elR += (-0.2 - p.elR) * k;
+              p.waistX += 0.45 * k; p.chestX += 0.2 * k; p.headX += 0.2 * k; p.hipsY += -0.12 * k;
+              if (!this.threw) { this.threw = true; try { g.audio.clang(1.1); } catch (e) {} }
+            }
+          } else if (key === 'ppyeo') {
+            // 뼈석원: 한 손으로 배를 문지르며 씩 웃기 → 시동 거는 손목 스냅
+            const k = easeOutCubic(Math.min(1, u / 0.4));
+            p.shRX += (-0.35 - p.shRX) * k; p.elR += (-2.3 - p.elR) * k; p.shRY += (0.5 - p.shRY) * k;
+            p.chestZ += Math.sin(u * 5) * 0.06 * k; p.waistY += Math.sin(u * 3) * 0.12 * k;
+            p.headX += -0.12 * k; p.hipsX += Math.sin(u * 2.2) * 0.04 * k;
+            if (u > 1.2) {
+              const k2 = easeOutCubic(Math.min(1, (u - 1.2) / 0.3));
+              p.shLX += (-1.5 - p.shLX) * k2; p.elL += (-1.7 - p.elL) * k2;
+              p.shLZ += Math.sin(u * 26) * 0.12 * k2;   // 부릉부릉 손목
+              if (!this.revved) { this.revved = true; try { g.audio.engine(1.1); } catch (e) {} }
+            }
+          } else if (u < 1.0) {
             // 삿대질: 오른팔을 앞으로 쭉 뻗어 상대를 가리킨다, 턱 들기
             const k = easeOutCubic(Math.min(1, u / 0.35));
             p.shRX += (-1.7 - p.shRX) * k; p.shRY += (0.05 - p.shRY) * k; p.shRZ += (0.0 - p.shRZ) * k; p.elR += (-0.05 - p.elR) * k;
@@ -4268,7 +4554,8 @@ class Intro {
     if (!this.spoken.has(idx) && local >= WALK * 0.7) {
       this.spoken.add(idx);
       const f = fs[idx];
-      const line = f.intro || ({ ippo: '…やります。全力で！', mashiba: '…殺す気で来い。', miyata: '見切ってやる。', sendo: 'ぶっ飛ばしたるわ！' })[f.defKey] || '…';
+      const hid = HIDDEN_LINES[f.defKey];
+      const line = f.intro || (hid && hid.intro) || ({ ippo: '…やります。全力で！', mashiba: '…殺す気で来い。', miyata: '見切ってやる。', sendo: 'ぶっ飛ばしたるわ！' })[f.defKey] || '…';
       g.subs.show(line, { duration: PER - WALK * 0.7, mid: true, speaker: f.slot === g.localSlot ? 'player' : 'opp', charKey: f.defKey, voice: true });
       g.introName(f);
       g.coaches.shout(f.slot, 1.2);
@@ -4414,6 +4701,254 @@ class TouchControls {
 }
 return { isTouchDevice, TouchControls };
 })();
+// ===== Music.js =====
+__M.Music = (() => {
+// Music.js — 칩튠 BGM (Web Audio 합성, 외부 음원 없음)
+// 90년대 스포츠 드라마풍 8비트 록: 펄스 리드 + 펄스 하모니 + 삼각파 베이스 + 노이즈 드럼.
+// 원곡 멜로디를 쓰지 않은 오리지널 진행 (Am 계열 질주감).
+
+const NOTE = { C: 0, 'C#': 1, D: 2, 'D#': 3, E: 4, F: 5, 'F#': 6, G: 7, 'G#': 8, A: 9, 'A#': 10, B: 11 };
+/** 'A4' → 주파수 */
+function hz(n) {
+  if (!n || n === '-') return 0;
+  const m = /^([A-G]#?)(-?\d)$/.exec(n);
+  if (!m) return 0;
+  return 440 * Math.pow(2, (NOTE[m[1]] + (+m[2] - 4) * 12 - 9) / 12);
+}
+
+// ---- 패턴 (한 칸 = 16분음표, 16칸 = 1마디) ----
+// 리드: 메인 테마 (Am - F - C - G / Am - F - G - E7 느낌). 오리지널 라인.
+const LEAD_A = [
+  'A4', '-', 'C5', 'E5', '-', 'D5', 'C5', '-', 'A4', '-', 'B4', 'C5', '-', 'E5', '-', '-',
+  'F4', '-', 'A4', 'C5', '-', 'B4', 'A4', '-', 'G4', '-', 'A4', 'B4', '-', 'C5', '-', '-',
+  'C5', '-', 'E5', 'G5', '-', 'F5', 'E5', '-', 'D5', '-', 'C5', 'D5', '-', 'E5', '-', '-',
+  'G4', '-', 'B4', 'D5', '-', 'C5', 'B4', '-', 'A4', '-', 'B4', 'C5', '-', 'B4', 'A4', '-',
+];
+// 리드: 후렴 (더 높고 끈질기게)
+const LEAD_B = [
+  'E5', 'E5', '-', 'F5', 'E5', '-', 'D5', '-', 'C5', '-', 'D5', 'E5', '-', '-', 'A4', '-',
+  'F5', 'F5', '-', 'G5', 'F5', '-', 'E5', '-', 'D5', '-', 'E5', 'F5', '-', '-', 'C5', '-',
+  'G5', '-', 'F5', 'E5', '-', 'D5', 'C5', '-', 'B4', '-', 'C5', 'D5', '-', 'E5', '-', '-',
+  'A5', '-', '-', 'G5', '-', 'E5', '-', 'D5', 'C5', '-', 'B4', '-', 'A4', '-', '-', '-',
+];
+// 베이스 (8분 질주)
+const BASS_A = [
+  'A2', 'A2', 'A3', 'A2', 'A2', 'A2', 'A3', 'A2', 'A2', 'A2', 'A3', 'A2', 'A2', 'A3', 'A2', 'A3',
+  'F2', 'F2', 'F3', 'F2', 'F2', 'F2', 'F3', 'F2', 'F2', 'F2', 'F3', 'F2', 'F2', 'F3', 'F2', 'F3',
+  'C3', 'C3', 'C4', 'C3', 'C3', 'C3', 'C4', 'C3', 'C3', 'C3', 'C4', 'C3', 'C3', 'C4', 'C3', 'C4',
+  'G2', 'G2', 'G3', 'G2', 'G2', 'G2', 'G3', 'G2', 'E2', 'E2', 'E3', 'E2', 'E2', 'E3', 'E2', 'E3',
+];
+const BASS_B = [
+  'A2', 'A2', 'A3', 'A2', 'A2', 'A2', 'A3', 'A2', 'F2', 'F2', 'F3', 'F2', 'F2', 'F2', 'F3', 'F2',
+  'D2', 'D2', 'D3', 'D2', 'D2', 'D2', 'D3', 'D2', 'G2', 'G2', 'G3', 'G2', 'G2', 'G2', 'G3', 'G2',
+  'C3', 'C3', 'C4', 'C3', 'C3', 'C3', 'C4', 'C3', 'A2', 'A2', 'A3', 'A2', 'A2', 'A2', 'A3', 'A2',
+  'F2', 'F2', 'F3', 'F2', 'G2', 'G2', 'G3', 'G2', 'E2', 'E2', 'E3', 'E2', 'E3', 'E3', 'E3', 'E3',
+];
+// 하모니 (3도/5도 받침, 리드보다 조용)
+const HARM_A = LEAD_A.map((n) => (n === '-' ? '-' : n));
+// 드럼: k=킥 s=스네어 h=하이햇 (대문자 H = 오픈)
+const DRUM = 'k h s h k h s h k h s h k k s H'.split(' ');
+const DRUM_FILL = 'k h s h k h s h k h s s s s s H'.split(' ');
+
+// 메뉴/로비용: 느긋한 아르페지오
+const MENU_LEAD = [
+  'A4', '-', 'E5', '-', 'C5', '-', 'E5', '-', 'F4', '-', 'C5', '-', 'A4', '-', 'C5', '-',
+  'G4', '-', 'D5', '-', 'B4', '-', 'D5', '-', 'E4', '-', 'B4', '-', 'G4', '-', 'B4', '-',
+];
+const MENU_BASS = [
+  'A2', '-', '-', '-', '-', '-', '-', '-', 'F2', '-', '-', '-', '-', '-', '-', '-',
+  'G2', '-', '-', '-', '-', '-', '-', '-', 'E2', '-', '-', '-', '-', '-', '-', '-',
+];
+
+const TRACKS = {
+  menu:   { bpm: 104, lead: MENU_LEAD, harm: null, bass: MENU_BASS, drums: false, leadVol: 0.1, duty: 0.5 },
+  battle: { bpm: 168, lead: LEAD_A, harm: HARM_A, bass: BASS_A, drums: true, leadVol: 0.13, duty: 0.25 },
+  chorus: { bpm: 168, lead: LEAD_B, harm: null, bass: BASS_B, drums: true, leadVol: 0.14, duty: 0.25 },
+};
+
+class Music {
+  constructor(audio) {
+    this.audio = audio;         // AudioManager (ctx/master 공유)
+    this.enabled = true;
+    try { this.enabled = localStorage.getItem('dr-bgm') !== 'off'; } catch (e) {}
+    this.track = null;          // 'menu' | 'battle' | 'chorus'
+    this.timer = null;
+    this.step = 0;              // 16분음표 인덱스
+    this.bar = 0;
+    this.nextTime = 0;
+    this.gain = null;
+    this.duck = 1;
+  }
+
+  get ctx() { return this.audio.ctx; }
+
+  _ensure() {
+    const ctx = this.ctx; if (!ctx) return false;
+    if (!this.gain) {
+      this.gain = ctx.createGain();
+      this.gain.gain.value = 0;
+      // 칩튠은 조금 좁게 — 살짝 로우패스로 찢어짐 완화
+      this.lp = ctx.createBiquadFilter(); this.lp.type = 'lowpass'; this.lp.frequency.value = 7000;
+      this.gain.connect(this.lp); this.lp.connect(this.audio.master);
+    }
+    return true;
+  }
+
+  /** 펄스파 (듀티 사이클) 오실레이터 */
+  _pulse(freq, t, dur, vol, duty = 0.5, detune = 0) {
+    const ctx = this.ctx;
+    const o = ctx.createOscillator();
+    if (duty === 0.5) o.type = 'square';
+    else {
+      // PeriodicWave 로 듀티 구현 (25% / 12.5%)
+      const n = 24, real = new Float32Array(n), imag = new Float32Array(n);
+      for (let i = 1; i < n; i++) imag[i] = (2 / (i * Math.PI)) * Math.sin(Math.PI * i * duty);
+      o.setPeriodicWave(ctx.createPeriodicWave(real, imag));
+    }
+    o.frequency.setValueAtTime(freq, t);
+    if (detune) o.detune.setValueAtTime(detune, t);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.006);
+    g.gain.setValueAtTime(vol, t + dur * 0.55);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(this.gain);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+
+  _bass(freq, t, dur, vol) {
+    const ctx = this.ctx;
+    const o = ctx.createOscillator(); o.type = 'triangle';
+    o.frequency.setValueAtTime(freq, t);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur * 0.95);
+    o.connect(g); g.connect(this.gain);
+    o.start(t); o.stop(t + dur);
+  }
+
+  _drum(kind, t) {
+    const ctx = this.ctx;
+    if (kind === 'k') {
+      const o = ctx.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.09);
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+      o.connect(g); g.connect(this.gain); o.start(t); o.stop(t + 0.18);
+      return;
+    }
+    const src = ctx.createBufferSource(); src.buffer = this.audio.noise;
+    src.playbackRate.value = kind === 's' ? 1 : 1.8;
+    const f = ctx.createBiquadFilter();
+    f.type = kind === 's' ? 'bandpass' : 'highpass';
+    f.frequency.value = kind === 's' ? 1700 : 7000;
+    f.Q.value = kind === 's' ? 1.1 : 0.7;
+    const dur = kind === 's' ? 0.13 : kind === 'H' ? 0.12 : 0.035;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(kind === 's' ? 0.3 : 0.12, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f); f.connect(g); g.connect(this.gain);
+    src.start(t); src.stop(t + dur + 0.02);
+  }
+
+  /** 16분음표 한 칸 예약 */
+  _schedule(t) {
+    const T = TRACKS[this.track]; if (!T) return;
+    const i = this.step % T.lead.length;
+    const spb = 60 / T.bpm / 4;   // 16분 길이
+    const lead = T.lead[i];
+    if (lead && lead !== '-') {
+      // 다음 쉼표까지 길이 계산 (레가토)
+      let len = 1;
+      while (len < 8 && T.lead[(i + len) % T.lead.length] === '-') len++;
+      const dur = spb * len * 0.92;
+      this._pulse(hz(lead), t, dur, T.leadVol, T.duty);
+      this._pulse(hz(lead), t, dur, T.leadVol * 0.45, T.duty, 9);   // 디튠 두께
+    }
+    if (T.harm) {
+      const h = T.harm[(i + 8) % T.harm.length];
+      if (h && h !== '-') this._pulse(hz(h) / 2, t, spb * 1.6, T.leadVol * 0.3, 0.125);
+    }
+    const b = T.bass[i % T.bass.length];
+    if (b && b !== '-') this._bass(hz(b), t, spb * 1.7, 0.22);
+    if (T.drums) {
+      const fill = this.bar % 8 === 7;
+      const d = (fill ? DRUM_FILL : DRUM)[i % 16];
+      if (d && d !== '-') this._drum(d, t);
+    }
+    this.step++;
+    if (this.step % 16 === 0) this.bar++;
+    // 전투곡은 4마디 A → 4마디 후렴 교대
+    if (T.drums && this.step % T.lead.length === 0) {
+      const next = this.track === 'battle' ? 'chorus' : 'battle';
+      this.track = next; this.step = 0;
+    }
+  }
+
+  _tick() {
+    const ctx = this.ctx; if (!ctx || !this.track) return;
+    const T = TRACKS[this.track];
+    const spb = 60 / T.bpm / 4;
+    while (this.nextTime < ctx.currentTime + 0.25) {
+      if (this.nextTime < ctx.currentTime) this.nextTime = ctx.currentTime + 0.02;
+      this._schedule(this.nextTime);
+      this.nextTime += spb;
+    }
+  }
+
+  /** 트랙 재생 ('menu' | 'battle'). 이미 같은 계열이면 유지 */
+  play(name) {
+    if (!this.enabled || !this._ensure()) { this.pending = name; return; }
+    const want = name === 'battle' ? 'battle' : 'menu';
+    const cur = this.track === 'chorus' ? 'battle' : this.track;
+    if (cur === want && this.timer) return;
+    this.track = want; this.step = 0; this.bar = 0;
+    this.nextTime = this.ctx.currentTime + 0.05;
+    const t = this.ctx.currentTime;
+    this.gain.gain.cancelScheduledValues(t);
+    this.gain.gain.setValueAtTime(this.gain.gain.value, t);
+    this.gain.gain.linearRampToValueAtTime(this.vol, t + 0.6);
+    clearInterval(this.timer);
+    this.timer = setInterval(() => this._tick(), 60);
+    this._tick();
+  }
+
+  get vol() { return (this.track === 'menu' ? 0.5 : 0.36) * this.duck; }
+
+  stop(fade = 0.5) {
+    if (!this.gain) { this.track = null; return; }
+    const t = this.ctx.currentTime;
+    this.gain.gain.cancelScheduledValues(t);
+    this.gain.gain.setValueAtTime(this.gain.gain.value, t);
+    this.gain.gain.linearRampToValueAtTime(0.0001, t + fade);
+    clearInterval(this.timer); this.timer = null;
+    setTimeout(() => { if (!this.timer) this.track = null; }, fade * 1000 + 50);
+  }
+
+  /** 필살기·KO 연출 때 잠깐 줄이기 */
+  setDuck(v) {
+    this.duck = v;
+    if (this.gain && this.track) {
+      const t = this.ctx.currentTime;
+      this.gain.gain.cancelScheduledValues(t);
+      this.gain.gain.setValueAtTime(this.gain.gain.value, t);
+      this.gain.gain.linearRampToValueAtTime(this.vol, t + 0.12);
+    }
+  }
+
+  toggle() {
+    this.enabled = !this.enabled;
+    try { localStorage.setItem('dr-bgm', this.enabled ? 'on' : 'off'); } catch (e) {}
+    if (!this.enabled) this.stop(0.25);
+    else this.play(this.pendingTrack || 'menu');
+    return this.enabled;
+  }
+
+  /** 오디오 컨텍스트가 늦게 열렸을 때 */
+  resumePending() { if (this.pending) { const p = this.pending; this.pending = null; this.play(p); } }
+}
+return { Music };
+})();
 // ===== main.js =====
 __M.main = (() => {
 // main.js — Game: 4인 난투. 모드: solo(로컬+CPU3) / host(방장 권위 시뮬 + 브로드캐스트) / client(입력 전송 + 스냅샷 보간 렌더)
@@ -4436,9 +4971,10 @@ const { HitSparks } = __M.HitSparks;
 const { CoachBubble, CoachBrain } = __M.Coach;
 const { Coaches } = __M.Coaches;
 const { Intro } = __M.Intro;
-const { CHARACTERS, CHARACTER_ORDER } = __M.Rig;
+const { CHARACTERS, CHARACTER_ORDER, HIDDEN_ORDER } = __M.Rig;
 const { KITS, SPECIALS } = __M.Specials;
 const { TouchControls, isTouchDevice } = __M.Touch;
+const { Music } = __M.Music;
 
 const _v = new THREE.Vector3();
 const _prevHead = new THREE.Vector3();
@@ -4446,7 +4982,7 @@ const _camF = new THREE.Vector3();
 const _camR = new THREE.Vector3();
 const _sep = new THREE.Vector3();
 const SPAWNS = [[0, 1.6], [0, -1.6], [1.6, 0], [-1.6, 0]];
-const AUDIO_FWD = ['whoosh', 'swoosh', 'impact', 'bassHit', 'riser', 'maxSpeedHit', 'stagger', 'ko', 'block', 'chargeUp', 'finisherWind', 'finisherHit', 'counter', 'cheer'];
+const AUDIO_FWD = ['whoosh', 'swoosh', 'impact', 'bassHit', 'riser', 'maxSpeedHit', 'stagger', 'ko', 'block', 'chargeUp', 'finisherWind', 'finisherHit', 'counter', 'cheer', 'engine', 'clang', 'nyang', 'shutter'];
 const SNAP_HZ = 20;
 
 class Game {
@@ -4469,6 +5005,7 @@ class Game {
     if (this.isTouch) document.body.classList.add('touch');
     window.addEventListener('contextmenu', (e) => { if (!(e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA'))) e.preventDefault(); });
     this.audio = new AudioManager();
+    this.music = new Music(this.audio);
     this.subs = new SubtitleManager(document.getElementById('subtitle'));
     this.hud = new HUD();
     this.fx = new FxOverlay(document.getElementById('fx'));
@@ -4520,7 +5057,7 @@ class Game {
     window.addEventListener('resize', () => this.onResize());
     window.addEventListener('error', (e) => this.showError(e.message || String(e.error)));
     window.addEventListener('unhandledrejection', (e) => this.showError(String(e.reason)));
-    window.addEventListener('pointerdown', () => this.audio.init(), { once: true });
+    window.addEventListener('pointerdown', () => { this.audio.init(); this.music.resumePending(); this.music.play(this.started ? 'battle' : 'menu'); }, { once: true });
     // 포커스 진단: 마지막 키 입력 시각/코드 기록, 캔버스 클릭 시 입력창 포커스 해제
     this.lastKeyT = -99; this.lastKey = '';
     window.addEventListener('keydown', (e) => { this.lastKeyT = this.realTime; this.lastKey = e.code; }, true);
@@ -4584,7 +5121,10 @@ class Game {
       ippo: { style: '인파이터', st: '<b>SPACE</b> 뎀프시롤 · <b>U</b> 가젤 펀치(띄움) · <b>I</b> 리버 블로(주저앉힘) · <b>L</b> 필살 훅' , pw: 3, sp: 3, hp: 3 },
       mashiba: { style: '히트맨 · 최장 리치', st: '<b>SPACE</b> 플리커 러시 · <b>U</b> 플리커 3연(무예비) · <b>I</b> 초핑 라이트 · <b>L</b> 초핑 라이트 강', pw: 3, sp: 4, hp: 3 },
       miyata: { style: '아웃복서 · 카운터', st: '<b>SPACE</b> 카운터 스탠스(피격 시 자동 회피→졸트) · <b>U</b> 졸트 · <b>I</b> 백스텝 잽 · <b>L</b> 졸트 블로', pw: 2, sp: 5, hp: 2 },
-      sendo: { style: '파워 슬러거 · 느리지만 한 방', st: '<b>SPACE</b> 스매시 차지(급속) · <b>U</b> 스매시(띄움) · <b>I</b> 러시 3연 · <b>L</b> 스매시 강', pw: 5, sp: 1, hp: 4 },
+      sendo: { style: '파워 슬러거 · 느리지만 한 방', st: '<b>U</b> 스매시(띄움) · <b>I</b> 러시 3연 · <b>L</b> 스매시 강', pw: 5, sp: 1, hp: 4 },
+      chaechae: { style: '히든 · 문화생활 인플루언서', st: '<b>기본</b> 냥냥펀치(초고속·경량) · <b>U</b> 냥냥 4연타 · <b>I</b> 고양이 할퀴기 · <b>L</b> <b>릴스</b>(상대를 붙잡고 같이 춤 → 다운)<br><i>기 게이지 15% 빨리 참</i>', pw: 1, sp: 5, hp: 2 },
+      jjeonghyo: { style: '히든 · 3대 500', st: '<b>기본</b> 덤벨 펀치(무겁고 느림) · <b>U</b> 덤벨 훅 · <b>I</b> 데드리프트 업(띄움) · <b>L</b> <b>바벨 내려찍기</b><br><i>기 게이지 20% 느림 · 체력 최고</i>', pw: 5, sp: 2, hp: 5 },
+      ppyeo: { style: '히든 · 오토바이 라이더', st: '<b>기본</b> 뼈펀치(리치 최장) · <b>U</b> 뼈 찌르기 · <b>I</b> 회전 팔꿈치 · <b>L</b> <b>오토바이 돌진</b>(소음공해·날려버림)<br><i>몸이 얇아 맷집 약함</i>', pw: 3, sp: 4, hp: 2 },
     };
     this.charDesc = DESC;
     this.buildCharSel($('charsel'));
@@ -4597,7 +5137,7 @@ class Game {
     $('intro').addEventListener('input', () => { try { localStorage.setItem('dr-intro', $('intro').value); } catch (e) {} });
     $('intro').addEventListener('keydown', (e) => e.stopPropagation());
     // 인트로 스킵: 클릭 / Space / Enter
-    const skip = () => { if (this.phase === 'intro') { if (this.mode === 'client') this.net.send({ t: 'skip' }); else this.endIntro(); } };
+    const skip = () => { if (this.phase === 'intro') { if (this.mode === 'client') this.net.send({ t: 'skip' }); else this.voteSkip(this.localFighter ? this.localFighter.netSlot : 0); } };
     window.addEventListener('pointerdown', (e) => { if (this.started && !(e.target && e.target.tagName === 'INPUT')) skip(); });
     window.addEventListener('keydown', (e) => { if ((e.code === 'Space' || e.code === 'Enter') && this.started && !(e.target && e.target.tagName === 'INPUT')) skip(); });
     window.addEventListener('keydown', (e) => {
@@ -4634,19 +5174,37 @@ class Game {
     return v || (this.net.role === 'client' ? 'P' + (this.net.mySlot + 1) : 'HOST');
   }
   nickOf(netSlot) { return (this.names && this.names[netSlot]) || (netSlot === 0 ? 'HOST' : 'P' + (netSlot + 1)); }
+  get hiddenShown() { try { return localStorage.getItem('dr-hidden') === 'on'; } catch (e) { return false; } }
+  set hiddenShown(v) { try { localStorage.setItem('dr-hidden', v ? 'on' : 'off'); } catch (e) {} }
+
   buildCharSel(container) {
     const DESC = this.charDesc;
     container.innerHTML = '';
-    for (const key of CHARACTER_ORDER) {
+    const keys = CHARACTER_ORDER.concat(this.hiddenShown ? HIDDEN_ORDER : []);
+    for (const key of keys) {
       const c = CHARACTERS[key], dsc = DESC[key];
       const card = document.createElement('div');
-      card.className = 'card' + (key === this.myChar ? ' sel' : '');
+      card.className = 'card' + (key === this.myChar ? ' sel' : '') + (c.hidden ? ' hidden-char' : '');
       card.dataset.key = key;
       const bar = (v) => `<i style="width:${v * 20}%"></i>`;
       card.innerHTML = `<div class="nm">${c.name}</div><div class="st">${dsc.style}<br>${dsc.st}</div><div class="bars"><span>HP</span>${bar(dsc.hp)}<span>PWR</span>${bar(dsc.pw)}<span>SPD</span>${bar(dsc.sp)}</div>`;
       card.addEventListener('click', () => this.pickChar(key));
       container.appendChild(card);
     }
+    // 기존 캐릭터 오른쪽 끝: 히든 버튼
+    const btn = document.createElement('div');
+    btn.className = 'card hidden-btn' + (this.hiddenShown ? ' open' : '');
+    btn.innerHTML = this.hiddenShown
+      ? '<div class="q">×</div><div class="lbl">히든 닫기</div>'
+      : '<div class="q">?</div><div class="lbl">히든</div>';
+    btn.addEventListener('click', () => {
+      this.hiddenShown = !this.hiddenShown;
+      if (!this.hiddenShown && CHARACTERS[this.myChar] && CHARACTERS[this.myChar].hidden) this.pickChar('ippo');
+      this.buildCharSel(document.getElementById('charsel'));
+      this.buildCharSel(document.getElementById('charsel2'));
+      if (this.hiddenShown) { try { this.audio.init(); this.audio.chargeUp(3); } catch (e) {} }
+    });
+    container.appendChild(btn);
   }
 
   /** 경기 종료 후 캐릭터 재선택 패널 */
@@ -4732,6 +5290,7 @@ class Game {
 
   returnToLobby() {
     this.teardownMatch();
+    this.music.pendingTrack = 'menu'; this.music.play('menu');
     document.getElementById('start-overlay').classList.remove('hidden');
     document.getElementById('menu').classList.add('hidden');
     document.getElementById('lobby').classList.remove('hidden');
@@ -4741,6 +5300,7 @@ class Game {
   }
 
   showMenu() {
+    this.music.pendingTrack = 'menu'; this.music.play('menu');
     document.getElementById('start-overlay').classList.remove('hidden');
     document.getElementById('lobby').classList.add('hidden');
     document.getElementById('menu').classList.remove('hidden');
@@ -4873,7 +5433,7 @@ class Game {
     net.onMessage = (m, slot) => {
       if (m.t === 'in' && this.netInputs[slot]) this.netInputs[slot].set(m.d[0], m.d[1], m.d[2]);
       else if (m.t === 'chat' && typeof m.text === 'string') { const text = m.text.slice(0, 120); this.addChat(slot, text); this.net.broadcast({ t: 'chat', from: slot, text }); }
-      else if (m.t === 'skip') { if (this.phase === 'intro') this.endIntro(); }
+      else if (m.t === 'skip') { this.voteSkip(slot); }
       else if (m.t === 'wantlobby') { this.addChat(0, `${this.chatName(slot)} 님이 대기실로 가자고 합니다 (경기 종료 후 '대기실로' 버튼)`, true); }
       else if (m.t === 'pick') {
         if (CHARACTERS[m.char]) { this.chars[slot] = m.char; if (this.roster[slot]) this.roster[slot].char = m.char; this.renderRoster(this.roster); this.broadcastLobby(); }
@@ -4928,6 +5488,7 @@ class Game {
       else if (m.t === 'full') this.lobbyMsg('방이 가득 찼거나 이미 시작됨');
       else if (m.t === 'start') { this.names = []; m.cfg.forEach((c) => { this.names[c.netSlot] = c.name; }); this.localSlot = Math.max(0, m.cfg.findIndex((c) => c.netSlot === net.mySlot)); this.startMatch('client', m.cfg); }
       else if (m.t === 'snap') { if (this.phase === 'fight') this.onSnapshot(m); }
+      else if (m.t === 'skipv') { this.showSkipHint(m.n, m.total); }
       else if (m.t === 'phase') { if (m.p === 'countdown') this.endIntro(); else if (m.p === 'fight') { this.phase = 'fight'; document.getElementById('countdown').classList.add('hidden'); } }
       else if (m.t === 'chat') this.addChat(m.from, String(m.text).slice(0, 120), !!m.sys);
       else if (m.t === 'over') this.showWinner(m.winner);
@@ -4980,6 +5541,7 @@ class Game {
     this.input.down.clear();
     document.getElementById('netinfo').textContent = mode === 'solo' ? this.soloLabel() : `ROOM ${this.net.code} · ${mode.toUpperCase()} · Enter = 채팅`;
     if (mode !== 'solo') { this.showChat(true); this.addChat(0, '시합 개시. Enter 로 채팅', true); }
+    this.music.pendingTrack = 'battle'; this.music.play('battle');
     this.beginIntro();
   }
 
@@ -5017,13 +5579,39 @@ class Game {
     this.camCtl.initialized = false;
   }
 
-  resetMatch() { this.buildFighters(this.cfg); this.over = false; if (this.mode === 'solo') document.getElementById('netinfo').textContent = this.soloLabel(); document.getElementById('next-overlay').classList.add('hidden'); this.hud.showKO(false); this.beginIntro(); }
+  resetMatch() { this.buildFighters(this.cfg); this.over = false; this.music.setDuck(1); this.music.play('battle'); if (this.mode === 'solo') document.getElementById('netinfo').textContent = this.soloLabel(); document.getElementById('next-overlay').classList.add('hidden'); this.hud.showKO(false); this.beginIntro(); }
+
+  // ================= 인트로 스킵 (전원 동의) =================
+  /** 사람 참가자 전원이 스킵을 눌러야 인트로가 끝난다 */
+  voteSkip(netSlot) {
+    if (this.phase !== 'intro' || this.mode === 'client') return;
+    if (!this.skipVotes) this.skipVotes = new Set();
+    this.skipVotes.add(netSlot);
+    const humans = this.fighters.filter((f) => !f.isAI).map((f) => f.netSlot);
+    const n = humans.filter((sl) => this.skipVotes.has(sl)).length;
+    const total = Math.max(1, humans.length);
+    this.showSkipHint(n, total);
+    if (this.mode === 'host') this.net.broadcast({ t: 'skipv', n, total });
+    if (n >= total) this.endIntro();
+  }
+
+  showSkipHint(n, total) {
+    const el = document.getElementById('skip-hint');
+    if (!el || el.classList.contains('hidden')) return;
+    el.textContent = total > 1
+      ? `스킵 ${n}/${total} — 전원이 눌러야 넘어갑니다 (SPACE / 클릭)`
+      : 'SPACE / 클릭 = 스킵';
+    el.classList.toggle('voted', n > 0);
+  }
 
   // ================= 인트로 / 카운트다운 =================
   beginIntro() {
     this.phase = 'intro';
+    this.skipVotes = new Set();
     this.intro.start();
     document.getElementById('skip-hint').classList.remove('hidden');
+    const humans = this.fighters.filter((f) => !f.isAI).length;
+    this.showSkipHint(0, Math.max(1, humans));
     document.getElementById('countdown').classList.add('hidden');
   }
   introName(f) {
@@ -5127,6 +5715,30 @@ class Game {
     const body = ev.zone === 'body';
     if (attacker) attacker.squash[ev.side] = 1;
     if (res.ignore) return;
+    if (res.dance) {
+      // ---- 릴스: 셔터 + 하트 + 자막 ----
+      this.audio.shutter(); this.audio.cheer(0.8);
+      this.fx.addPopup(px, py, '릴스 촬영!', 'groggy');
+      this.fx.addImpact(px, py, 0.9, true, [255, 120, 200]);
+      this.sparks.burst(pos, dir, 22, new THREE.Color(1, 0.5, 0.8), 1.2, 0.8);
+      this.camCtl.onHit(dir, 0.5);
+      if (mine) this.subs.show('찍는다~ 하나 둘!', { duration: 1.6, mid: true });
+      else if (hurt) this.subs.show('뭐, 뭐야 이거…!', { duration: 1.6, mid: true, speaker: 'opp' });
+      setTimeout(() => { this.audio.shutter(); }, 700);
+      setTimeout(() => { this.audio.shutter(); }, 1500);
+      this.stopPair(ev, 0.12, 0.5, 0.35);
+      return;
+    }
+    if (ev.kind === 'bike' && !res.blocked) {
+      this.audio.engine(1.2);
+      this.fx.addPopup(px, py, '부아아앙!!', 'groggy');
+      this.fx.addSpeedBurst(1);
+      this.camCtl.onHit(dir, 1.2);
+    } else if (ev.kind === 'barbell' && !res.blocked) {
+      this.audio.clang(1.2);
+      this.fx.addPopup(px, py, '3대 500!', 'groggy');
+      this.camCtl.onHit(dir, 0.9);
+    }
     if (res.evaded) {
       // ---- 회피: 상대 주먹이 허공을 가른다. 뎀프시롤 회피는 「피함!」 팝업 ----
       this.audio.whoosh(1, 1.6, 0.8, true);
@@ -5275,6 +5887,7 @@ class Game {
 
   showWinner(slot) {
     this.over = true;
+    this.music.setDuck(0.45);
     const w = this.fighters[slot];
     const me = slot === this.localSlot;
     const canRestart = this.mode !== 'client';
@@ -5327,6 +5940,7 @@ class Game {
     }
     const input = this.input;
     if (input.justPressed('KeyQ')) { this.autoQuality = false; this.setQuality((this.quality + 2) % 3); this.qualityCool = 999; }
+    if (input.justPressed('KeyB')) { const on = this.music.toggle(); this.subs.show(`BGM: ${on ? 'ON' : 'OFF'}`, { duration: 0.8, voice: false }); }
     if (input.justPressed('KeyV')) { const m = this.voice.toggle(); this.subs.show(`VOICE: ${m.toUpperCase()}`, { duration: 0.8, voice: false }); }
     if (this.localFighter) { this.subs.myChar = this.localFighter.defKey; const tg = this.localFighter.target; if (tg) this.subs.oppChar = tg.defKey; }
     // R = 다음 경기: 경기가 끝난 뒤에만 (경기 중 오입력으로 리셋되지 않게)
@@ -5396,7 +6010,7 @@ class Game {
         if (e.type === 'special') continue;
         const type = e.type === 'finisherStart' ? 'finisher' : (e.punchType === 'special' ? 'hook' : e.punchType);
         for (const o of fs) if (o.brain && o !== f && (o.target === f || f.target === o)) o.brain.onEnemyPunch(type, f);
-        if (e.type === 'finisherStart') { this.applySlow(f.slot, 0.5, 0.2); if (f.slot === this.localSlot) this.finisherWindFx(); }
+        if (e.type === 'finisherStart') { this.applySlow(f.slot, 0.5, 0.2); if (f.slot === this.localSlot) { this.finisherWindFx(); this.music.setDuck(0.35); setTimeout(() => this.music.setDuck(1), 2200); } }
         if (e.type === 'finisherStart' && this.mode === 'host') this.pendingEvents.push({ t: 'fin', s: f.slot });
       }
       if (inp !== this.localInput) inp.endFrame();
@@ -5414,9 +6028,10 @@ class Game {
       // 기(氣) 충전: 때릴수록 찬다. 막혀도 조금, 맞은 쪽도 조금
       if (!res.ignore && !res.downed && !h.finisher && h.attacker.rollT <= 0) {
         const base = h.kind ? 12 : h.type === 'hook' ? 8 : h.type === 'flicker' ? 4 : 6;
+        const gm = h.attacker.def.gaugeMul || 1, tm = h.target.def.gaugeMul || 1;
         if (res.evaded) { /* 회피됨 */ }
-        else if (res.blocked) { h.attacker.dempsey.addGauge(base * 0.4); h.target.dempsey.addGauge(2); }
-        else { h.attacker.dempsey.addGauge(base * ((counter || h.counter) ? 1.5 : 1), true); if (h.target.rollT <= 0) h.target.dempsey.addGauge(2.5); }
+        else if (res.blocked) { h.attacker.dempsey.addGauge(base * 0.4 * gm); h.target.dempsey.addGauge(2 * tm); }
+        else { h.attacker.dempsey.addGauge(base * ((counter || h.counter) ? 1.5 : 1) * gm, true); if (h.target.rollT <= 0) h.target.dempsey.addGauge(2.5 * tm); }
       }
       if (res.perfect) { h.attacker.punch = null; h.attacker.queue.length = 0; h.attacker.bufferedHook = null; h.attacker.stagger = Math.max(h.attacker.stagger, 0.5); h.attacker.knock.addScaledVector(h.dir, -1.2); }
       if (h.finisher && !res.armored && !res.blocked && !res.downed && !res.ignore) {
@@ -5425,7 +6040,7 @@ class Game {
         if (!res.down) h.target.stagger = Math.max(h.target.stagger, 2.6);
         if (h.target.hp <= 0 && !h.target.ko) { h.target._die(); res.ko = true; }
       }
-      const ev = { t: 'hit', a: h.attacker.slot, b: h.target.slot, side: h.side, type: h.type, zone: h.zone || 'head', kind: h.kind || null, launch: h.launch || 0, liver: !!h.liver, power: +h.power.toFixed(2), pos: [h.pos.x, h.pos.y, h.pos.z], dir: [h.dir.x, h.dir.z], maxSpeed: !!h.maxSpeed, finisher: !!h.finisher, charge: h.charge || 0, counter: !!(counter || h.counter), dempsey: !!h.dempsey, res: { dmg: +res.dmg.toFixed(1), blocked: !!res.blocked, perfect: !!res.perfect, heavy: !!res.heavy, evaded: !!res.evaded, roll: !!res.roll, down: !!res.down, groggy: h.target.staggerKind === 'groggy' && !!res.staggered, guardBreak: !!res.guardBreak, armored: !!res.armored, staggered: !!res.staggered, interrupted: !!res.interrupted, ko: !!res.ko, downed: !!res.downed, ignore: !!res.ignore } };
+      const ev = { t: 'hit', a: h.attacker.slot, b: h.target.slot, side: h.side, type: h.type, zone: h.zone || 'head', kind: h.kind || null, launch: h.launch || 0, liver: !!h.liver, power: +h.power.toFixed(2), pos: [h.pos.x, h.pos.y, h.pos.z], dir: [h.dir.x, h.dir.z], maxSpeed: !!h.maxSpeed, finisher: !!h.finisher, charge: h.charge || 0, counter: !!(counter || h.counter), dempsey: !!h.dempsey, res: { dmg: +res.dmg.toFixed(1), dance: !!res.dance, blocked: !!res.blocked, perfect: !!res.perfect, heavy: !!res.heavy, evaded: !!res.evaded, roll: !!res.roll, down: !!res.down, groggy: h.target.staggerKind === 'groggy' && !!res.staggered, guardBreak: !!res.guardBreak, armored: !!res.armored, staggered: !!res.staggered, interrupted: !!res.interrupted, ko: !!res.ko, downed: !!res.downed, ignore: !!res.ignore } };
       this.hitFx(ev);
       if (this.mode === 'host') this.pendingEvents.push(ev);
     }

@@ -22,6 +22,10 @@ const FINISHERS = {
   chopping:     { side: 'R', wind: 0.5, dur: 0.5, powerBase: 1.9, powerCharge: 0.3, kind: 'chopping' },
   jolt:         { side: 'R', wind: 0.4, dur: 0.36, powerBase: 1.7, powerCharge: 0.3, kind: 'jolt', dash: 5.5 },
   smash:        { side: 'R', wind: 0.55, dur: 0.6, powerBase: 2.1, powerCharge: 0.35, kind: 'smash', launch: 1.1 },
+  // 히든 필살기
+  reels:        { side: 'L', wind: 0.35, dur: 0.4, powerBase: 1.2, powerCharge: 0.2, kind: 'reels', dash: 3.4 },        // 붙잡아 릴스 댄스
+  barbell:      { side: 'R', wind: 0.62, dur: 0.6, powerBase: 2.2, powerCharge: 0.4, kind: 'barbell', launch: 1.2 },     // 바벨 내려찍기
+  bike:         { side: 'R', wind: 0.5, dur: 0.52, powerBase: 2.3, powerCharge: 0.35, kind: 'bike', launch: 0.6, dash: 9.5 }, // 오토바이 돌진
 };
 
 export class Fighter {
@@ -66,6 +70,7 @@ export class Fighter {
     this.knock = new THREE.Vector3();
     this.hitCount = 0; this.hitTimer = 0;
     this.stagger = 0; this.staggerImmune = 0; this.staggerKind = 'normal';
+    this.danceT = 0; this.danceVictim = false; this.dancePartner = null;   // 릴스 댄스 (채채더킴 필살)
     this.groggy = 0;   // 뎀프시 연타 누적 → 4 이면 그로기
     this.downT = 0; this.downDur = 2.7;   // 필살기 피격 다운 → 넘어졌다 고개 흔들며 일어남 (무적·행동불가)
     this.rattle = 0;
@@ -86,7 +91,7 @@ export class Fighter {
 
   get dempseyActive() { return this.dempsey.active; }
   get stanceStyle() { return this.dempsey.style; }
-  get busy() { return this.ko || this.stagger > 0 || !!this.finisher || this.airY > 0.01 || this.downT > 0; }
+  get busy() { return this.ko || this.stagger > 0 || !!this.finisher || this.airY > 0.01 || this.downT > 0 || this.danceT > 0; }
   get rolling() { return this.rollT > 0; }
   get alive() { return !this.ko; }
   get isCounterWindow() { return !!this.punch && this.punch.t / this.punch.dur < 0.55; }
@@ -176,6 +181,10 @@ export class Fighter {
     if (opts.staggerT && !opts.kind) this.punch.staggerT = opts.staggerT;
     if (!opts.noTell) this.tell[side] = 1;
     this.audio.swoosh(side === 'L' ? -1 : 1, power, type === 'hook');
+    // 캐릭터별 펀치 효과음 (냥냥펀치 / 덤벨 / 뼈)
+    const sfx = this.def.sfx;
+    if (sfx === 'nyang') this.audio.nyang(0.9 + Math.random() * 0.3);
+    else if (sfx === 'clang' && (type === 'hook' || opts.heavy)) this.audio.clang(0.5);
     this.events.push({ type: 'punch', punchType: type, kind: opts.kind || null });
     return true;
   }
@@ -226,7 +235,7 @@ export class Fighter {
       this.rollT = 2.8; this.rollFinal = false; this.punch = null; this.queue.length = 0;
       this.audio.finisherWind(0.6);
       this.subs.show(charge >= 3 ? 'デンプシーロールッ！！！' : 'デンプシー…ロールッ！！', { duration: 1.4, strong: true });
-      this.events.push({ type: 'finisherStart', charge, roll: true });
+      this.events.push({ type: 'finisherStart', charge, roll: true, kind: 'roll' });
       return true;
     }
     const side = F.side || (d.sway > 0 ? 'L' : 'R');
@@ -234,9 +243,12 @@ export class Fighter {
     this.punch = null;
     d.consume();
     this.audio.finisherWind(F.wind);
-    const line = fk === 'chopping' ? 'チョッピングライトォッ！！' : fk === 'jolt' ? 'ジョルトブローッ！！' : fk === 'smash' ? 'スマッシュゥゥッ！！！' : (charge >= 3 ? 'うおおおおおっ！！！' : 'うおおおっ！！');
+    if (F.kind === 'bike') this.audio.engine(1.8);
+    else if (F.kind === 'barbell') this.audio.clang(0.8);
+    else if (F.kind === 'reels') this.audio.shutter();
+    const line = fk === 'reels' ? '자, 같이 춤춰!' : fk === 'barbell' ? '데드리프트… 받아!' : fk === 'bike' ? '부아아앙—!!' : fk === 'chopping' ? 'チョッピングライトォッ！！' : fk === 'jolt' ? 'ジョルトブローッ！！' : fk === 'smash' ? 'スマッシュゥゥッ！！！' : (charge >= 3 ? 'うおおおおおっ！！！' : 'うおおおっ！！');
     this.subs.show(line, { duration: 1.3, strong: true });
-    this.events.push({ type: 'finisherStart', charge });
+    this.events.push({ type: 'finisherStart', charge, kind: F.kind || null });
     return true;
   }
 
@@ -387,6 +399,16 @@ export class Fighter {
     if (this.hp <= 0) this._die();
     // 필살기에 맞고 살아남으면 다운: 넘어졌다가 고개를 흔들며 일어난다 (그동안 무적 + 행동 불가)
     let down = false;
+    // 릴스 (채채더킴): 다운 대신 2.6초 강제 댄스 → 끝나고 쓰러짐
+    if (ev.finisher && !this.ko && ev.kind === 'reels') {
+      this.danceT = 2.6; this.danceVictim = true; this.dancePartner = ev.attacker;
+      this.stagger = 0; this.punch = null; this.queue.length = 0; this.finisher = null; this.dempsey.stop();
+      if (ev.attacker) { ev.attacker.danceT = 2.6; ev.attacker.danceVictim = false; ev.attacker.dancePartner = this; ev.attacker.punch = null; }
+      this.audio.stagger();
+      return { dmg, blocked: false, staggered: true, dance: true, ko: this.ko, heavy: true };
+    }
+    // 오토바이 (뼈석원): 쳐박히고 날아간다
+    if (ev.kind === 'bike' && !this.ko) { this.knock.addScaledVector(ev.dir, 6.5); this.rattle = 1; }
     if (ev.finisher && !this.ko && ev.kind !== 'jolt') {   // 속공형(미야타 졸트)은 다운 없음
       this.downT = this.downDur; this.stagger = 0; this.punch = null; this.queue.length = 0; this.finisher = null; this.dempsey.stop();
       this.airY = 0; this.airV = 0;
@@ -693,6 +715,38 @@ export class Fighter {
       }
     }
 
+    // ---- 릴스 댄스 (둘 다 강제로 춤) ----
+    if (this.danceT > 0) {
+      this.danceT -= dt;
+      const pr = this.dancePartner;
+      if (pr && !this.danceVictim) {
+        // 촬영자: 상대를 자기 옆에 끌어다 붙인다
+        this.forward.copy(pr.pos).sub(this.pos).setY(0);
+        if (this.forward.lengthSq() < 1e-4) this.forward.set(0, 0, 1);
+        this.forward.normalize();
+        this.yaw = Math.atan2(this.forward.x, this.forward.z);
+        this.side.set(this.forward.z, 0, -this.forward.x);
+      } else if (pr) {
+        const want = pr.pos.clone().addScaledVector(pr.forward, 0.95);
+        this.pos.lerp(want, Math.min(1, dt * 8));
+        this.forward.copy(pr.pos).sub(this.pos).setY(0).normalize();
+        this.yaw = Math.atan2(this.forward.x, this.forward.z);
+      }
+      const ph = t * 9.5, sw = Math.sin(ph), sw2 = Math.sin(ph * 2);
+      p.hipsY += Math.abs(sw2) * 0.1; p.hipsX += sw * 0.1; p.hipsRotY += sw * 0.35;
+      p.waistY += sw * 0.4; p.waistZ += sw2 * 0.12; p.chestY += sw * 0.2;
+      p.headY += sw * 0.5; p.headZ += sw2 * 0.18; p.headX += -0.1;
+      p.shLX += -1.9 + sw * 0.9; p.shRX += -1.9 - sw * 0.9;
+      p.shLZ += 0.5 + sw2 * 0.2; p.shRZ += -0.5 - sw2 * 0.2;
+      p.elL += -1.0 - Math.max(0, sw) * 0.6; p.elR += -1.0 - Math.max(0, -sw) * 0.6;
+      p.thighLX += -0.25 + sw * 0.35; p.thighRX += -0.25 - sw * 0.35; p.shinL += Math.max(0, sw) * 0.7; p.shinR += Math.max(0, -sw) * 0.7;
+      this.queue.length = 0;
+      if (this.danceT <= 0) {
+        this.danceT = 0; this.dancePartner = null;
+        if (this.danceVictim && !this.ko) { this.downT = this.downDur; this.hp = Math.max(0, this.hp - 6); if (this.hp <= 0) this._die(); }
+        this.danceVictim = false;
+      }
+    }
     // ---- 스태거 ----
     if (this.stagger > 0) {
       this.stagger -= dt;

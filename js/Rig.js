@@ -75,8 +75,34 @@ export const CHARACTERS = {
     prop: { height: 1.06, torsoW: 1.22, torsoD: 1.15, armR: 1.22, armLen: 1.08, legR: 1.15, legLen: 1.04, headS: 1.03, headY: 1.0, neck: 1.0, muscle: 1 },
     hp: 220, powerMul: 1.75, speedMul: 0.55, style: 'power',
   },
+  // ---- 히든 캐릭터 ----
+  // 채채더킴: 작은 키, 단발머리 + 큰 눈. 냥냥펀치(빠르고 가벼움), 필살 = 릴스 (상대를 붙잡아 같이 춤)
+  chaechae: {
+    name: 'CHAECHAE', skin: 0xffdcc4, trunks: 0xff5ea8, trunksTrim: 0xfff0f6, trunksText: 'NYANG',
+    gloves: 0xff85c0, hair: 0x2a1a16, shoes: 0xff5ea8, shoesTrim: 0xffffff,
+    hairStyle: 'bob', brows: 'thin', eyes: 'big', mouth: 'grin',
+    prop: { height: 0.82, torsoW: 0.88, torsoD: 0.86, armR: 0.86, armLen: 0.88, legR: 0.9, legLen: 0.86, headS: 1.08, headY: 1.0, neck: 0.8, muscle: 0.3 },
+    hp: 120, powerMul: 0.8, speedMul: 1.8, style: 'idol', gaugeMul: 1.15, hidden: true, sfx: 'nyang',
+  },
+  // 쩡효: 중간 키, 긴 생머리 + 흰 피부. 덤벨 펀치(무겁다), 필살 = 바벨 내려찍기
+  jjeonghyo: {
+    name: 'JJEONGHYO', skin: 0xfdeade, trunks: 0x1a1a22, trunksTrim: 0xc0f000, trunksText: '500',
+    gloves: 0x2b2b33, hair: 0x241b18, shoes: 0x1a1a22, shoesTrim: 0xc0f000,
+    hairStyle: 'long', brows: 'thin', eyes: 'narrow', mouth: 'grit',
+    prop: { height: 1.0, torsoW: 1.06, torsoD: 1.0, armR: 1.12, armLen: 1.0, legR: 1.12, legLen: 0.98, headS: 0.98, headY: 1.0, neck: 1.0, muscle: 1 },
+    hp: 185, powerMul: 1.45, speedMul: 0.8, style: 'gym', gaugeMul: 0.8, hidden: true, propItem: 'dumbbell', sfx: 'clang',
+  },
+  // 뼈석원: 큰 키, 구릿빛 피부에 마른 몸. 뼈펀치(리치 최장), 필살 = 오토바이 돌진
+  ppyeo: {
+    name: 'PPYEO', skin: 0xb07848, trunks: 0x14141c, trunksTrim: 0xff2d2d, trunksText: 'BONE',
+    gloves: 0xe8e8ec, hair: 0x14100e, shoes: 0x14141c, shoesTrim: 0xff2d2d,
+    hairStyle: 'slick', brows: 'thin', eyes: 'narrow', mouth: 'grin',
+    prop: { height: 1.2, torsoW: 0.74, torsoD: 0.72, armR: 0.7, armLen: 1.32, legR: 0.72, legLen: 1.2, headS: 0.94, headY: 1.16, neck: 1.4, muscle: 0.1 },
+    hp: 125, powerMul: 1.15, speedMul: 1.4, style: 'bone', gaugeMul: 1.0, hidden: true, propItem: 'bone', sfx: 'bone',
+  },
 };
 export const CHARACTER_ORDER = ['ippo', 'mashiba', 'miyata', 'sendo'];
+export const HIDDEN_ORDER = ['chaechae', 'jjeonghyo', 'ppyeo'];
 
 // 코치 (링 밖 코너에 서 있는 NPC): 트레이닝복, 글러브 없음
 export const COACH_DEFS = [
@@ -323,6 +349,20 @@ export function buildBoxer(def, opts = {}) {
       seam.rotation.x = Math.PI / 2; seam.rotation.z = 0.5;
       const strap = part(new THREE.CylinderGeometry(0.1, 0.1, 0.035, 14), 0xf5f5f5, elbow, 0, -armLen * 0.86, 0, false);
     }
+    // 소품: 쩡효는 글러브에 덤벨, 뼈석원은 손등에 뼈 보호대
+    if (def.propItem === 'dumbbell') {
+      const bar = part(new THREE.CylinderGeometry(0.022, 0.022, 0.2, 8), 0x8a8a94, glove, 0, 0, 0.02);
+      bar.rotation.z = Math.PI / 2;
+      for (const sx of [-1, 1]) {
+        const pl = part(new THREE.CylinderGeometry(0.062, 0.062, 0.05, 10), 0x2e2e36, glove, sx * 0.1, 0, 0.02);
+        pl.rotation.z = Math.PI / 2;
+      }
+    } else if (def.propItem === 'bone') {
+      for (const sx of [-1, 1]) {
+        const kn = part(new THREE.SphereGeometry(0.035, 8, 6), 0xf2efe6, glove, sx * 0.055, 0.02, 0.095, false);
+        kn.scale.set(1, 0.85, 0.7);
+      }
+    }
     return { shoulder, elbow, glove };
   };
   const armL = mkArm(1);
@@ -342,7 +382,28 @@ export function buildBoxer(def, opts = {}) {
   part(G.ear, def.skin, head, 0.165 * P.headS, hy, 0);
   part(G.ear, def.skin, head, -0.165 * P.headS, hy, 0);
   part(G.hair, def.hair, head, 0, hy + 0.03, -0.02);
-  if (def.hairStyle === 'spiky') {
+  if (def.hairStyle === 'bob') {
+    // 단발: 머리통을 감싸는 짧은 컷 + 앞머리 뱅
+    const cap = part(new THREE.SphereGeometry(0.205 * P.headS, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.72), def.hair, head, 0, hy + 0.012, -0.012);
+    cap.scale.set(1.02, 1.0, 1.04);
+    for (const sx of [-1, 1]) {   // 옆머리 (귀 아래까지)
+      const side = part(new THREE.CapsuleGeometry(0.055 * P.headS, 0.16, 4, 10), def.hair, head, sx * 0.155 * P.headS, hy - 0.06, -0.01);
+      side.scale.set(1, 1, 0.75);
+    }
+    const bang = part(new THREE.BoxGeometry(0.26 * P.headS, 0.075, 0.08), def.hair, head, 0, hy + 0.1, 0.108 * P.headS);
+    bang.rotation.x = -0.18;
+  } else if (def.hairStyle === 'long') {
+    // 긴 생머리: 뒤로 길게 흐르는 판 + 양옆 머리카락
+    const cap = part(new THREE.SphereGeometry(0.2 * P.headS, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.66), def.hair, head, 0, hy + 0.01, -0.01);
+    const back = part(new THREE.CapsuleGeometry(0.115 * P.headS, 0.42, 4, 12), def.hair, head, 0, hy - 0.3, -0.075);
+    back.scale.set(1.15, 1, 0.6);
+    for (const sx of [-1, 1]) {
+      const side = part(new THREE.CapsuleGeometry(0.05 * P.headS, 0.3, 4, 10), def.hair, head, sx * 0.15 * P.headS, hy - 0.16, 0.012);
+      side.scale.set(1, 1, 0.7);
+    }
+    const bang = part(new THREE.BoxGeometry(0.24 * P.headS, 0.06, 0.07), def.hair, head, 0, hy + 0.105, 0.1 * P.headS);
+    bang.rotation.x = -0.25;
+  } else if (def.hairStyle === 'spiky') {
     // 사방으로 뻗친 굵은 스파이크
     const n = 9;
     for (let i = 0; i < n; i++) {
@@ -376,13 +437,18 @@ export function buildBoxer(def, opts = {}) {
   // 눈: 흰자 + 동공 (외곽선 없음)
   const eyeY = hy + 0.02 * P.headY, eyeZ = 0.14 * P.headS;
   const narrow = def.eyes === 'narrow';
+  const big = def.eyes === 'big';
   for (const sx of [-1, 1]) {
-    const sc = part(G.sclera, 0xf6f6f6, head, sx * 0.065, eyeY, eyeZ, false);
-    sc.scale.set(1, narrow ? 0.35 : 1.15, 0.5);
-    const pu = part(G.pupil, 0x101018, head, sx * 0.062, eyeY, eyeZ + 0.02, false);
-    pu.scale.set(narrow ? 0.9 : 1.1, narrow ? 0.45 : 1.4, 0.6);
-    const br = part(G.brow, 0x101018, head, sx * 0.068, eyeY + (narrow ? 0.03 : 0.06), eyeZ + 0.015, false);
-    br.rotation.z = -sx * (narrow ? 0.55 : 0.32);
+    const sc = part(G.sclera, 0xf6f6f6, head, sx * (big ? 0.072 : 0.065), eyeY, eyeZ, false);
+    sc.scale.set(big ? 1.35 : 1, narrow ? 0.35 : big ? 1.75 : 1.15, 0.5);
+    const pu = part(G.pupil, big ? 0x3a2418 : 0x101018, head, sx * (big ? 0.07 : 0.062), eyeY, eyeZ + 0.022, false);
+    pu.scale.set(narrow ? 0.9 : big ? 1.8 : 1.1, narrow ? 0.45 : big ? 2.1 : 1.4, 0.6);
+    if (big) {   // 큰 눈 하이라이트
+      const hl = part(new THREE.SphereGeometry(0.012, 8, 6), 0xffffff, head, sx * 0.078, eyeY + 0.022, eyeZ + 0.034, false);
+      hl.scale.set(1.1, 1.1, 0.5);
+    }
+    const br = part(G.brow, 0x101018, head, sx * 0.068, eyeY + (narrow ? 0.03 : big ? 0.085 : 0.06), eyeZ + 0.015, false);
+    br.rotation.z = -sx * (narrow ? 0.55 : big ? 0.12 : 0.32);
   }
   // 코
   const nose = part(new THREE.ConeGeometry(0.028, 0.06, 6), def.skin, head, 0, hy - 0.02 * P.headY, 0.165 * P.headS, false);

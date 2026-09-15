@@ -286,3 +286,16 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
 #hud .menubtn { font-family: Bangers, Impact, sans-serif; font-size: 14px; letter-spacing: 1px; width: 52px; }
 #touch .tbtn.chat { font-family: Bangers, Impact, sans-serif; font-size: 12px; letter-spacing: 1px; }
 .btn i { display: none; }
+
+/* ---------- 히든 캐릭터 ---------- */
+.charsel .card.hidden-btn { --c: #6b21a8; flex: 0 0 96px; max-width: 96px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; background: linear-gradient(160deg, #241338, #120a1e); color: #e9d5ff; border-color: #6b21a8; cursor: pointer; }
+.charsel .card.hidden-btn .q { font-family: Bangers, Impact, sans-serif; font-size: 44px; line-height: 1; color: #d8b4fe; text-shadow: 0 0 14px #a855f7; }
+.charsel .card.hidden-btn .lbl { font-size: 12px; font-weight: 900; letter-spacing: 1px; }
+.charsel .card.hidden-btn.open { --c: #9ca3af; background: linear-gradient(160deg, #23232b, #131318); color: #d1d5db; border-color: #4b5563; }
+.charsel .card.hidden-btn:hover { filter: brightness(1.15); }
+.charsel .card.hidden-char { --c: #a855f7; box-shadow: 0 0 0 2px #a855f7 inset, 0 10px 24px rgba(168,85,247,.35); animation: hiddenIn .3s cubic-bezier(.2,1.4,.4,1) both; }
+.charsel .card.hidden-char .nm::after { content: ' ★'; color: #d8b4fe; }
+@keyframes hiddenIn { from { transform: scale(.8) translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+#next-overlay .charsel .card.hidden-btn { flex: 0 0 74px; max-width: 74px; }
+#next-overlay .charsel .card.hidden-btn .q { font-size: 30px; }
+#skip-hint.voted { color: #ffd34d; border-color: #ffd34d; }
