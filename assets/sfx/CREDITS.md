@@ -3,7 +3,7 @@
 전부 [Pixabay](https://pixabay.com) 무료 라이선스 (Pixabay Content License).
 상업적 사용 가능, 출처 표기 의무 없음. 아래는 기록용.
 
-제작자: **Universfield**
+제작자: **Universfield** (반격기만 **Alice_soundz**)
 
 | 파일 | 원제 | 게임 내 용도 | 원본 |
 |---|---|---|---|
@@ -12,6 +12,7 @@
 | `punch-follow.mp3` | Punch | 뎀프시 연타 등 후속타 | https://pixabay.com/ko/sound-effects/punch-140236/ |
 | `punch-body.mp3` | Punch 03 | 보디 · 리버 · 착지 | https://pixabay.com/ko/sound-effects/punch-03-352040/ |
 | `bell.mp3` | Boxing Bell | 라운드 공 (경기 시작 · 교대 출전) | https://pixabay.com/ko/sound-effects/boxing-bell-122093/ |
+| `counter.mp3` | indy_hit1 (Alice_soundz) | 반격기 적중 | https://pixabay.com/ko/sound-effects/indy-hit1-224072/ |
 
 ## 가공
 

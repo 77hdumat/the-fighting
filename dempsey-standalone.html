@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta name="build-id" content="1789495138">
+<meta name="build-id" content="1789495311">
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -391,7 +391,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   }
 }
 </script>
-<script>window.__BUILD_ID = "1789495138";</script>
+<script>window.__BUILD_ID = "1789495311";</script>
 </head>
 <body>
   <canvas id="gl" tabindex="0"></canvas>
@@ -1586,7 +1586,8 @@ class UltimateFx {
     }
     if (u > 2.05 && !it.cutDone) {
       it.cutDone = true;
-      this.audio.counter(); this.audio.impact(0.9, 'hook');
+      // counter() 자체가 임팩트 샘플을 재생한다 — 여기서 impact 를 또 부르면 겹쳐서 탁해진다
+      this.audio.counter();
       if (this.fx) this.fx.flash = Math.max(this.fx.flash || 0, 0.55);
       for (const sh of it.shards) { sh.m.visible = true; sh.m.position.copy(tp).add(new THREE.Vector3((Math.random() - 0.5) * 0.9, 2.05, (Math.random() - 0.5) * 0.4)); }
       if (it.slash) { it.slash.visible = true; it.slash.position.copy(tp).add(new THREE.Vector3(0, 2.05, 0)); }
@@ -3346,6 +3347,7 @@ const SFX_SAMPLES = {
   follow: 'punch-follow.mp3', // 뎀프시 연타 등 후속타
   body: 'punch-body.mp3',     // 보디 · 리버
   bell: 'bell.mp3',           // 라운드 공 (시작 · 교대 출전)
+  counter: 'counter.mp3',     // 반격기 적중 — 묵직한 임팩트
 };
 
 class AudioManager {
@@ -3450,7 +3452,18 @@ class AudioManager {
   /** 카운터: 강타 + 귀울림(고음 사인) */
   counter() {
     if (!this.ctx) return;
-    this.impact(1.2);
+    // 반격기는 전용 샘플. impact() 를 또 부르면 타격음이 겹쳐 탁해지므로 대체한다
+    if (this.sfx && this.sfx.counter) {
+      const ctx0 = this.ctx;
+      const src = ctx0.createBufferSource();
+      src.buffer = this.sfx.counter;
+      const g0 = ctx0.createGain();
+      g0.gain.value = 1.1;
+      src.connect(g0); g0.connect(this.master);
+      src.start(ctx0.currentTime);
+    } else {
+      this.impact(1.2, 'hook');
+    }
     this.bassHit();
     const ctx = this.ctx, t = ctx.currentTime;
     const o = ctx.createOscillator();

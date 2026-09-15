@@ -387,7 +387,8 @@ export class UltimateFx {
     }
     if (u > 2.05 && !it.cutDone) {
       it.cutDone = true;
-      this.audio.counter(); this.audio.impact(0.9, 'hook');
+      // counter() 자체가 임팩트 샘플을 재생한다 — 여기서 impact 를 또 부르면 겹쳐서 탁해진다
+      this.audio.counter();
       if (this.fx) this.fx.flash = Math.max(this.fx.flash || 0, 0.55);
       for (const sh of it.shards) { sh.m.visible = true; sh.m.position.copy(tp).add(new THREE.Vector3((Math.random() - 0.5) * 0.9, 2.05, (Math.random() - 0.5) * 0.4)); }
       if (it.slash) { it.slash.visible = true; it.slash.position.copy(tp).add(new THREE.Vector3(0, 2.05, 0)); }

@@ -11,6 +11,7 @@ const SFX_SAMPLES = {
   follow: 'punch-follow.mp3', // 뎀프시 연타 등 후속타
   body: 'punch-body.mp3',     // 보디 · 리버
   bell: 'bell.mp3',           // 라운드 공 (시작 · 교대 출전)
+  counter: 'counter.mp3',     // 반격기 적중 — 묵직한 임팩트
 };
 
 export class AudioManager {
@@ -115,7 +116,18 @@ export class AudioManager {
   /** 카운터: 강타 + 귀울림(고음 사인) */
   counter() {
     if (!this.ctx) return;
-    this.impact(1.2);
+    // 반격기는 전용 샘플. impact() 를 또 부르면 타격음이 겹쳐 탁해지므로 대체한다
+    if (this.sfx && this.sfx.counter) {
+      const ctx0 = this.ctx;
+      const src = ctx0.createBufferSource();
+      src.buffer = this.sfx.counter;
+      const g0 = ctx0.createGain();
+      g0.gain.value = 1.1;
+      src.connect(g0); g0.connect(this.master);
+      src.start(ctx0.currentTime);
+    } else {
+      this.impact(1.2, 'hook');
+    }
     this.bassHit();
     const ctx = this.ctx, t = ctx.currentTime;
     const o = ctx.createOscillator();
