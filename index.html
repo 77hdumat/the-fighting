@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta name="build-id" content="1789463360">
+<meta name="build-id" content="1789463559">
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -373,7 +373,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   }
 }
 </script>
-<script>window.__BUILD_ID = "1789463360";</script>
+<script>window.__BUILD_ID = "1789463559";</script>
 </head>
 <body>
   <canvas id="gl" tabindex="0"></canvas>
@@ -4900,8 +4900,7 @@ class Fighter {
       }
       this.queue.length = 0;
       if (this.ultT <= 0) {
-        this.ultT = 0; this.ultKind = null; this.ultTarget = null;
-    this.fallT = 0; this.fallY = 0; this.benched = false; this.team = null;   // 낙사 / 팀전 교체 대기 this.armor = 0;
+        this.ultT = 0; this.ultKind = null; this.ultTarget = null; this.armor = 0;
         if (this.rushHits) { for (const f2 of fighters) f2._rushReleased = false; this.rushHits.clear(); }
       }
     }

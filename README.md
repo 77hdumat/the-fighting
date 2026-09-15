@@ -291,3 +291,9 @@ EffectComposer(Render→Afterimage→SpeedBlur→Output, 최대 4패스) 를 걷
 GitHub Pages 는 HTML 을 최대 10분 캐시하고 브라우저도 index.html 을 캐시한다. 번들이 index.html 안에 있으므로 **새 배포를 해도 구버전이 계속 돌 수 있다** (버그 수정이 반영 안 된 것처럼 보임).
 대응: 빌드마다 `version.json` 과 페이지의 `window.__BUILD_ID` 를 갱신하고, 로드 시 + 1분마다 `version.json?ts=`(no-store)로 비교한다.
 - 첫 불일치면 **자동으로 한 번 새로고침**(`?v=<build>` 로 캐시 우회), 이후에는 우측 하단 `새 버전이 있습니다` 배너를 눌러 갱신.
+
+### 치명 버그: 필살기 후 팀 정보가 날아감
+연출형 필살이 끝나는 블록에 예전 일괄 치환이 잘못 들어가 `this.armor = 0;` 자리가
+`this.fallT = 0; this.fallY = 0; this.benched = false; this.team = null;` 로 덮여 있었다.
+그 결과 **필살기를 쓴 사람의 `team` 이 null 이 되어** ① 아군 판정이 풀려 팀킬이 가능해지고 ② 그 팀에 "출전 선수 0명" 으로 보여 **교체 선수가 튀어나왔다**. (아머 해제도 누락)
+수정 후 7개 캐릭터 필살을 각각 7초씩 돌려 검증: `team` 유지, 팀 null 프레임 0, 아군 조기 출전 0, 아머 잔류 0, 아군 피격 0.

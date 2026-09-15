@@ -1000,8 +1000,7 @@ export class Fighter {
       }
       this.queue.length = 0;
       if (this.ultT <= 0) {
-        this.ultT = 0; this.ultKind = null; this.ultTarget = null;
-    this.fallT = 0; this.fallY = 0; this.benched = false; this.team = null;   // 낙사 / 팀전 교체 대기 this.armor = 0;
+        this.ultT = 0; this.ultKind = null; this.ultTarget = null; this.armor = 0;
         if (this.rushHits) { for (const f2 of fighters) f2._rushReleased = false; this.rushHits.clear(); }
       }
     }
