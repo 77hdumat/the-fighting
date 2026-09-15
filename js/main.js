@@ -1073,7 +1073,14 @@ class Game {
           if (this.mode === 'host') this.pendingEvents.push({ t: 'ult', s: f.slot, b: e.target, k: e.kind });
           continue;
         }
-        if (e.type === 'rushHit') { this.camCtl.onHit(f.forward, 0.8); this.audio.impact(0.9); continue; }
+        if (e.type === 'rushHit') {
+          // 0.1초 도트라 연출은 솎아서 (소리/흔들림 폭주 방지)
+          this._rushFxT = (this._rushFxT || 0) + 1;
+          if (this._rushFxT % 3 === 0) { this.camCtl.onHit(f.forward, 0.45); this.audio.impact(0.5); }
+          const tg = this.fighters[e.target];
+          if (tg && this._rushFxT % 2 === 0) this.sparks.burst(tg.chestPos, f.forward, 8, new THREE.Color(1, 0.85, 0.5), 0.9, 0.35);
+          continue;
+        }
         if (e.type === 'special') continue;
         const type = e.type === 'finisherStart' ? 'finisher' : (e.punchType === 'special' ? 'hook' : e.punchType);
         for (const o of fs) if (o.brain && o !== f && (o.target === f || f.target === o)) o.brain.onEnemyPunch(type, f);

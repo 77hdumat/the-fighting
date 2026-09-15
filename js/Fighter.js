@@ -827,24 +827,26 @@ export class Fighter {
         this.rushT = (this.rushT || 0) + dt;
         if (u > 0.35 && u < 2.7) {
           this.pos.addScaledVector(this.forward, 7.2 * dt);
-          const tickDmg = (this.rushPower || 16) * 0.22;   // 0.3초 간격 × 8히트 ≈ 다른 필살기 총량
+          const tickDmg = (this.rushPower || 16) * 0.075;   // 0.1초 간격 도트 (≈23히트, 총량은 다른 필살기와 동일)
           for (const o of fighters) {
-            if (o === this || o.ko || o.downT > 0) continue;
+            if (o === this || o.ko) continue;
             const caught = this.rushHits.has(o.slot);
             if (!caught && o.pos.distanceTo(this.pos) > 0.95) continue;
-            // 한 번 닿으면 앞에 매달고 밀면서 간다 → 0.3초마다 다다다닥
-            if (!caught) { this.rushHits.set(o.slot, 0); o.audio.stagger(); }
-            const want = this.pos.clone().addScaledVector(this.forward, 0.82);
-            o.pos.lerp(want, Math.min(1, dt * 14));
-            o.stagger = Math.max(o.stagger, 0.5); o.staggerKind = 'normal'; o.staggerImmune = 0.4;
-            o.punch = null; o.queue.length = 0;
+            // 닿는 즉시 첫 타격, 이후 0.1초마다 도트. 기절/다운 중이어도 데미지는 그대로 들어간다
+            if (!caught) { this.rushHits.set(o.slot, -1); o.audio.stagger(); }
+            if (o.downT <= 0) {
+              const want = this.pos.clone().addScaledVector(this.forward, 0.82);
+              o.pos.lerp(want, Math.min(1, dt * 14));
+              o.stagger = Math.max(o.stagger, 0.6); o.staggerKind = 'normal'; o.staggerImmune = 0.4;
+              o.punch = null; o.queue.length = 0;
+            }
             const next = this.rushHits.get(o.slot);
             if (this.rushT >= next) {
-              this.rushHits.set(o.slot, this.rushT + 0.3);
+              this.rushHits.set(o.slot, this.rushT + 0.1);
               o.hp = Math.max(0, o.hp - tickDmg);
-              o.rattle = Math.max(o.rattle, 0.9);
-              o.react.headX = -0.35; o.react.waistX = -0.2;
-              o.audio.impact(0.75);
+              o.rattle = Math.max(o.rattle, 0.55);
+              o.react.headX = -0.22; o.react.waistX = -0.12;
+              o.audio.impact(0.45);
               if (o.hp <= 0) o._die();
               this.events.push({ type: 'rushHit', target: o.slot });
             }
@@ -852,7 +854,7 @@ export class Fighter {
         } else if (u >= 2.7) {
           // 돌격 종료: 밀고 온 상대들을 앞으로 튕겨내고 스태거만 남긴다 (넘어지진 않음)
           for (const o of fighters) {
-            if (!this.rushHits.has(o.slot) || o.ko) continue;
+            if (!this.rushHits.has(o.slot) || o.ko || o.downT > 0) continue;
             if (!o._rushReleased) { o._rushReleased = true; o.knock.addScaledVector(this.forward, 3.4); o.stagger = Math.max(o.stagger, 1.4); o.staggerImmune = 1.2; o.audio.stagger(); }
           }
         }
@@ -972,24 +974,26 @@ export class Fighter {
         this.rushT = (this.rushT || 0) + dt;
         if (u > 0.35 && u < 2.7) {
           this.pos.addScaledVector(this.forward, 7.2 * dt);
-          const tickDmg = (this.rushPower || 16) * 0.22;   // 0.3초 간격 × 8히트 ≈ 다른 필살기 총량
+          const tickDmg = (this.rushPower || 16) * 0.075;   // 0.1초 간격 도트 (≈23히트, 총량은 다른 필살기와 동일)
           for (const o of fighters) {
-            if (o === this || o.ko || o.downT > 0) continue;
+            if (o === this || o.ko) continue;
             const caught = this.rushHits.has(o.slot);
             if (!caught && o.pos.distanceTo(this.pos) > 0.95) continue;
-            // 한 번 닿으면 앞에 매달고 밀면서 간다 → 0.3초마다 다다다닥
-            if (!caught) { this.rushHits.set(o.slot, 0); o.audio.stagger(); }
-            const want = this.pos.clone().addScaledVector(this.forward, 0.82);
-            o.pos.lerp(want, Math.min(1, dt * 14));
-            o.stagger = Math.max(o.stagger, 0.5); o.staggerKind = 'normal'; o.staggerImmune = 0.4;
-            o.punch = null; o.queue.length = 0;
+            // 닿는 즉시 첫 타격, 이후 0.1초마다 도트. 기절/다운 중이어도 데미지는 그대로 들어간다
+            if (!caught) { this.rushHits.set(o.slot, -1); o.audio.stagger(); }
+            if (o.downT <= 0) {
+              const want = this.pos.clone().addScaledVector(this.forward, 0.82);
+              o.pos.lerp(want, Math.min(1, dt * 14));
+              o.stagger = Math.max(o.stagger, 0.6); o.staggerKind = 'normal'; o.staggerImmune = 0.4;
+              o.punch = null; o.queue.length = 0;
+            }
             const next = this.rushHits.get(o.slot);
             if (this.rushT >= next) {
-              this.rushHits.set(o.slot, this.rushT + 0.3);
+              this.rushHits.set(o.slot, this.rushT + 0.1);
               o.hp = Math.max(0, o.hp - tickDmg);
-              o.rattle = Math.max(o.rattle, 0.9);
-              o.react.headX = -0.35; o.react.waistX = -0.2;
-              o.audio.impact(0.75);
+              o.rattle = Math.max(o.rattle, 0.55);
+              o.react.headX = -0.22; o.react.waistX = -0.12;
+              o.audio.impact(0.45);
               if (o.hp <= 0) o._die();
               this.events.push({ type: 'rushHit', target: o.slot });
             }
@@ -997,7 +1001,7 @@ export class Fighter {
         } else if (u >= 2.7) {
           // 돌격 종료: 밀고 온 상대들을 앞으로 튕겨내고 스태거만 남긴다 (넘어지진 않음)
           for (const o of fighters) {
-            if (!this.rushHits.has(o.slot) || o.ko) continue;
+            if (!this.rushHits.has(o.slot) || o.ko || o.downT > 0) continue;
             if (!o._rushReleased) { o._rushReleased = true; o.knock.addScaledVector(this.forward, 3.4); o.stagger = Math.max(o.stagger, 1.4); o.staggerImmune = 1.2; o.audio.stagger(); }
           }
         }
