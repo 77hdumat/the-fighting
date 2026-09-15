@@ -38,12 +38,10 @@ export class DempseyController {
     this.active = true;
     this.activeTime = 0;
     this.theta = 0;
-    this.audio.startDrone();
   }
 
   stop() {
     this.active = false;
-    this.audio.stopDrone();
   }
 
   consume() {
@@ -81,14 +79,13 @@ export class DempseyController {
       const triggers = this.style === 'dempsey' || this.style === 'flicker';
       if (triggers && ((ps < 0 && s >= 0) || (ps > 0 && s <= 0))) {
         const dir = s >= 0 ? 1 : -1;
-        if (this.style === 'dempsey') this.audio.whoosh(dir, 0.7 + this.intensity * 1.2, 0.3 + 0.55 * this.intensity, this.maxSpeed);
+        if (this.style === 'dempsey') this.audio.whoosh(dir, 0.7 + this.intensity * 1.2, 0.42 + 0.62 * this.intensity, this.maxSpeed);
         this.crossPulse = 1;
       }
       if (this.style === 'dempsey' && Math.abs(ps) < 0.88 && Math.abs(s) >= 0.88) this.hookTrigger = s > 0 ? 'L' : 'R';
       if (this.style === 'flicker' && ps < 0.85 && s >= 0.85) this.hookTrigger = 'L';
       if (this.style === 'smash') this.crossPulse = Math.max(this.crossPulse, 0.3 * this.intensity);
 
-      this.audio.setDrone(this.intensity, this.maxSpeed);
     } else {
       this.blend = Math.max(0, this.blend - dt / 0.25);
     }

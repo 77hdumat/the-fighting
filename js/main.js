@@ -107,7 +107,6 @@ class Game {
     this.headScreen = new THREE.Vector2(0.5, 0.5);
     this.headVel = new THREE.Vector2();
     this.move = new THREE.Vector3();
-    this.droneOn = false;
     // 적응형 품질: 평균 프레임시간이 나쁘면 자동으로 단계 하향 (2 풀 → 1 → 0). Q 키로 수동 순환
     this.quality = 2; this.frameAvg = 16; this.qualityCool = 0; this.hudAccum = 0;
     if (PHOTOREAL || new URLSearchParams(location.search).has('profile')) {
@@ -402,7 +401,7 @@ class Game {
     this.started = false; this.over = false; this.phase = 'lobby';
     this.hitStop = 0; this.slowMo = 0; this.snaps = []; this.playT = null; this._pred = null; this.coachBrains = {};
     if (this.ultFx) this.ultFx.clear();
-    try { this.audio.stopDrone(); } catch (e) {}
+    try { this.audio.stopCrowd(); } catch (e) {}
     for (const id of ['next-overlay', 'pause-menu', 'skip-hint', 'countdown', 'intro-name', 'coach', 'guard-badge']) document.getElementById(id).classList.add('hidden');
     this.hud.showKO(false);
     this.touch.setVisible(false);
@@ -739,7 +738,6 @@ class Game {
         if (this.mode === 'host') this.pendingEvents.push({ t: 'a', n, a, s: slot });
       };
     }
-    audio.startDrone = () => {}; audio.stopDrone = () => {}; audio.setDrone = () => {};
     const subs = {
       show: (text, o = {}) => {
         if (relevant()) this.subs.show(text, Object.assign({}, o, { speaker: isLocal() ? 'player' : 'opp', charKey: this.fighters[slot] ? this.fighters[slot].defKey : 'ippo' }));
@@ -927,6 +925,7 @@ class Game {
     this.subs.clear();
     this.phase = 'countdown'; this.countT = 0; this.countStep = -1;
     this.camCtl.initialized = false;
+    this.audio.startCrowd();   // 경기 끝날 때까지 관중 앰비언스 루프 (샘플 도착 전이면 도착 즉시 시작)
     if (this.mode === 'host') this.net.broadcast({ t: 'phase', p: 'countdown' });
   }
   updateCountdown(rawDt) {
@@ -1209,6 +1208,7 @@ class Game {
     if (this.mode === 'solo') { if (me) { this.soloLevel = this.soloLevel + 1; } this.soloResult = me ? `클리어! 다음: ${this.soloLabel()}` : `패배… 다시: ${this.soloLabel()}`; }
     const title = team !== null ? (w && w.team === (this.localFighter && this.localFighter.team) ? 'TEAM WIN' : `TEAM ${team + 1} WIN`) : (me ? 'WINNER' : (w ? `${who} WIN` : 'DRAW'));
     const sub = (me ? '승리! ' : (w ? `${who} (${w.name}) 승리. ` : '')) + (canRestart ? '아래에서 캐릭터를 고르고 R / 버튼' : '캐릭터를 고르고 방장을 기다리세요');
+    this.audio.stopCrowd();
     setTimeout(() => this.hud.showKO(true, title, sub), 900);
     setTimeout(() => { if (this.over) this.showNextPanel(); }, 1800);
     if (w && !me) this.subs.show(`${who} の勝ち！`, { duration: 2.2, mid: true, voice: false });
@@ -1614,9 +1614,6 @@ class Game {
     // 로컬 드론 사운드
     if (local) {
       const ld = local.dempsey;
-      if (ld.active && !this.droneOn) { this.audio.startDrone(); this.droneOn = true; }
-      if (!ld.active && this.droneOn) { this.audio.stopDrone(); this.droneOn = false; }
-      if (this.droneOn) this.audio.setDrone(ld.intensity, ld.maxSpeed);
     }
 
     for (const f of this.fighters) {

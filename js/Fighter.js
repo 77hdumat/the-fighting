@@ -230,6 +230,8 @@ export class Fighter {
     if (opts.staggerT && !opts.kind) this.punch.staggerT = opts.staggerT;
     if (!opts.noTell) this.tell[side] = 1;
     this.audio.swoosh(side === 'L' ? -1 : 1, power, type === 'hook');
+    // 뎀프시롤: 좌우 훅이 나갈 때마다 번개가 친다 (마무리 훅은 더 크게)
+    if (opts.roll || opts.rollFinish) this.audio.lightning(side === 'L' ? -1 : 1, opts.rollFinish ? 1.5 : 0.9);
     // 캐릭터별 펀치 효과음 (냥냥펀치 / 덤벨 / 뼈)
     const sfx = this.def.sfx;
     if (sfx === 'nyang') this.audio.nyang(0.9 + Math.random() * 0.3);

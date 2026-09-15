@@ -1,5 +1,5 @@
 // AudioManager.js — Web Audio API 절차적 효과음 + 타격음 샘플
-// whoosh(스웨이 동기, 패닝/피치), swoosh(펀치), impact(적중), bassHit(강타), drone(뎀프시 지속음), riser, maxSpeed, stagger, ko, block
+// whoosh(스웨이 동기, 패닝/피치), swoosh(펀치), impact(적중), bassHit(강타), riser, maxSpeed, stagger, ko, block
 //
 // 타격음과 라운드 공만 외부 mp3 샘플을 쓴다 (assets/sfx/). 나머지는 전부 합성음이다.
 // 샘플 로드에 실패하면(file:// 로 열었거나 오프라인) 기존 합성음으로 자동 대체된다.
@@ -12,6 +12,9 @@ const SFX_SAMPLES = {
   body: 'punch-body.mp3',     // 보디 · 리버
   bell: 'bell.mp3',           // 라운드 공 (시작 · 교대 출전)
   counter: 'counter.mp3',     // 반격기 적중 — 묵직한 임팩트
+  crowd: 'crowd.mp3',         // 관중 앰비언스 (경기 중 루프)
+  lightning: 'lightning.mp3', // 뎀프시롤 좌우 훅마다 터지는 번개
+  block: 'block.mp3',         // 가드로 막았을 때
 };
 
 export class AudioManager {
@@ -19,9 +22,11 @@ export class AudioManager {
     this.ctx = null;
     this.master = null;
     this.noise = null;
-    this.drone = null;
-    this.sfx = null;          // { jab, hook, follow, body, bell } AudioBuffer — 로드 전엔 null
+    this.sfx = null;          // { jab, hook, follow, body, bell, counter, crowd } AudioBuffer — 로드 전엔 null
     this._sfxLoading = false;
+    this.crowd = null;        // 재생 중인 관중 앰비언스 { g, srcs }
+    this.crowdOn = false;
+    this.crowdLevel = 0.18;
   }
 
   /** 효과음 샘플을 비동기로 받아 디코드한다. 실패해도 게임은 합성음으로 계속 돈다. */
@@ -38,6 +43,7 @@ export class AudioManager {
     }));
     if (Object.keys(out).length) this.sfx = out;
     this._sfxLoading = false;
+    this._startCrowdNow();   // 로드 전에 startCrowd 가 불렸다면 여기서 시작된다
   }
 
   /**
@@ -94,9 +100,69 @@ export class AudioManager {
 
   get ready() { return !!this.ctx; }
 
-  /** (제거됨) 상시 관중 노이즈 루프는 정적 잡음처럼 들려 사용하지 않는다. 환호는 cheer() 버스트만. */
-  startCrowd() {}
-  setCrowd() {}
+  // ---- 관중 앰비언스 ----
+  // 예전엔 합성 노이즈 루프를 썼는데 정적 잡음처럼 들려 제거했었다. 지금은 실제 관중 녹음을 쓴다.
+  // 6.75초짜리 한 버퍼를 재생 속도가 다른 두 겹으로 깔아 반복 주기를 귀에 안 띄게 만든다.
+
+  /** 경기 시작 시 호출. 샘플이 아직 도착 전이면 도착하는 즉시 자동으로 시작된다. */
+  startCrowd(level = 0.18) {
+    if (!this.ctx) return;
+    this.crowdOn = true;
+    this.crowdLevel = level;
+    this._startCrowdNow();
+  }
+
+  _startCrowdNow() {
+    if (!this.ctx || this.crowd || !this.crowdOn) return;
+    const buf = this.sfx && this.sfx.crowd;
+    if (!buf) return;                       // 로드 완료 후 _loadSamples 가 다시 부른다
+    const ctx = this.ctx, t = ctx.currentTime;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, this.crowdLevel), t + 1.5);
+    g.connect(this.master);
+    // mp3 디코드 결과 앞뒤에 인코더 패딩(무음)이 붙는다 → 루프 구간을 안쪽으로 잡아 이음새 끊김을 피한다
+    const margin = 0.12;
+    const loopEnd = Math.max(margin + 0.5, buf.duration - margin);
+    const srcs = [1.0, 0.873].map((rate, i) => {
+      const s = ctx.createBufferSource();
+      s.buffer = buf;
+      s.loop = true;
+      s.loopStart = margin;
+      s.loopEnd = loopEnd;
+      s.playbackRate.value = rate;
+      const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+      if (pan) { pan.pan.value = i === 0 ? -0.35 : 0.35; s.connect(pan); pan.connect(g); }
+      else s.connect(g);
+      // 두 겹의 시작 위치를 어긋나게 → 같은 박수가 겹쳐 들리지 않는다
+      s.start(t, margin + i * 2.6);
+      return s;
+    });
+    this.crowd = { g, srcs };
+  }
+
+  /** 경기 중 음량 조절 (0 = 무음). 환호 버스트 cheer() 와는 별개다. */
+  setCrowd(level) {
+    this.crowdLevel = level;
+    if (!this.crowd) return;
+    const t = this.ctx.currentTime;
+    this.crowd.g.gain.cancelScheduledValues(t);
+    this.crowd.g.gain.setValueAtTime(Math.max(0.0001, this.crowd.g.gain.value), t);
+    this.crowd.g.gain.exponentialRampToValueAtTime(Math.max(0.0001, level), t + 0.5);
+  }
+
+  /** 경기 종료 / 메뉴 복귀 시 호출. 페이드아웃 후 정리한다. */
+  stopCrowd() {
+    this.crowdOn = false;
+    const c = this.crowd;
+    if (!c) return;
+    this.crowd = null;
+    const t = this.ctx.currentTime;
+    c.g.gain.cancelScheduledValues(t);
+    c.g.gain.setValueAtTime(Math.max(0.0001, c.g.gain.value), t);
+    c.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+    for (const s of c.srcs) { try { s.stop(t + 0.85); } catch { /* 이미 정지 */ } }
+  }
 
   /** 관중 환호 버스트 */
   cheer(power = 0.5) {
@@ -274,6 +340,25 @@ export class AudioManager {
     }
   }
 
+  /**
+   * 뎀프시롤 훅마다 터지는 번개. 0.2초 간격으로 연타되므로 짧게 끊고 매번 피치를 흔든다.
+   * @param dir -1 = 왼손, +1 = 오른손 (좌우로 갈라 쳐야 난타감이 산다)
+   */
+  lightning(dir = 0, power = 1) {
+    const buf = this.sfx && this.sfx.lightning;
+    if (!this.ctx || !buf) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = 0.92 + Math.random() * 0.26;
+    const g = ctx.createGain();
+    g.gain.value = Math.min(0.85, 0.34 + 0.34 * power);
+    const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    if (pan) { pan.pan.value = Math.max(-1, Math.min(1, dir * 0.6)); src.connect(g); g.connect(pan); pan.connect(this.master); }
+    else { src.connect(g); g.connect(this.master); }
+    src.start(t);
+  }
+
   /** 강타 시 추가 베이스 */
   bassHit() {
     if (!this.ctx) return;
@@ -297,44 +382,9 @@ export class AudioManager {
     sub.start(t); sub.stop(t + 0.45);
   }
 
-  /** 뎀프시롤 지속 저음 드론 (강도에 따라 피치/밝기 상승) */
-  startDrone() {
-    if (!this.ctx || this.drone) return;
-    const ctx = this.ctx, t = ctx.currentTime;
-    const o1 = ctx.createOscillator(); o1.type = 'sawtooth'; o1.frequency.value = 45;
-    const o2 = ctx.createOscillator(); o2.type = 'square'; o2.frequency.value = 45.7;
-    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 200; lp.Q.value = 4;
-    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.1, t + 0.4);
-    // 트레몰로 (심장박동 느낌)
-    const lfo = ctx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 4;
-    const lg = ctx.createGain(); lg.gain.value = 0.05;
-    lfo.connect(lg); lg.connect(g.gain);
-    o1.connect(lp); o2.connect(lp); lp.connect(g); g.connect(this.master);
-    o1.start(t); o2.start(t); lfo.start(t);
-    this.drone = { o1, o2, lp, g, lfo };
-  }
+  // 뎀프시롤 지속음(드론)은 제거했다.
+  // '위이이잉' 하는 저음이 거슬려서, 스웨이마다 나는 바람소리(whoosh)만으로 연출한다.
 
-  setDrone(I, max) {
-    if (!this.drone) return;
-    const ctx = this.ctx, t = ctx.currentTime;
-    const d = this.drone;
-    const f = 45 + 70 * I;
-    d.o1.frequency.setTargetAtTime(f, t, 0.08);
-    d.o2.frequency.setTargetAtTime(f * 1.015 + 0.5, t, 0.08);
-    d.lp.frequency.setTargetAtTime(200 + 1600 * I + (max ? 800 : 0), t, 0.08);
-    d.g.gain.setTargetAtTime(0.1 + 0.18 * I + (max ? 0.08 : 0), t, 0.1);
-    d.lfo.frequency.setTargetAtTime(4 + 14 * I, t, 0.1);
-  }
-
-  stopDrone() {
-    if (!this.drone) return;
-    const ctx = this.ctx, t = ctx.currentTime;
-    const d = this.drone;
-    d.g.gain.cancelScheduledValues(t);
-    d.g.gain.setTargetAtTime(0.0001, t, 0.12);
-    setTimeout(() => { try { d.o1.stop(); d.o2.stop(); d.lfo.stop(); } catch (e) {} }, 500);
-    this.drone = null;
-  }
 
   /** 상승음 (자막 마일스톤 동기) */
   riser(dur = 0.4, vol = 0.3) {
@@ -577,6 +627,18 @@ export class AudioManager {
 
   block() {
     if (!this.ctx) return;
+    // 가드는 연타 중에도 자주 울린다 → 짧은 샘플 + 매번 피치를 흔들어 뭉치지 않게
+    if (this.sfx && this.sfx.block) {
+      const c = this.ctx, now = c.currentTime;
+      const s = c.createBufferSource();
+      s.buffer = this.sfx.block;
+      s.playbackRate.value = 0.94 + Math.random() * 0.2;
+      const bg = c.createGain();
+      bg.gain.value = 0.75;
+      s.connect(bg); bg.connect(this.master);
+      s.start(now);
+      return;
+    }
     const ctx = this.ctx, t = ctx.currentTime;
     const o = ctx.createOscillator();
     o.type = 'square';
