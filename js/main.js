@@ -43,6 +43,8 @@ class Game {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.shadowMap.autoUpdate = true;
+    this.renderer.info.autoReset = true;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.9;
 
@@ -689,6 +691,13 @@ class Game {
     net.join(code);
   }
 
+  /** 정적 지오메트리의 행렬 갱신을 끈다 (매 프레임 updateMatrixWorld 비용 절감) */
+  freezeStatic(group) {
+    if (!group) return;
+    group.updateMatrixWorld(true);
+    group.traverse((o) => { if (o.isMesh) { o.matrixAutoUpdate = false; o.updateMatrix(); } });
+  }
+
   /** 맵 교체 (ring | cliff). 경기 시작 전에 부른다 */
   setMap(kind) {
     if (kind === this.mapKind && this.ring) return;
@@ -697,9 +706,11 @@ class Game {
     this.mapKind = kind;
     if (kind === 'cliff') {
       this.ring = buildCliff(this.scene);
+      this.freezeStatic(this.ring.group);
       setArena({ kind: 'cliff', radius: (x, z) => this.ring.radius(x, z) });
     } else {
       this.ring = buildRing(this.scene);
+      this.freezeStatic(this.ring.group);
       setArena({ kind: 'ring', radius: () => 4.15 });
     }
     this.coaches.setVisible ? this.coaches.setVisible(kind !== 'cliff') : null;
@@ -745,6 +756,7 @@ class Game {
     this.netLabel = mode === 'solo' ? '' : `ROOM ${this.net.code} · ${mode.toUpperCase()} · Enter = 채팅`;
     if (mode !== 'solo') { this.showChat(true); this.addChat(0, '시합 개시. Enter 로 채팅', true); }
     this.music.pendingTrack = 'battle'; this.music.play('battle');
+    if (this.ring && this.ring.reset) this.ring.reset();
     this.beginIntro();
   }
 
@@ -797,7 +809,7 @@ class Game {
     this.camCtl.initialized = false;
   }
 
-  resetMatch() { this.buildFighters(this.cfg); this.over = false; this.music.setDuck(1); this.music.play('battle'); if (this.mode === 'solo') document.getElementById('netinfo').textContent = this.soloLabel(); document.getElementById('next-overlay').classList.add('hidden'); this.hud.showKO(false); this.beginIntro(); }
+  resetMatch() { this.buildFighters(this.cfg); if (this.ring && this.ring.reset) this.ring.reset(); this.over = false; this.music.setDuck(1); this.music.play('battle'); if (this.mode === 'solo') document.getElementById('netinfo').textContent = this.soloLabel(); document.getElementById('next-overlay').classList.add('hidden'); this.hud.showKO(false); this.beginIntro(); }
 
   /** 교체 대기 처리: 화면 밖으로 내리고 판정에서 제외 */
   setBenched(f, on) {
@@ -1317,7 +1329,7 @@ class Game {
       const a = fs[i], b = fs[j]; if (a.ko || b.ko) continue;
       _sep.subVectors(b.pos, a.pos); _sep.y = 0;
       const d = _sep.length();
-      if (d < 0.8 && d > 1e-4) { _sep.multiplyScalar((0.8 - d) / d * 0.5); a.pos.sub(_sep); b.pos.add(_sep); }
+      if (d < 0.58 && d > 1e-4) { _sep.multiplyScalar((0.58 - d) / d * 0.5); a.pos.sub(_sep); b.pos.add(_sep); }
     }
     for (const h of hits) {
       const counter = h.target.isCounterWindow && !h.finisher;
@@ -1595,18 +1607,17 @@ class Game {
       const g = this.ghostFx[f.slot];
       const tNow = this.mode === 'client' ? this.realTime : f.time;
       g.record(tNow, f.pos, f.yaw, f.rig.root.rotation.x, f.pose);
+      // 잔상은 "공격 중"일 때만 (이동/걷기에는 남기지 않는다)
+      const attacking = !!f.punch || !!f.finisher || f.rollT > 0 || f.ultT > 0;
       let count = 0, interval = f.dempsey.ghostInterval, strength = 1;
-      if (f === view) {
-        count = f.dempsey.ghostCount;
-        if (f.punch) { count = Math.max(count, 5); interval = Math.max(interval, 0.022); }
-        if (f.dempsey.maxSpeed) { count = 7; strength = 1.15; }
-        if (f.finisher) count = Math.max(count, 6);
-      } else if (f === opp) {
-        if (f.rattle > 0.05) { count = 5; interval = 0.045; strength = Math.min(1, f.rattle * 1.6); }
-        else if (f.blockGhost > 0) { count = 5; interval = 0.03; strength = Math.min(1, f.blockGhost * 2.5); }
-        else if (f.dempsey.blend > 0) { count = Math.min(6, f.dempsey.ghostCount); strength = 0.9; }
+      if (f === view || f === opp) {
+        if (attacking) {
+          count = f.finisher || f.ultT > 0 || f.rollT > 0 ? 7 : 5;
+          interval = f.rollT > 0 ? 0.022 : 0.026;
+          strength = f.finisher || f.ultT > 0 ? 1.15 : 1;
+        }
+        if (f.dempsey.maxSpeed && attacking) { count = Math.max(count, 7); strength = 1.15; }
       }
-      if (f === view && f.blockGhost > 0) { count = Math.max(count, 6); interval = 0.03; strength = Math.max(strength, Math.min(1, f.blockGhost * 2.5)); }
       g.update(this.mode === 'client' ? this.realTime : f.time, count, interval, strength);
     }
 
@@ -1628,6 +1639,19 @@ class Game {
     const f = new THREE.Vector3().subVectors(opp.pos, view.pos); f.y = 0; if (f.lengthSq() < 1e-6) f.set(0, 0, -1); f.normalize();
     const s = new THREE.Vector3(f.z, 0, -f.x);
     if (this.phase !== 'intro') this.camCtl.update(rawDt, { playerPos: view.pos, oppPos: opp.pos, f, s, intensity: I, dempseyActive: d.active || !!view.finisher, sway: d.sway, maxSpeed: d.maxSpeed || !!view.finisher, hitStop: this.hitStop });
+    // ---- 낙사 카메라: 떨어지는 선수를 따라 내려가며 지켜본다 ----
+    const faller = (view && (view.fallT > 0 || (view.ko && view.fallY > 0.5))) ? view
+      : this.fighters.find((x) => x.fallT > 0 && (x.slot === this.localSlot || (local && local.target === x)));
+    if (faller) {
+      const y = -(faller.fallY || 0);
+      const want = faller.pos.clone().add(new THREE.Vector3(0, y + 2.2, 0)).addScaledVector(faller.forward, -2.6);
+      this.camera.position.lerp(want, Math.min(1, rawDt * 5));
+      this.camera.lookAt(faller.pos.x, y + 0.7, faller.pos.z);
+      const wantFov = 62;
+      this.camera.fov += (wantFov - this.camera.fov) * Math.min(1, rawDt * 3);
+      this.camera.updateProjectionMatrix();
+      this.camCtl.initialized = false;
+    }
     // ---- 필살 연출 카메라: 하늘에서 떨어지는 유물·랙·오토바이가 확실히 보이는 와이드 샷 ----
     const ultF = this.fighters.find((x) => x.ultT > 0);
     if (ultF && ultF.ultTarget) {

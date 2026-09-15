@@ -44,9 +44,13 @@ function rockTexture() {
 }
 
 /** 고원 가장자리 반경 (각도에 따라 울퉁불퉁) */
-export function cliffRadius(x, z, R = 6.2) {
+export const CLIFF_R = 8.6;
+export const SECTORS = 16;
+
+/** 각도별 기본 반경 (울퉁불퉁) */
+export function cliffRadius(x, z, R = CLIFF_R) {
   const a = Math.atan2(z, x);
-  return R + Math.sin(a * 3.1) * 0.45 + Math.sin(a * 5.7 + 1.2) * 0.25;
+  return R + Math.sin(a * 3.1) * 0.6 + Math.sin(a * 5.7 + 1.2) * 0.35;
 }
 
 export function buildCliff(scene) {
@@ -58,42 +62,50 @@ export function buildCliff(scene) {
   const rockMat = new THREE.MeshToonMaterial({ map: rockTexture(), gradientMap: toonRamp });
   const rockDark = new THREE.MeshToonMaterial({ color: 0x5c5046, gradientMap: toonRamp });
 
-  // ---- 고원 상판: 원판을 각도별로 찌그러뜨려 자연스러운 바위 실루엣 ----
-  const SEG = 48, R = 6.2;
-  const topGeo = new THREE.CircleGeometry(1, SEG);
-  {
-    const pos = topGeo.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i), y = pos.getY(i);
-      const len = Math.hypot(x, y);
-      if (len < 1e-4) continue;
-      const r = cliffRadius(x, y, R);
-      pos.setXY(i, (x / len) * r, (y / len) * r);
+  // ---- 고원: 섹터 조각들로 만든다 (1분 뒤부터 조각이 무너져 내린다) ----
+  const SEG = 64, R = CLIFF_R;
+  const sectors = [];
+  const SECTOR_SEG = 6;      // 조각 하나의 원주 분할
+  for (let s2 = 0; s2 < SECTORS; s2++) {
+    const a0 = (s2 / SECTORS) * Math.PI * 2, span = (Math.PI * 2) / SECTORS;
+    const g2 = new THREE.Group();
+    // 상판 부채꼴
+    const topGeo = new THREE.CircleGeometry(1, SECTOR_SEG, a0, span);
+    {
+      const pos = topGeo.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), y = pos.getY(i);
+        const len = Math.hypot(x, y);
+        if (len < 1e-4) continue;
+        const r = cliffRadius(x, y, R);
+        pos.setXY(i, (x / len) * r, (y / len) * r);
+      }
+      topGeo.computeVertexNormals();
     }
-    topGeo.computeVertexNormals();
-  }
-  const top = new THREE.Mesh(topGeo, rockMat);
-  top.rotation.x = -Math.PI / 2;
-  top.receiveShadow = true;
-  group.add(top);
-
-  // ---- 절벽 옆면: 아래로 갈수록 살짝 좁아지는 기둥 ----
-  const sideGeo = new THREE.CylinderGeometry(1, 0.82, 9, SEG, 1, true);
-  {
-    const pos = sideGeo.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
-      const len = Math.hypot(x, z);
-      if (len < 1e-4) continue;
-      const scale = cliffRadius(x, z, R) * (y > 0 ? 1 : 0.86);
-      const jag = 1 + Math.sin(y * 1.7 + Math.atan2(z, x) * 4) * 0.035;
-      pos.setXYZ(i, (x / len) * scale * jag, y, (z / len) * scale * jag);
+    const topM = new THREE.Mesh(topGeo, rockMat);
+    topM.rotation.x = -Math.PI / 2;
+    topM.receiveShadow = true;
+    g2.add(topM);
+    // 옆면 (조각 아래로 뻗은 암벽)
+    const sideGeo = new THREE.CylinderGeometry(1, 0.84, 9, SECTOR_SEG, 1, true, a0, span);
+    {
+      const pos = sideGeo.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+        const len = Math.hypot(x, z);
+        if (len < 1e-4) continue;
+        const scale = cliffRadius(x, z, R) * (y > 0 ? 1 : 0.86);
+        const jag = 1 + Math.sin(y * 1.7 + Math.atan2(z, x) * 4) * 0.04;
+        pos.setXYZ(i, (x / len) * scale * jag, y, (z / len) * scale * jag);
+      }
+      sideGeo.computeVertexNormals();
     }
-    sideGeo.computeVertexNormals();
+    const sideM = new THREE.Mesh(sideGeo, rockDark);
+    sideM.position.y = -4.5;
+    g2.add(sideM);
+    group.add(g2);
+    sectors.push({ g: g2, idx: s2, mid: a0 + span / 2, state: 'ok', t: 0, vy: 0, spin: 0 });
   }
-  const side = new THREE.Mesh(sideGeo, rockDark);
-  side.position.y = -4.5;
-  group.add(side);
 
   // ---- 주변 봉우리 (멀리 솟은 바위 기둥들) ----
   for (let i = 0; i < 14; i++) {
@@ -146,14 +158,85 @@ export function buildCliff(scene) {
 
   const flashes = [];   // 링 인터페이스 맞추기용 (암벽엔 카메라 플래시 없음)
 
+  // ---- 붕괴 상태 ----
+  let clock = 0;            // 경기 시작 후 경과
+  let nextBreak = 60;       // 1분 뒤 첫 붕괴, 이후 점점 잦아진다
+  const rubble = [];
+  const sectorOf = (x, z) => {
+    let a = Math.atan2(z, x); if (a < 0) a += Math.PI * 2;
+    return Math.floor((a / (Math.PI * 2)) * SECTORS) % SECTORS;
+  };
+  const spawnRubble = (sec, n) => {
+    for (let i = 0; i < n; i++) {
+      const a = sec.mid + (Math.random() - 0.5) * (Math.PI * 2 / SECTORS) * 0.9;
+      const rr = R * (0.55 + Math.random() * 0.45);
+      const m = new THREE.Mesh(new THREE.DodecahedronGeometry(0.12 + Math.random() * 0.22, 0), rockDark);
+      m.position.set(Math.cos(a) * rr, -0.1, Math.sin(a) * rr);
+      group.add(m);
+      rubble.push({ m, vy: -0.5 - Math.random(), sx: (Math.random() - 0.5) * 0.6, sz: (Math.random() - 0.5) * 0.6, t: 0 });
+    }
+  };
+
   return {
     group,
     kind: 'cliff',
     fill,
-    radius: (x, z) => cliffRadius(x, z, R),
+    /** 무너진 섹터는 반경 0 → 그 방향은 발판이 없다 */
+    radius: (x, z) => {
+      const sec = sectors[sectorOf(x, z)];
+      if (sec && sec.state === 'gone') return 0.0;
+      return cliffRadius(x, z, R);
+    },
+    /** 흔들리는 중인 섹터인지 (연출/경고용) */
+    shakingAt: (x, z) => {
+      const sec = sectors[sectorOf(x, z)];
+      return sec && sec.state === 'shake' ? 1 : 0;
+    },
+    reset() {
+      clock = 0; nextBreak = 60;
+      for (const sec of sectors) { sec.state = 'ok'; sec.t = 0; sec.vy = 0; sec.spin = 0; sec.g.visible = true; sec.g.position.set(0, 0, 0); sec.g.rotation.set(0, 0, 0); }
+      for (const r of rubble) group.remove(r.m);
+      rubble.length = 0;
+    },
     update(dt, excitement) {
-      // 가장자리 경고 링 맥동
       edge.material.opacity = 0.25 + 0.18 * (0.5 + 0.5 * Math.sin(performance.now() * 0.004));
+      clock += dt;
+
+      // 1분 뒤부터 랜덤 섹터가 무너진다 (점점 빨라짐)
+      if (clock > nextBreak) {
+        const alive = sectors.filter((x) => x.state === 'ok');
+        if (alive.length > 4) {
+          const sec = alive[Math.floor(Math.random() * alive.length)];
+          sec.state = 'shake'; sec.t = 0;
+        }
+        nextBreak = clock + Math.max(4.5, 11 - clock * 0.05);
+      }
+
+      for (const sec of sectors) {
+        if (sec.state === 'shake') {
+          sec.t += dt;
+          // 후두둑 — 크게 흔들리며 자갈이 떨어진다
+          const amp = 0.02 + 0.06 * (sec.t / 1.6);
+          sec.g.position.set(Math.sin(sec.t * 47) * amp, Math.sin(sec.t * 61) * amp * 1.4, Math.cos(sec.t * 53) * amp);
+          sec.g.rotation.z = Math.sin(sec.t * 37) * amp * 0.25;
+          if (Math.random() < dt * 22) spawnRubble(sec, 1);
+          if (sec.t > 1.6) { sec.state = 'falling'; sec.t = 0; sec.vy = 0; sec.spin = (Math.random() - 0.5) * 1.2; spawnRubble(sec, 8); }
+        } else if (sec.state === 'falling') {
+          sec.t += dt; sec.vy -= 16 * dt;
+          sec.g.position.y += sec.vy * dt;
+          sec.g.position.x += Math.cos(sec.mid) * dt * 0.8;
+          sec.g.position.z += Math.sin(sec.mid) * dt * 0.8;
+          sec.g.rotation.x += sec.spin * dt; sec.g.rotation.z += sec.spin * dt * 0.6;
+          if (sec.g.position.y < -22) { sec.state = 'gone'; sec.g.visible = false; }
+        }
+      }
+      for (let i = rubble.length - 1; i >= 0; i--) {
+        const r = rubble[i];
+        r.t += dt; r.vy -= 14 * dt;
+        r.m.position.x += r.sx * dt; r.m.position.z += r.sz * dt; r.m.position.y += r.vy * dt;
+        r.m.rotation.x += dt * 3; r.m.rotation.y += dt * 2;
+        if (r.m.position.y < -20 || r.t > 6) { group.remove(r.m); r.m.geometry.dispose(); rubble.splice(i, 1); }
+      }
     },
     cheer() {},
     setCrowd() {},

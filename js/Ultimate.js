@@ -414,6 +414,27 @@ export class UltimateFx {
 
   _updRack(it, dt, tp) {
     it.root.position.lerp(new THREE.Vector3(tp.x, 0, tp.z), Math.min(1, dt * 6));
+    // 랙은 시전자를 바라보게 세운다 → 바벨이 피격자의 어깨선과 나란해진다 (십자 교차 방지)
+    if (it.attacker) {
+      const dir = new THREE.Vector3().subVectors(it.attacker.pos, tp).setY(0);
+      if (dir.lengthSq() > 1e-4) {
+        const want = Math.atan2(dir.x, dir.z);
+        let d2 = want - it.root.rotation.y;
+        while (d2 > Math.PI) d2 -= Math.PI * 2;
+        while (d2 < -Math.PI) d2 += Math.PI * 2;
+        it.root.rotation.y += d2 * Math.min(1, dt * 8);
+      }
+      // 피격자도 시전자를 정면으로 보게 (바벨이 몸을 가로지르지 않게)
+      if (it.target && it.target.ultVictimT > 0) {
+        const f = it.target;
+        f.forward.copy(it.attacker.pos).sub(f.pos).setY(0);
+        if (f.forward.lengthSq() > 1e-4) {
+          f.forward.normalize();
+          f.yaw = Math.atan2(f.forward.x, f.forward.z);
+          f.side.set(f.forward.z, 0, -f.forward.x);
+        }
+      }
+    }
     const u = it.t;
     // 0~0.45 기둥 솟음 → 0.45 상단바 → 1.0~2.4 바벨 상하 (스쿼트 3회) → 2.4 낙하
     for (const p of it.parts) if (p.type === 'post') p.m.scale.y = Math.min(1, u / 0.45);

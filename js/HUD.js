@@ -18,9 +18,9 @@ export class HUD {
     this.cards = fighters.map((f) => {
       const el = document.createElement('div');
       el.className = 'fcard' + (f.slot === localSlot ? ' me' : '') + (f.team !== null && f.team !== undefined ? ` team${f.team}` : '');
-      el.innerHTML = `<div class="name"><span class="tag">${f.nick || (f.isAI ? 'CPU' : 'P' + (f.netSlot + 1))}${f.slot === localSlot ? ' (YOU)' : ''}</span>${f.name}<span class="charge"></span><span class="hpnum"></span></div><div class="bar hp"><div class="fill"></div></div><div class="bar mini"><div class="fill"></div></div>`;
+      el.innerHTML = `<div class="name"><span class="tag">${f.nick || (f.isAI ? 'CPU' : 'P' + (f.netSlot + 1))}${f.slot === localSlot ? ' (YOU)' : ''}</span>${f.name}<span class="charge"></span><span class="hpnum"></span></div><div class="bar hp"><div class="ghost"></div><div class="fill"></div></div><div class="bar mini"><div class="fill"></div></div>`;
       this.top.appendChild(el);
-      return { el, fill: el.querySelector('.hp .fill'), mini: el.querySelector('.mini'), miniFill: el.querySelector('.mini .fill'), charge: el.querySelector('.charge'), hpnum: el.querySelector('.hpnum') };
+      return { el, fill: el.querySelector('.hp .fill'), ghost: el.querySelector('.hp .ghost'), ghostV: 1, ghostHold: 0, mini: el.querySelector('.mini'), miniFill: el.querySelector('.mini .fill'), charge: el.querySelector('.charge'), hpnum: el.querySelector('.hpnum') };
     });
   }
   update(dt, fighters, local) {
@@ -29,6 +29,16 @@ export class HUD {
       const r = f.hp / f.maxHp;
       c.fill.style.width = (r * 100).toFixed(1) + '%';
       c.fill.classList.toggle('low', r < 0.3);
+      // 철권식 잔상: 깎인 만큼 붉은 띠가 잠깐 남았다가 스르륵 줄어든다
+      if (c.ghost) {
+        if (r > c.ghostV) { c.ghostV = r; c.ghostHold = 0; }
+        else if (r < c.ghostV) {
+          c.ghostHold += dt;
+          if (c.ghostHold > 0.45) c.ghostV = Math.max(r, c.ghostV - dt * (0.35 + (c.ghostV - r) * 1.6));
+        }
+        c.ghost.style.width = (c.ghostV * 100).toFixed(1) + '%';
+        c.ghost.classList.toggle('draining', c.ghostV - r > 0.005);
+      }
       c.hpnum.textContent = Math.ceil(f.hp) + '/' + f.maxHp;
       c.el.classList.toggle('ko', f.ko);
       c.el.classList.toggle('target', local && local.target === f);

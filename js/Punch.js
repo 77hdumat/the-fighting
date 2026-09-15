@@ -106,6 +106,27 @@ export function applyPunchToPose(pose, punch) {
   pose.hipsY -= 0.05 * strikeAmt;
   pose.headY += sgn * 0.25 * strikeAmt;
   pose.headX += 0.1 * strikeAmt;
+
+  // ---- 하체: 도움닫기 (뒷발로 밀고 앞발이 들어간다) ----
+  // 와인드업엔 무릎을 굽혀 체중을 뒤로, 타격 순간 뒷발이 펴지며 앞발이 착지한다
+  const lead = side === 'L' ? 'L' : 'R';          // 치는 쪽 팔의 반대 발이 앞발
+  const frontThigh = lead === 'L' ? 'thighRX' : 'thighLX';
+  const backThigh = lead === 'L' ? 'thighLX' : 'thighRX';
+  const frontShin = lead === 'L' ? 'shinR' : 'shinL';
+  const backShin = lead === 'L' ? 'shinL' : 'shinR';
+  const H2 = punch.heavy ? 1.35 : 1;
+  // 예비: 살짝 주저앉으며 뒷발에 체중
+  pose.hipsY += -0.07 * H2 * windAmt;
+  pose[backThigh] += 0.28 * H2 * windAmt;
+  pose[backShin] += 0.34 * H2 * windAmt;
+  pose[frontThigh] += -0.12 * windAmt;
+  // 타격: 뒷발이 쭉 펴지고(푸시) 앞발이 앞으로 들어간다
+  pose[backThigh] += 0.42 * H2 * strikeAmt;
+  pose[backShin] += -0.18 * strikeAmt;
+  pose[frontThigh] += -0.5 * H2 * strikeAmt;
+  pose[frontShin] += 0.28 * strikeAmt;
+  pose.hipsRotY += sgn * 0.18 * H2 * strikeAmt;   // 골반 회전으로 힘 전달
+  pose.hipsX += sgn * 0.05 * strikeAmt;
   if (isHook) {
     pose.waistZ += -sgn * 0.12 * strikeAmt;
     pose.chestZ += -sgn * 0.1 * strikeAmt;

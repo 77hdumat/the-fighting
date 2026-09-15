@@ -70,7 +70,7 @@ export class CameraController {
     const bx = Math.sin(this.orbitYaw), bz = Math.cos(this.orbitYaw);     // 부드러운 전방
     const sx = bz, sz = -bx;                                               // 부드러운 좌측
     // 살짝 대각선(오른쪽 뒤)에서 → 내 몸이 상대를 가리지 않는다. 내 캐릭터는 화면 왼쪽 아래, 상대는 중앙
-    const dist = 4.0 - 0.5 * b, height = 2.9 - 0.6 * b, sideOff = 1.6 - 0.25 * b;   // 높은 대각 부감 → 거리감
+    const dist = 3.1 - 0.4 * b, height = 2.15 - 0.45 * b, sideOff = 1.2 - 0.2 * b;   // 캐릭터 70% 축소에 맞춰 카메라도 당긴다
     _p.copy(playerPos).addScaledVector(new THREE.Vector3(bx, 0, bz), -dist).addScaledVector(new THREE.Vector3(sx, 0, sz), -sideOff).addScaledVector(UP, height);
     // 시선: 나와 타겟 사이 45% 지점 (타겟이 멀면 더 멀리)
     _mid.copy(playerPos).lerp(oppPos, 0.55);

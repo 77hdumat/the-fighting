@@ -352,6 +352,11 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
 #roster-teams li.dragover, #roster li.dragover { outline: 2px dashed #1c1c2e; outline-offset: 1px; background: #fffbe6; }
 #roster li { display: flex; align-items: center; gap: 8px; }
 
+/* 체력 잔상 (철권식) */
+.bar.hp .ghost { position: absolute; top: 0; left: 0; bottom: 0; width: 100%; background: linear-gradient(90deg, #ff6b4a, #b01818); opacity: .95; transition: none; }
+.bar.hp .ghost.draining { box-shadow: 0 0 10px rgba(255,80,60,.55) inset; }
+.bar.hp .fill { z-index: 1; }
+
 </style>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script type="importmap">
@@ -1023,6 +1028,27 @@ function applyPunchToPose(pose, punch) {
   pose.hipsY -= 0.05 * strikeAmt;
   pose.headY += sgn * 0.25 * strikeAmt;
   pose.headX += 0.1 * strikeAmt;
+
+  // ---- 하체: 도움닫기 (뒷발로 밀고 앞발이 들어간다) ----
+  // 와인드업엔 무릎을 굽혀 체중을 뒤로, 타격 순간 뒷발이 펴지며 앞발이 착지한다
+  const lead = side === 'L' ? 'L' : 'R';          // 치는 쪽 팔의 반대 발이 앞발
+  const frontThigh = lead === 'L' ? 'thighRX' : 'thighLX';
+  const backThigh = lead === 'L' ? 'thighLX' : 'thighRX';
+  const frontShin = lead === 'L' ? 'shinR' : 'shinL';
+  const backShin = lead === 'L' ? 'shinL' : 'shinR';
+  const H2 = punch.heavy ? 1.35 : 1;
+  // 예비: 살짝 주저앉으며 뒷발에 체중
+  pose.hipsY += -0.07 * H2 * windAmt;
+  pose[backThigh] += 0.28 * H2 * windAmt;
+  pose[backShin] += 0.34 * H2 * windAmt;
+  pose[frontThigh] += -0.12 * windAmt;
+  // 타격: 뒷발이 쭉 펴지고(푸시) 앞발이 앞으로 들어간다
+  pose[backThigh] += 0.42 * H2 * strikeAmt;
+  pose[backShin] += -0.18 * strikeAmt;
+  pose[frontThigh] += -0.5 * H2 * strikeAmt;
+  pose[frontShin] += 0.28 * strikeAmt;
+  pose.hipsRotY += sgn * 0.18 * H2 * strikeAmt;   // 골반 회전으로 힘 전달
+  pose.hipsX += sgn * 0.05 * strikeAmt;
   if (isHook) {
     pose.waistZ += -sgn * 0.12 * strikeAmt;
     pose.chestZ += -sgn * 0.1 * strikeAmt;
@@ -1537,6 +1563,27 @@ class UltimateFx {
 
   _updRack(it, dt, tp) {
     it.root.position.lerp(new THREE.Vector3(tp.x, 0, tp.z), Math.min(1, dt * 6));
+    // 랙은 시전자를 바라보게 세운다 → 바벨이 피격자의 어깨선과 나란해진다 (십자 교차 방지)
+    if (it.attacker) {
+      const dir = new THREE.Vector3().subVectors(it.attacker.pos, tp).setY(0);
+      if (dir.lengthSq() > 1e-4) {
+        const want = Math.atan2(dir.x, dir.z);
+        let d2 = want - it.root.rotation.y;
+        while (d2 > Math.PI) d2 -= Math.PI * 2;
+        while (d2 < -Math.PI) d2 += Math.PI * 2;
+        it.root.rotation.y += d2 * Math.min(1, dt * 8);
+      }
+      // 피격자도 시전자를 정면으로 보게 (바벨이 몸을 가로지르지 않게)
+      if (it.target && it.target.ultVictimT > 0) {
+        const f = it.target;
+        f.forward.copy(it.attacker.pos).sub(f.pos).setY(0);
+        if (f.forward.lengthSq() > 1e-4) {
+          f.forward.normalize();
+          f.yaw = Math.atan2(f.forward.x, f.forward.z);
+          f.side.set(f.forward.z, 0, -f.forward.x);
+        }
+      }
+    }
     const u = it.t;
     // 0~0.45 기둥 솟음 → 0.45 상단바 → 1.0~2.4 바벨 상하 (스쿼트 3회) → 2.4 낙하
     for (const p of it.parts) if (p.type === 'post') p.m.scale.y = Math.min(1, u / 0.45);
@@ -1939,6 +1986,8 @@ function trunksTextTexture(text, color) {
  * 복서 리그 생성. 캐릭터는 로컬 +Z 방향을 바라본다.
  * ghost=true 이면 잔상용: 라이팅 없는 반투명 머티리얼, 그림자 없음.
  */
+const FIGHTER_SCALE = 0.7;
+
 function buildBoxer(def, opts = {}) {
   const { ghost = false, tint = 0x9fdcff } = opts;
   const P = def.prop;
@@ -1989,6 +2038,8 @@ function buildBoxer(def, opts = {}) {
   };
 
   const root = new THREE.Group();
+  // 전체 체격 축소 (맵이 넓어져 상대적으로 크게 보이던 것을 70% 로)
+  root.scale.setScalar(FIGHTER_SCALE);
   const legLen = 0.42 * P.legLen;
   const hipsBaseY = 0.1 + legLen * 2 + 0.04;
 
@@ -2251,7 +2302,7 @@ function buildBoxer(def, opts = {}) {
   applyPose(rig, defaultPose());
   return rig;
 }
-return { CHARACTERS, CHARACTER_ORDER, HIDDEN_ORDER, COACH_DEFS, POSE_KEYS, defaultPose, copyPose, lerpPose, applyPose, buildBoxer };
+return { CHARACTERS, CHARACTER_ORDER, HIDDEN_ORDER, COACH_DEFS, POSE_KEYS, defaultPose, copyPose, lerpPose, applyPose, FIGHTER_SCALE, buildBoxer };
 })();
 // ===== InputState.js =====
 __M.InputState = (() => {
@@ -3609,9 +3660,13 @@ function rockTexture() {
 }
 
 /** 고원 가장자리 반경 (각도에 따라 울퉁불퉁) */
-function cliffRadius(x, z, R = 6.2) {
+const CLIFF_R = 8.6;
+const SECTORS = 16;
+
+/** 각도별 기본 반경 (울퉁불퉁) */
+function cliffRadius(x, z, R = CLIFF_R) {
   const a = Math.atan2(z, x);
-  return R + Math.sin(a * 3.1) * 0.45 + Math.sin(a * 5.7 + 1.2) * 0.25;
+  return R + Math.sin(a * 3.1) * 0.6 + Math.sin(a * 5.7 + 1.2) * 0.35;
 }
 
 function buildCliff(scene) {
@@ -3623,42 +3678,50 @@ function buildCliff(scene) {
   const rockMat = new THREE.MeshToonMaterial({ map: rockTexture(), gradientMap: toonRamp });
   const rockDark = new THREE.MeshToonMaterial({ color: 0x5c5046, gradientMap: toonRamp });
 
-  // ---- 고원 상판: 원판을 각도별로 찌그러뜨려 자연스러운 바위 실루엣 ----
-  const SEG = 48, R = 6.2;
-  const topGeo = new THREE.CircleGeometry(1, SEG);
-  {
-    const pos = topGeo.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i), y = pos.getY(i);
-      const len = Math.hypot(x, y);
-      if (len < 1e-4) continue;
-      const r = cliffRadius(x, y, R);
-      pos.setXY(i, (x / len) * r, (y / len) * r);
+  // ---- 고원: 섹터 조각들로 만든다 (1분 뒤부터 조각이 무너져 내린다) ----
+  const SEG = 64, R = CLIFF_R;
+  const sectors = [];
+  const SECTOR_SEG = 6;      // 조각 하나의 원주 분할
+  for (let s2 = 0; s2 < SECTORS; s2++) {
+    const a0 = (s2 / SECTORS) * Math.PI * 2, span = (Math.PI * 2) / SECTORS;
+    const g2 = new THREE.Group();
+    // 상판 부채꼴
+    const topGeo = new THREE.CircleGeometry(1, SECTOR_SEG, a0, span);
+    {
+      const pos = topGeo.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), y = pos.getY(i);
+        const len = Math.hypot(x, y);
+        if (len < 1e-4) continue;
+        const r = cliffRadius(x, y, R);
+        pos.setXY(i, (x / len) * r, (y / len) * r);
+      }
+      topGeo.computeVertexNormals();
     }
-    topGeo.computeVertexNormals();
-  }
-  const top = new THREE.Mesh(topGeo, rockMat);
-  top.rotation.x = -Math.PI / 2;
-  top.receiveShadow = true;
-  group.add(top);
-
-  // ---- 절벽 옆면: 아래로 갈수록 살짝 좁아지는 기둥 ----
-  const sideGeo = new THREE.CylinderGeometry(1, 0.82, 9, SEG, 1, true);
-  {
-    const pos = sideGeo.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
-      const len = Math.hypot(x, z);
-      if (len < 1e-4) continue;
-      const scale = cliffRadius(x, z, R) * (y > 0 ? 1 : 0.86);
-      const jag = 1 + Math.sin(y * 1.7 + Math.atan2(z, x) * 4) * 0.035;
-      pos.setXYZ(i, (x / len) * scale * jag, y, (z / len) * scale * jag);
+    const topM = new THREE.Mesh(topGeo, rockMat);
+    topM.rotation.x = -Math.PI / 2;
+    topM.receiveShadow = true;
+    g2.add(topM);
+    // 옆면 (조각 아래로 뻗은 암벽)
+    const sideGeo = new THREE.CylinderGeometry(1, 0.84, 9, SECTOR_SEG, 1, true, a0, span);
+    {
+      const pos = sideGeo.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+        const len = Math.hypot(x, z);
+        if (len < 1e-4) continue;
+        const scale = cliffRadius(x, z, R) * (y > 0 ? 1 : 0.86);
+        const jag = 1 + Math.sin(y * 1.7 + Math.atan2(z, x) * 4) * 0.04;
+        pos.setXYZ(i, (x / len) * scale * jag, y, (z / len) * scale * jag);
+      }
+      sideGeo.computeVertexNormals();
     }
-    sideGeo.computeVertexNormals();
+    const sideM = new THREE.Mesh(sideGeo, rockDark);
+    sideM.position.y = -4.5;
+    g2.add(sideM);
+    group.add(g2);
+    sectors.push({ g: g2, idx: s2, mid: a0 + span / 2, state: 'ok', t: 0, vy: 0, spin: 0 });
   }
-  const side = new THREE.Mesh(sideGeo, rockDark);
-  side.position.y = -4.5;
-  group.add(side);
 
   // ---- 주변 봉우리 (멀리 솟은 바위 기둥들) ----
   for (let i = 0; i < 14; i++) {
@@ -3711,14 +3774,85 @@ function buildCliff(scene) {
 
   const flashes = [];   // 링 인터페이스 맞추기용 (암벽엔 카메라 플래시 없음)
 
+  // ---- 붕괴 상태 ----
+  let clock = 0;            // 경기 시작 후 경과
+  let nextBreak = 60;       // 1분 뒤 첫 붕괴, 이후 점점 잦아진다
+  const rubble = [];
+  const sectorOf = (x, z) => {
+    let a = Math.atan2(z, x); if (a < 0) a += Math.PI * 2;
+    return Math.floor((a / (Math.PI * 2)) * SECTORS) % SECTORS;
+  };
+  const spawnRubble = (sec, n) => {
+    for (let i = 0; i < n; i++) {
+      const a = sec.mid + (Math.random() - 0.5) * (Math.PI * 2 / SECTORS) * 0.9;
+      const rr = R * (0.55 + Math.random() * 0.45);
+      const m = new THREE.Mesh(new THREE.DodecahedronGeometry(0.12 + Math.random() * 0.22, 0), rockDark);
+      m.position.set(Math.cos(a) * rr, -0.1, Math.sin(a) * rr);
+      group.add(m);
+      rubble.push({ m, vy: -0.5 - Math.random(), sx: (Math.random() - 0.5) * 0.6, sz: (Math.random() - 0.5) * 0.6, t: 0 });
+    }
+  };
+
   return {
     group,
     kind: 'cliff',
     fill,
-    radius: (x, z) => cliffRadius(x, z, R),
+    /** 무너진 섹터는 반경 0 → 그 방향은 발판이 없다 */
+    radius: (x, z) => {
+      const sec = sectors[sectorOf(x, z)];
+      if (sec && sec.state === 'gone') return 0.0;
+      return cliffRadius(x, z, R);
+    },
+    /** 흔들리는 중인 섹터인지 (연출/경고용) */
+    shakingAt: (x, z) => {
+      const sec = sectors[sectorOf(x, z)];
+      return sec && sec.state === 'shake' ? 1 : 0;
+    },
+    reset() {
+      clock = 0; nextBreak = 60;
+      for (const sec of sectors) { sec.state = 'ok'; sec.t = 0; sec.vy = 0; sec.spin = 0; sec.g.visible = true; sec.g.position.set(0, 0, 0); sec.g.rotation.set(0, 0, 0); }
+      for (const r of rubble) group.remove(r.m);
+      rubble.length = 0;
+    },
     update(dt, excitement) {
-      // 가장자리 경고 링 맥동
       edge.material.opacity = 0.25 + 0.18 * (0.5 + 0.5 * Math.sin(performance.now() * 0.004));
+      clock += dt;
+
+      // 1분 뒤부터 랜덤 섹터가 무너진다 (점점 빨라짐)
+      if (clock > nextBreak) {
+        const alive = sectors.filter((x) => x.state === 'ok');
+        if (alive.length > 4) {
+          const sec = alive[Math.floor(Math.random() * alive.length)];
+          sec.state = 'shake'; sec.t = 0;
+        }
+        nextBreak = clock + Math.max(4.5, 11 - clock * 0.05);
+      }
+
+      for (const sec of sectors) {
+        if (sec.state === 'shake') {
+          sec.t += dt;
+          // 후두둑 — 크게 흔들리며 자갈이 떨어진다
+          const amp = 0.02 + 0.06 * (sec.t / 1.6);
+          sec.g.position.set(Math.sin(sec.t * 47) * amp, Math.sin(sec.t * 61) * amp * 1.4, Math.cos(sec.t * 53) * amp);
+          sec.g.rotation.z = Math.sin(sec.t * 37) * amp * 0.25;
+          if (Math.random() < dt * 22) spawnRubble(sec, 1);
+          if (sec.t > 1.6) { sec.state = 'falling'; sec.t = 0; sec.vy = 0; sec.spin = (Math.random() - 0.5) * 1.2; spawnRubble(sec, 8); }
+        } else if (sec.state === 'falling') {
+          sec.t += dt; sec.vy -= 16 * dt;
+          sec.g.position.y += sec.vy * dt;
+          sec.g.position.x += Math.cos(sec.mid) * dt * 0.8;
+          sec.g.position.z += Math.sin(sec.mid) * dt * 0.8;
+          sec.g.rotation.x += sec.spin * dt; sec.g.rotation.z += sec.spin * dt * 0.6;
+          if (sec.g.position.y < -22) { sec.state = 'gone'; sec.g.visible = false; }
+        }
+      }
+      for (let i = rubble.length - 1; i >= 0; i--) {
+        const r = rubble[i];
+        r.t += dt; r.vy -= 14 * dt;
+        r.m.position.x += r.sx * dt; r.m.position.z += r.sz * dt; r.m.position.y += r.vy * dt;
+        r.m.rotation.x += dt * 3; r.m.rotation.y += dt * 2;
+        if (r.m.position.y < -20 || r.t > 6) { group.remove(r.m); r.m.geometry.dispose(); rubble.splice(i, 1); }
+      }
     },
     cheer() {},
     setCrowd() {},
@@ -3728,7 +3862,7 @@ function buildCliff(scene) {
     },
   };
 }
-return { cliffRadius, buildCliff };
+return { CLIFF_R, SECTORS, cliffRadius, buildCliff };
 })();
 // ===== Fighter.js =====
 __M.Fighter = (() => {
@@ -3839,7 +3973,7 @@ class Fighter {
   get alive() { return !this.ko; }
   get isCounterWindow() { return !!this.punch && this.punch.t / this.punch.dur < 0.55; }
   get punchProgress() { return this.punch ? this.punch.t / this.punch.dur : 0; }
-  get reach() { return 0.55 + 0.35 * this.def.prop.armLen; }
+  get reach() { return (0.55 + 0.35 * this.def.prop.armLen) * 0.7; }
 
   hitTest(glove, radius) { return pointSegmentDist(glove, this.hipsPos, this.headPos) < radius; }
   sweptHit(prev, cur, radius, out) {
@@ -4155,7 +4289,7 @@ class Fighter {
       if (this.hp <= 0) this._die();
       const heavy = ev.dempsey || ev.heavy || ev.finisher || ev.counter || counter || P >= 0.75;
       this.react.headX = -0.1 - 0.15 * P; this.react.waistX = -0.08 - 0.1 * P;
-      this.knock.copy(ev.dir).multiplyScalar((0.5 + 1.2 * P) * (ev.finisher ? 1.8 : 1));
+      this.knock.copy(ev.dir).multiplyScalar((1.6 + 3.2 * P) * (ev.finisher ? 2.1 : 1));   // 가드해도 크게 밀린다
       this.block = Math.max(this.block, 0.3);
       this.blockShock = Math.max(this.blockShock, heavy ? 1 : 0.4);
       if (heavy) this.blockGhost = 0.4;
@@ -4169,16 +4303,19 @@ class Fighter {
     const r = this.react;
     const k = counter ? 1.7 : 1;
     if (body) {
-      r.waistX = (0.55 + 0.35 * P) * k; r.headX = 0.35 * k; r.waistY = sgn * 0.25 * k;
-      if (ev.type === 'hook') r.waistZ = -sgn * 0.3 * k;
+      r.waistX = (0.75 + 0.45 * P) * k; r.headX = 0.45 * k; r.waistY = sgn * 0.3 * k;
+      if (ev.type === 'hook') r.waistZ = -sgn * 0.38 * k;
       this.dempsey.gauge = Math.max(0, this.dempsey.gauge - 4 * P);
     } else if (ev.type === 'hook' || ev.type === 'special') {
-      r.headY = sgn * (0.9 + 0.5 * P) * k; r.headZ = -sgn * (0.45 + 0.3 * P) * k; r.headX = -0.2 * k;
-      r.waistY = sgn * (0.45 + 0.3 * P) * k; r.waistZ = -sgn * 0.2 * k; r.waistX = -0.25 * P * k;
+      r.headY = sgn * (1.15 + 0.6 * P) * k; r.headZ = -sgn * (0.6 + 0.35 * P) * k; r.headX = -0.3 * k;
+      r.waistY = sgn * (0.6 + 0.4 * P) * k; r.waistZ = -sgn * 0.3 * k; r.waistX = -0.35 * P * k;
     } else {
-      r.headX = -(0.5 + 0.4 * P) * k; r.waistX = -0.3 * k; r.headY = sgn * 0.2;
+      r.headX = -(0.7 + 0.5 * P) * k; r.waistX = -0.45 * k; r.headY = sgn * 0.28;
     }
-    this.knock.copy(ev.dir).multiplyScalar((0.5 + 1.1 * P) * (body ? 1.3 : 1) * (counter ? 2.2 : ev.finisher ? 3.5 : 1));
+    // 맞은 충격으로 뒷발이 밀리는 스텝백 (0.22초 동안)
+    this.hitStep = Math.min(1.2, (this.hitStep || 0) + (0.35 + 0.7 * P) * (counter ? 1.6 : 1));
+    this.hitStepT = 0.22;
+    this.knock.copy(ev.dir).multiplyScalar((1.9 + 3.4 * P) * (body ? 1.25 : 1) * (counter ? 2.4 : ev.finisher ? 3.6 : 1));
     this.punch = null; this.queue.length = 0; this.bufferedHook = null;
 
     // ---- 뎀프시 연타 그로기: 롤 훅을 연속으로 맞으면 누적, 4 스택이면 그로기(2초 무방비) ----
@@ -4327,7 +4464,7 @@ class Fighter {
         const r = Math.hypot(this.pos.x, this.pos.z);
         const edge = ARENA.radius(this.pos.x, this.pos.z);
         if (r > edge) {
-          this.fallT = 1.5; this.punch = null; this.queue.length = 0; this.finisher = null;
+          this.fallT = 2.4; this.fallVy = 0; this._fallDir = null; this.punch = null; this.queue.length = 0; this.finisher = null;
           this.dempsey.stop(); this.ultT = 0; this.ultVictimT = 0;
           this.audio.stagger();
           this.events.push({ type: 'fell' });
@@ -4536,7 +4673,7 @@ class Fighter {
         if (info.p < 0.5 && dist > 0.95) this.pos.addScaledVector(this.forward, (f.dash || 4.5) * dt);
         if (!f.hit && info.p > 0.3 && info.p < 0.66) {
           this._applyNow(p);
-          hitEvent = tryHit(f.side, 0.6, (tg, h) => { f.hit = true; return { attacker: this, target: tg, side: f.side, type: 'hook', power: f.power, pos: h.point.clone(), zone: h.zone, dir: this.forward.clone(), maxSpeed: true, finisher: true, charge: f.charge, dempsey: false, launch: f.launch, kind: f.kind }; });
+          hitEvent = tryHit(f.side, 0.42, (tg, h) => { f.hit = true; return { attacker: this, target: tg, side: f.side, type: 'hook', power: f.power, pos: h.point.clone(), zone: h.zone, dir: this.forward.clone(), maxSpeed: true, finisher: true, charge: f.charge, dempsey: false, launch: f.launch, kind: f.kind }; });
         }
         if (f.punch.t >= f.punch.dur) this.finisher = null;
       }
@@ -4545,16 +4682,22 @@ class Fighter {
       pu.t += dt;
       const info = applyPunchToPose(p, pu);
       // 스텝인
-      if (tgt && info.p < 0.5 && !d.active) {
+      if (tgt && !d.active) {
         const reach = this.reach;
         const stepSpd = pu.step || 3.2;
-        if (dist > reach) this.pos.addScaledVector(this.forward, Math.min(stepSpd, (dist - reach) * 12) * dt);
+        if (info.p < 0.28) {
+          // 예비동작: 뒷발로 체중 싣기 (아주 살짝 뒤로)
+          this.pos.addScaledVector(this.forward, -0.5 * dt);
+        } else if (info.p < 0.56 && dist > reach) {
+          // 도움닫기: 거리가 멀수록 크게 파고든다
+          this.pos.addScaledVector(this.forward, Math.min(stepSpd * 1.35, (dist - reach) * 15) * dt);
+        }
       }
       if (pu.t >= pu.dur) { this.punch = null; this.events.push({ type: 'punchEnd', hit: !!pu.hit }); }
       if (!d.active) this.bufferedHook = null;
       if (!pu.hit && info.p > (pu.kind ? 0.24 : 0.3) && info.p < 0.66) {
         this._applyNow(p);
-        const radius = pu.hitRadius || (pu.type === 'flicker' ? (st === 'flicker' && d.active ? 0.55 : 0.48) : pu.kind ? 0.62 : 0.42);
+        const radius = 0.7 * (pu.hitRadius || (pu.type === 'flicker' ? (st === 'flicker' && d.active ? 0.55 : 0.48) : pu.kind ? 0.62 : 0.42));
         hitEvent = tryHit(pu.side, radius, (tg, h) => { pu.hit = true; return { attacker: this, target: tg, side: pu.side, type: pu.type, power: pu.power, pos: h.point.clone(), zone: pu.zoneForce || h.zone, dir: this.forward.clone(), maxSpeed: d.maxSpeed, dempsey: d.active, finisher: !!pu.rollFinish, roll: !!pu.roll, charge: pu.rollFinish ? d.charge : 0, heavy: !!pu.heavy, counter: !!pu.counter || !!pu.forceCounter, counterMul: pu.counterMul || 1, launch: pu.launch || 0, liver: !!pu.liver, staggerT: pu.staggerT || 0, kind: pu.kind || null, fromU: !!pu.fromU }; }, !!pu.kick);
       }
     }
@@ -4562,13 +4705,22 @@ class Fighter {
     // ---- 낙사: 허우적대며 아래로 ----
     if (this.fallT > 0) {
       this.fallT -= dt;
-      const u = 1.5 - this.fallT;
-      this.fallY += (2.5 + u * 9) * dt;                       // 점점 빨라지는 낙하
-      this.pos.addScaledVector(this.vel.clone().setY(0).normalize(), 0.6 * dt);
-      p.shLX += -2.6 + Math.sin(t * 22) * 0.5; p.shRX += -2.6 - Math.sin(t * 22) * 0.5;
-      p.elL += -0.6; p.elR += -0.6; p.shLZ += 0.7; p.shRZ += -0.7;
-      p.thighLX += -0.9 + Math.sin(t * 18) * 0.5; p.thighRX += -0.9 - Math.sin(t * 18) * 0.5;
-      p.shinL += 0.9; p.shinR += 0.9; p.waistX += -0.5; p.headX += -0.6;
+      const u = 2.4 - this.fallT;                              // 총 2.4초 낙하
+      // 발이 허공을 딛고 → 중심을 잃고 뒤로 기울며 → 가속 추락
+      const tip = Math.min(1, u / 0.35);
+      this.fallVy = (this.fallVy || 0) + 19 * dt;
+      this.fallY += this.fallVy * dt * (0.25 + 0.75 * tip);
+      if (!this._fallDir) { this._fallDir = this.forward.clone().multiplyScalar(-1); this.fallSpin = (Math.random() - 0.5) * 2.2; }
+      this.pos.addScaledVector(this._fallDir, (1.4 - u * 0.4) * dt);   // 밀려난 방향으로 관성
+      this.rig.root.rotation.x = tip * (0.5 + Math.sin(u * 2.2) * 0.35) + u * 0.5;
+      this.rig.root.rotation.z = Math.sin(u * 3.1) * 0.35 * tip;
+      const flail = Math.sin(t * 16);
+      p.shLX += -2.35 + flail * 0.75; p.shRX += -2.35 - flail * 0.75;
+      p.elL += -0.45 - Math.abs(flail) * 0.3; p.elR += -0.45 - Math.abs(flail) * 0.3;
+      p.shLZ += 0.75; p.shRZ += -0.75;
+      p.thighLX += -0.75 + flail * 0.65; p.thighRX += -0.7 - flail * 0.65;
+      p.shinL += 0.85 + Math.max(0, flail) * 0.5; p.shinR += 0.8 + Math.max(0, -flail) * 0.5;
+      p.waistX += -0.35 - 0.25 * tip; p.headX += -0.55; p.headZ += flail * 0.25;
       this.queue.length = 0;
       if (this.fallT <= 0) { this.fallT = 0; this.hp = 0; if (!this.ko) { this._die(); this.events.push({ type: 'fellDead' }); } }
     }
@@ -4886,6 +5038,15 @@ class Fighter {
       p.thighLX += -0.4 * a; p.thighRX += 0.3 * a; p.shinL += 0.6 * a;
     }
 
+    // 피격 스텝백: 뒷발이 끌리며 몸이 뒤로 밀린다
+    if (this.hitStepT > 0) {
+      this.hitStepT -= dt;
+      const k2 = Math.max(0, this.hitStepT / 0.22);
+      this.pos.addScaledVector(this.forward, -this.hitStep * 2.6 * dt * k2);
+      p.thighLX += -0.22 * this.hitStep * k2; p.thighRX += 0.18 * this.hitStep * k2;
+      p.shinL += 0.3 * this.hitStep * k2; p.hipsY += -0.05 * this.hitStep * k2;
+      if (this.hitStepT <= 0) this.hitStep = 0;
+    }
     const r = this.react;
     p.headX += r.headX; p.headY += r.headY; p.headZ += r.headZ;
     p.waistX += r.waistX; p.waistY += r.waistY; p.waistZ += r.waistZ; p.chestY += r.waistY * 0.5;
@@ -4910,7 +5071,7 @@ class Fighter {
       if (u < 0.55) lie = Math.pow(u / 0.55, 2);
       else if (u < 1.1) lie = 1;
       else lie = 1 - easeOutCubic(Math.min(1, (u - 1.1) / 1.6));
-      this.rig.root.rotation.x = -lie * Math.PI * 0.5;
+      this.rig.root.rotation.x = lie * Math.PI * 0.5;    // 다운도 뒤로 넘어졌다가 일어난다
       const rise = 1 - lie;
       // 일어나는 동안 무릎 짚고 웅크림 + 고개 좌우로 흔들기
       p.hipsY += -0.35 * lie * rise * 2 - 0.05 * lie;
@@ -4923,14 +5084,14 @@ class Fighter {
     } else if (this.ko) {
       this.koT += dt;
       const k = Math.min(1, this.koT / 0.75), e = k * k;
-      this.rig.root.rotation.x = -e * Math.PI * 0.5;
+      this.rig.root.rotation.x = e * Math.PI * 0.5;      // 뒤로 벌러덩
       this.koAngle += this.koSpin * dt; this.koSpin *= Math.exp(-dt * 3);
       this.koLift = Math.max(0, this.koLift - dt * 1.6);
       p.hipsY += this.koLift * 0.6;
       this.knock.multiplyScalar(Math.exp(-dt * 3));
       p.shLX = -0.4 + e * 1.3; p.shRX = -0.4 + e * 1.3; p.elL = -0.5; p.elR = -0.5;
       p.shLZ = 0.6; p.shRZ = -0.6; p.headX = -0.4; p.waistX = 0; p.thighLX = -0.2; p.thighRX = -0.2; p.shinL = 0.5; p.shinR = 0.4;
-    } else { this.rig.root.rotation.x = 0; this.koAngle = 0; }
+    } else if (this.fallT <= 0 && !(this.ko && this.fallY > 0.01)) { this.rig.root.rotation.x = 0; this.koAngle = 0; }
 
     this._applyNow(p);
     if (hitEvent) { this.combo++; this.comboTimer = 1.4; }
@@ -5174,7 +5335,7 @@ class CameraController {
     const bx = Math.sin(this.orbitYaw), bz = Math.cos(this.orbitYaw);     // 부드러운 전방
     const sx = bz, sz = -bx;                                               // 부드러운 좌측
     // 살짝 대각선(오른쪽 뒤)에서 → 내 몸이 상대를 가리지 않는다. 내 캐릭터는 화면 왼쪽 아래, 상대는 중앙
-    const dist = 4.0 - 0.5 * b, height = 2.9 - 0.6 * b, sideOff = 1.6 - 0.25 * b;   // 높은 대각 부감 → 거리감
+    const dist = 3.1 - 0.4 * b, height = 2.15 - 0.45 * b, sideOff = 1.2 - 0.2 * b;   // 캐릭터 70% 축소에 맞춰 카메라도 당긴다
     _p.copy(playerPos).addScaledVector(new THREE.Vector3(bx, 0, bz), -dist).addScaledVector(new THREE.Vector3(sx, 0, sz), -sideOff).addScaledVector(UP, height);
     // 시선: 나와 타겟 사이 45% 지점 (타겟이 멀면 더 멀리)
     _mid.copy(playerPos).lerp(oppPos, 0.55);
@@ -5580,9 +5741,9 @@ class HUD {
     this.cards = fighters.map((f) => {
       const el = document.createElement('div');
       el.className = 'fcard' + (f.slot === localSlot ? ' me' : '') + (f.team !== null && f.team !== undefined ? ` team${f.team}` : '');
-      el.innerHTML = `<div class="name"><span class="tag">${f.nick || (f.isAI ? 'CPU' : 'P' + (f.netSlot + 1))}${f.slot === localSlot ? ' (YOU)' : ''}</span>${f.name}<span class="charge"></span><span class="hpnum"></span></div><div class="bar hp"><div class="fill"></div></div><div class="bar mini"><div class="fill"></div></div>`;
+      el.innerHTML = `<div class="name"><span class="tag">${f.nick || (f.isAI ? 'CPU' : 'P' + (f.netSlot + 1))}${f.slot === localSlot ? ' (YOU)' : ''}</span>${f.name}<span class="charge"></span><span class="hpnum"></span></div><div class="bar hp"><div class="ghost"></div><div class="fill"></div></div><div class="bar mini"><div class="fill"></div></div>`;
       this.top.appendChild(el);
-      return { el, fill: el.querySelector('.hp .fill'), mini: el.querySelector('.mini'), miniFill: el.querySelector('.mini .fill'), charge: el.querySelector('.charge'), hpnum: el.querySelector('.hpnum') };
+      return { el, fill: el.querySelector('.hp .fill'), ghost: el.querySelector('.hp .ghost'), ghostV: 1, ghostHold: 0, mini: el.querySelector('.mini'), miniFill: el.querySelector('.mini .fill'), charge: el.querySelector('.charge'), hpnum: el.querySelector('.hpnum') };
     });
   }
   update(dt, fighters, local) {
@@ -5591,6 +5752,16 @@ class HUD {
       const r = f.hp / f.maxHp;
       c.fill.style.width = (r * 100).toFixed(1) + '%';
       c.fill.classList.toggle('low', r < 0.3);
+      // 철권식 잔상: 깎인 만큼 붉은 띠가 잠깐 남았다가 스르륵 줄어든다
+      if (c.ghost) {
+        if (r > c.ghostV) { c.ghostV = r; c.ghostHold = 0; }
+        else if (r < c.ghostV) {
+          c.ghostHold += dt;
+          if (c.ghostHold > 0.45) c.ghostV = Math.max(r, c.ghostV - dt * (0.35 + (c.ghostV - r) * 1.6));
+        }
+        c.ghost.style.width = (c.ghostV * 100).toFixed(1) + '%';
+        c.ghost.classList.toggle('draining', c.ghostV - r > 0.005);
+      }
       c.hpnum.textContent = Math.ceil(f.hp) + '/' + f.maxHp;
       c.el.classList.toggle('ko', f.ko);
       c.el.classList.toggle('target', local && local.target === f);
@@ -6539,6 +6710,8 @@ class Game {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.shadowMap.autoUpdate = true;
+    this.renderer.info.autoReset = true;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.9;
 
@@ -7185,6 +7358,13 @@ class Game {
     net.join(code);
   }
 
+  /** 정적 지오메트리의 행렬 갱신을 끈다 (매 프레임 updateMatrixWorld 비용 절감) */
+  freezeStatic(group) {
+    if (!group) return;
+    group.updateMatrixWorld(true);
+    group.traverse((o) => { if (o.isMesh) { o.matrixAutoUpdate = false; o.updateMatrix(); } });
+  }
+
   /** 맵 교체 (ring | cliff). 경기 시작 전에 부른다 */
   setMap(kind) {
     if (kind === this.mapKind && this.ring) return;
@@ -7193,9 +7373,11 @@ class Game {
     this.mapKind = kind;
     if (kind === 'cliff') {
       this.ring = buildCliff(this.scene);
+      this.freezeStatic(this.ring.group);
       setArena({ kind: 'cliff', radius: (x, z) => this.ring.radius(x, z) });
     } else {
       this.ring = buildRing(this.scene);
+      this.freezeStatic(this.ring.group);
       setArena({ kind: 'ring', radius: () => 4.15 });
     }
     this.coaches.setVisible ? this.coaches.setVisible(kind !== 'cliff') : null;
@@ -7241,6 +7423,7 @@ class Game {
     this.netLabel = mode === 'solo' ? '' : `ROOM ${this.net.code} · ${mode.toUpperCase()} · Enter = 채팅`;
     if (mode !== 'solo') { this.showChat(true); this.addChat(0, '시합 개시. Enter 로 채팅', true); }
     this.music.pendingTrack = 'battle'; this.music.play('battle');
+    if (this.ring && this.ring.reset) this.ring.reset();
     this.beginIntro();
   }
 
@@ -7293,7 +7476,7 @@ class Game {
     this.camCtl.initialized = false;
   }
 
-  resetMatch() { this.buildFighters(this.cfg); this.over = false; this.music.setDuck(1); this.music.play('battle'); if (this.mode === 'solo') document.getElementById('netinfo').textContent = this.soloLabel(); document.getElementById('next-overlay').classList.add('hidden'); this.hud.showKO(false); this.beginIntro(); }
+  resetMatch() { this.buildFighters(this.cfg); if (this.ring && this.ring.reset) this.ring.reset(); this.over = false; this.music.setDuck(1); this.music.play('battle'); if (this.mode === 'solo') document.getElementById('netinfo').textContent = this.soloLabel(); document.getElementById('next-overlay').classList.add('hidden'); this.hud.showKO(false); this.beginIntro(); }
 
   /** 교체 대기 처리: 화면 밖으로 내리고 판정에서 제외 */
   setBenched(f, on) {
@@ -7813,7 +7996,7 @@ class Game {
       const a = fs[i], b = fs[j]; if (a.ko || b.ko) continue;
       _sep.subVectors(b.pos, a.pos); _sep.y = 0;
       const d = _sep.length();
-      if (d < 0.8 && d > 1e-4) { _sep.multiplyScalar((0.8 - d) / d * 0.5); a.pos.sub(_sep); b.pos.add(_sep); }
+      if (d < 0.58 && d > 1e-4) { _sep.multiplyScalar((0.58 - d) / d * 0.5); a.pos.sub(_sep); b.pos.add(_sep); }
     }
     for (const h of hits) {
       const counter = h.target.isCounterWindow && !h.finisher;
@@ -8091,18 +8274,17 @@ class Game {
       const g = this.ghostFx[f.slot];
       const tNow = this.mode === 'client' ? this.realTime : f.time;
       g.record(tNow, f.pos, f.yaw, f.rig.root.rotation.x, f.pose);
+      // 잔상은 "공격 중"일 때만 (이동/걷기에는 남기지 않는다)
+      const attacking = !!f.punch || !!f.finisher || f.rollT > 0 || f.ultT > 0;
       let count = 0, interval = f.dempsey.ghostInterval, strength = 1;
-      if (f === view) {
-        count = f.dempsey.ghostCount;
-        if (f.punch) { count = Math.max(count, 5); interval = Math.max(interval, 0.022); }
-        if (f.dempsey.maxSpeed) { count = 7; strength = 1.15; }
-        if (f.finisher) count = Math.max(count, 6);
-      } else if (f === opp) {
-        if (f.rattle > 0.05) { count = 5; interval = 0.045; strength = Math.min(1, f.rattle * 1.6); }
-        else if (f.blockGhost > 0) { count = 5; interval = 0.03; strength = Math.min(1, f.blockGhost * 2.5); }
-        else if (f.dempsey.blend > 0) { count = Math.min(6, f.dempsey.ghostCount); strength = 0.9; }
+      if (f === view || f === opp) {
+        if (attacking) {
+          count = f.finisher || f.ultT > 0 || f.rollT > 0 ? 7 : 5;
+          interval = f.rollT > 0 ? 0.022 : 0.026;
+          strength = f.finisher || f.ultT > 0 ? 1.15 : 1;
+        }
+        if (f.dempsey.maxSpeed && attacking) { count = Math.max(count, 7); strength = 1.15; }
       }
-      if (f === view && f.blockGhost > 0) { count = Math.max(count, 6); interval = 0.03; strength = Math.max(strength, Math.min(1, f.blockGhost * 2.5)); }
       g.update(this.mode === 'client' ? this.realTime : f.time, count, interval, strength);
     }
 
@@ -8124,6 +8306,19 @@ class Game {
     const f = new THREE.Vector3().subVectors(opp.pos, view.pos); f.y = 0; if (f.lengthSq() < 1e-6) f.set(0, 0, -1); f.normalize();
     const s = new THREE.Vector3(f.z, 0, -f.x);
     if (this.phase !== 'intro') this.camCtl.update(rawDt, { playerPos: view.pos, oppPos: opp.pos, f, s, intensity: I, dempseyActive: d.active || !!view.finisher, sway: d.sway, maxSpeed: d.maxSpeed || !!view.finisher, hitStop: this.hitStop });
+    // ---- 낙사 카메라: 떨어지는 선수를 따라 내려가며 지켜본다 ----
+    const faller = (view && (view.fallT > 0 || (view.ko && view.fallY > 0.5))) ? view
+      : this.fighters.find((x) => x.fallT > 0 && (x.slot === this.localSlot || (local && local.target === x)));
+    if (faller) {
+      const y = -(faller.fallY || 0);
+      const want = faller.pos.clone().add(new THREE.Vector3(0, y + 2.2, 0)).addScaledVector(faller.forward, -2.6);
+      this.camera.position.lerp(want, Math.min(1, rawDt * 5));
+      this.camera.lookAt(faller.pos.x, y + 0.7, faller.pos.z);
+      const wantFov = 62;
+      this.camera.fov += (wantFov - this.camera.fov) * Math.min(1, rawDt * 3);
+      this.camera.updateProjectionMatrix();
+      this.camCtl.initialized = false;
+    }
     // ---- 필살 연출 카메라: 하늘에서 떨어지는 유물·랙·오토바이가 확실히 보이는 와이드 샷 ----
     const ultF = this.fighters.find((x) => x.ultT > 0);
     if (ultF && ultF.ultTarget) {

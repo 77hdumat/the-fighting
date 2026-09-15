@@ -106,7 +106,7 @@ export class Fighter {
   get alive() { return !this.ko; }
   get isCounterWindow() { return !!this.punch && this.punch.t / this.punch.dur < 0.55; }
   get punchProgress() { return this.punch ? this.punch.t / this.punch.dur : 0; }
-  get reach() { return 0.55 + 0.35 * this.def.prop.armLen; }
+  get reach() { return (0.55 + 0.35 * this.def.prop.armLen) * 0.7; }
 
   hitTest(glove, radius) { return pointSegmentDist(glove, this.hipsPos, this.headPos) < radius; }
   sweptHit(prev, cur, radius, out) {
@@ -422,7 +422,7 @@ export class Fighter {
       if (this.hp <= 0) this._die();
       const heavy = ev.dempsey || ev.heavy || ev.finisher || ev.counter || counter || P >= 0.75;
       this.react.headX = -0.1 - 0.15 * P; this.react.waistX = -0.08 - 0.1 * P;
-      this.knock.copy(ev.dir).multiplyScalar((0.5 + 1.2 * P) * (ev.finisher ? 1.8 : 1));
+      this.knock.copy(ev.dir).multiplyScalar((1.6 + 3.2 * P) * (ev.finisher ? 2.1 : 1));   // 가드해도 크게 밀린다
       this.block = Math.max(this.block, 0.3);
       this.blockShock = Math.max(this.blockShock, heavy ? 1 : 0.4);
       if (heavy) this.blockGhost = 0.4;
@@ -436,16 +436,19 @@ export class Fighter {
     const r = this.react;
     const k = counter ? 1.7 : 1;
     if (body) {
-      r.waistX = (0.55 + 0.35 * P) * k; r.headX = 0.35 * k; r.waistY = sgn * 0.25 * k;
-      if (ev.type === 'hook') r.waistZ = -sgn * 0.3 * k;
+      r.waistX = (0.75 + 0.45 * P) * k; r.headX = 0.45 * k; r.waistY = sgn * 0.3 * k;
+      if (ev.type === 'hook') r.waistZ = -sgn * 0.38 * k;
       this.dempsey.gauge = Math.max(0, this.dempsey.gauge - 4 * P);
     } else if (ev.type === 'hook' || ev.type === 'special') {
-      r.headY = sgn * (0.9 + 0.5 * P) * k; r.headZ = -sgn * (0.45 + 0.3 * P) * k; r.headX = -0.2 * k;
-      r.waistY = sgn * (0.45 + 0.3 * P) * k; r.waistZ = -sgn * 0.2 * k; r.waistX = -0.25 * P * k;
+      r.headY = sgn * (1.15 + 0.6 * P) * k; r.headZ = -sgn * (0.6 + 0.35 * P) * k; r.headX = -0.3 * k;
+      r.waistY = sgn * (0.6 + 0.4 * P) * k; r.waistZ = -sgn * 0.3 * k; r.waistX = -0.35 * P * k;
     } else {
-      r.headX = -(0.5 + 0.4 * P) * k; r.waistX = -0.3 * k; r.headY = sgn * 0.2;
+      r.headX = -(0.7 + 0.5 * P) * k; r.waistX = -0.45 * k; r.headY = sgn * 0.28;
     }
-    this.knock.copy(ev.dir).multiplyScalar((0.5 + 1.1 * P) * (body ? 1.3 : 1) * (counter ? 2.2 : ev.finisher ? 3.5 : 1));
+    // 맞은 충격으로 뒷발이 밀리는 스텝백 (0.22초 동안)
+    this.hitStep = Math.min(1.2, (this.hitStep || 0) + (0.35 + 0.7 * P) * (counter ? 1.6 : 1));
+    this.hitStepT = 0.22;
+    this.knock.copy(ev.dir).multiplyScalar((1.9 + 3.4 * P) * (body ? 1.25 : 1) * (counter ? 2.4 : ev.finisher ? 3.6 : 1));
     this.punch = null; this.queue.length = 0; this.bufferedHook = null;
 
     // ---- 뎀프시 연타 그로기: 롤 훅을 연속으로 맞으면 누적, 4 스택이면 그로기(2초 무방비) ----
@@ -594,7 +597,7 @@ export class Fighter {
         const r = Math.hypot(this.pos.x, this.pos.z);
         const edge = ARENA.radius(this.pos.x, this.pos.z);
         if (r > edge) {
-          this.fallT = 1.5; this.punch = null; this.queue.length = 0; this.finisher = null;
+          this.fallT = 2.4; this.fallVy = 0; this._fallDir = null; this.punch = null; this.queue.length = 0; this.finisher = null;
           this.dempsey.stop(); this.ultT = 0; this.ultVictimT = 0;
           this.audio.stagger();
           this.events.push({ type: 'fell' });
@@ -803,7 +806,7 @@ export class Fighter {
         if (info.p < 0.5 && dist > 0.95) this.pos.addScaledVector(this.forward, (f.dash || 4.5) * dt);
         if (!f.hit && info.p > 0.3 && info.p < 0.66) {
           this._applyNow(p);
-          hitEvent = tryHit(f.side, 0.6, (tg, h) => { f.hit = true; return { attacker: this, target: tg, side: f.side, type: 'hook', power: f.power, pos: h.point.clone(), zone: h.zone, dir: this.forward.clone(), maxSpeed: true, finisher: true, charge: f.charge, dempsey: false, launch: f.launch, kind: f.kind }; });
+          hitEvent = tryHit(f.side, 0.42, (tg, h) => { f.hit = true; return { attacker: this, target: tg, side: f.side, type: 'hook', power: f.power, pos: h.point.clone(), zone: h.zone, dir: this.forward.clone(), maxSpeed: true, finisher: true, charge: f.charge, dempsey: false, launch: f.launch, kind: f.kind }; });
         }
         if (f.punch.t >= f.punch.dur) this.finisher = null;
       }
@@ -812,16 +815,22 @@ export class Fighter {
       pu.t += dt;
       const info = applyPunchToPose(p, pu);
       // 스텝인
-      if (tgt && info.p < 0.5 && !d.active) {
+      if (tgt && !d.active) {
         const reach = this.reach;
         const stepSpd = pu.step || 3.2;
-        if (dist > reach) this.pos.addScaledVector(this.forward, Math.min(stepSpd, (dist - reach) * 12) * dt);
+        if (info.p < 0.28) {
+          // 예비동작: 뒷발로 체중 싣기 (아주 살짝 뒤로)
+          this.pos.addScaledVector(this.forward, -0.5 * dt);
+        } else if (info.p < 0.56 && dist > reach) {
+          // 도움닫기: 거리가 멀수록 크게 파고든다
+          this.pos.addScaledVector(this.forward, Math.min(stepSpd * 1.35, (dist - reach) * 15) * dt);
+        }
       }
       if (pu.t >= pu.dur) { this.punch = null; this.events.push({ type: 'punchEnd', hit: !!pu.hit }); }
       if (!d.active) this.bufferedHook = null;
       if (!pu.hit && info.p > (pu.kind ? 0.24 : 0.3) && info.p < 0.66) {
         this._applyNow(p);
-        const radius = pu.hitRadius || (pu.type === 'flicker' ? (st === 'flicker' && d.active ? 0.55 : 0.48) : pu.kind ? 0.62 : 0.42);
+        const radius = 0.7 * (pu.hitRadius || (pu.type === 'flicker' ? (st === 'flicker' && d.active ? 0.55 : 0.48) : pu.kind ? 0.62 : 0.42));
         hitEvent = tryHit(pu.side, radius, (tg, h) => { pu.hit = true; return { attacker: this, target: tg, side: pu.side, type: pu.type, power: pu.power, pos: h.point.clone(), zone: pu.zoneForce || h.zone, dir: this.forward.clone(), maxSpeed: d.maxSpeed, dempsey: d.active, finisher: !!pu.rollFinish, roll: !!pu.roll, charge: pu.rollFinish ? d.charge : 0, heavy: !!pu.heavy, counter: !!pu.counter || !!pu.forceCounter, counterMul: pu.counterMul || 1, launch: pu.launch || 0, liver: !!pu.liver, staggerT: pu.staggerT || 0, kind: pu.kind || null, fromU: !!pu.fromU }; }, !!pu.kick);
       }
     }
@@ -829,13 +838,22 @@ export class Fighter {
     // ---- 낙사: 허우적대며 아래로 ----
     if (this.fallT > 0) {
       this.fallT -= dt;
-      const u = 1.5 - this.fallT;
-      this.fallY += (2.5 + u * 9) * dt;                       // 점점 빨라지는 낙하
-      this.pos.addScaledVector(this.vel.clone().setY(0).normalize(), 0.6 * dt);
-      p.shLX += -2.6 + Math.sin(t * 22) * 0.5; p.shRX += -2.6 - Math.sin(t * 22) * 0.5;
-      p.elL += -0.6; p.elR += -0.6; p.shLZ += 0.7; p.shRZ += -0.7;
-      p.thighLX += -0.9 + Math.sin(t * 18) * 0.5; p.thighRX += -0.9 - Math.sin(t * 18) * 0.5;
-      p.shinL += 0.9; p.shinR += 0.9; p.waistX += -0.5; p.headX += -0.6;
+      const u = 2.4 - this.fallT;                              // 총 2.4초 낙하
+      // 발이 허공을 딛고 → 중심을 잃고 뒤로 기울며 → 가속 추락
+      const tip = Math.min(1, u / 0.35);
+      this.fallVy = (this.fallVy || 0) + 19 * dt;
+      this.fallY += this.fallVy * dt * (0.25 + 0.75 * tip);
+      if (!this._fallDir) { this._fallDir = this.forward.clone().multiplyScalar(-1); this.fallSpin = (Math.random() - 0.5) * 2.2; }
+      this.pos.addScaledVector(this._fallDir, (1.4 - u * 0.4) * dt);   // 밀려난 방향으로 관성
+      this.rig.root.rotation.x = tip * (0.5 + Math.sin(u * 2.2) * 0.35) + u * 0.5;
+      this.rig.root.rotation.z = Math.sin(u * 3.1) * 0.35 * tip;
+      const flail = Math.sin(t * 16);
+      p.shLX += -2.35 + flail * 0.75; p.shRX += -2.35 - flail * 0.75;
+      p.elL += -0.45 - Math.abs(flail) * 0.3; p.elR += -0.45 - Math.abs(flail) * 0.3;
+      p.shLZ += 0.75; p.shRZ += -0.75;
+      p.thighLX += -0.75 + flail * 0.65; p.thighRX += -0.7 - flail * 0.65;
+      p.shinL += 0.85 + Math.max(0, flail) * 0.5; p.shinR += 0.8 + Math.max(0, -flail) * 0.5;
+      p.waistX += -0.35 - 0.25 * tip; p.headX += -0.55; p.headZ += flail * 0.25;
       this.queue.length = 0;
       if (this.fallT <= 0) { this.fallT = 0; this.hp = 0; if (!this.ko) { this._die(); this.events.push({ type: 'fellDead' }); } }
     }
@@ -1153,6 +1171,15 @@ export class Fighter {
       p.thighLX += -0.4 * a; p.thighRX += 0.3 * a; p.shinL += 0.6 * a;
     }
 
+    // 피격 스텝백: 뒷발이 끌리며 몸이 뒤로 밀린다
+    if (this.hitStepT > 0) {
+      this.hitStepT -= dt;
+      const k2 = Math.max(0, this.hitStepT / 0.22);
+      this.pos.addScaledVector(this.forward, -this.hitStep * 2.6 * dt * k2);
+      p.thighLX += -0.22 * this.hitStep * k2; p.thighRX += 0.18 * this.hitStep * k2;
+      p.shinL += 0.3 * this.hitStep * k2; p.hipsY += -0.05 * this.hitStep * k2;
+      if (this.hitStepT <= 0) this.hitStep = 0;
+    }
     const r = this.react;
     p.headX += r.headX; p.headY += r.headY; p.headZ += r.headZ;
     p.waistX += r.waistX; p.waistY += r.waistY; p.waistZ += r.waistZ; p.chestY += r.waistY * 0.5;
@@ -1177,7 +1204,7 @@ export class Fighter {
       if (u < 0.55) lie = Math.pow(u / 0.55, 2);
       else if (u < 1.1) lie = 1;
       else lie = 1 - easeOutCubic(Math.min(1, (u - 1.1) / 1.6));
-      this.rig.root.rotation.x = -lie * Math.PI * 0.5;
+      this.rig.root.rotation.x = lie * Math.PI * 0.5;    // 다운도 뒤로 넘어졌다가 일어난다
       const rise = 1 - lie;
       // 일어나는 동안 무릎 짚고 웅크림 + 고개 좌우로 흔들기
       p.hipsY += -0.35 * lie * rise * 2 - 0.05 * lie;
@@ -1190,14 +1217,14 @@ export class Fighter {
     } else if (this.ko) {
       this.koT += dt;
       const k = Math.min(1, this.koT / 0.75), e = k * k;
-      this.rig.root.rotation.x = -e * Math.PI * 0.5;
+      this.rig.root.rotation.x = e * Math.PI * 0.5;      // 뒤로 벌러덩
       this.koAngle += this.koSpin * dt; this.koSpin *= Math.exp(-dt * 3);
       this.koLift = Math.max(0, this.koLift - dt * 1.6);
       p.hipsY += this.koLift * 0.6;
       this.knock.multiplyScalar(Math.exp(-dt * 3));
       p.shLX = -0.4 + e * 1.3; p.shRX = -0.4 + e * 1.3; p.elL = -0.5; p.elR = -0.5;
       p.shLZ = 0.6; p.shRZ = -0.6; p.headX = -0.4; p.waistX = 0; p.thighLX = -0.2; p.thighRX = -0.2; p.shinL = 0.5; p.shinR = 0.4;
-    } else { this.rig.root.rotation.x = 0; this.koAngle = 0; }
+    } else if (this.fallT <= 0 && !(this.ko && this.fallY > 0.01)) { this.rig.root.rotation.x = 0; this.koAngle = 0; }
 
     this._applyNow(p);
     if (hitEvent) { this.combo++; this.comboTimer = 1.4; }

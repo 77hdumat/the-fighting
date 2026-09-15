@@ -321,6 +321,8 @@ function trunksTextTexture(text, color) {
  * 복서 리그 생성. 캐릭터는 로컬 +Z 방향을 바라본다.
  * ghost=true 이면 잔상용: 라이팅 없는 반투명 머티리얼, 그림자 없음.
  */
+export const FIGHTER_SCALE = 0.7;
+
 export function buildBoxer(def, opts = {}) {
   const { ghost = false, tint = 0x9fdcff } = opts;
   const P = def.prop;
@@ -371,6 +373,8 @@ export function buildBoxer(def, opts = {}) {
   };
 
   const root = new THREE.Group();
+  // 전체 체격 축소 (맵이 넓어져 상대적으로 크게 보이던 것을 70% 로)
+  root.scale.setScalar(FIGHTER_SCALE);
   const legLen = 0.42 * P.legLen;
   const hipsBaseY = 0.1 + legLen * 2 + 0.04;
 
