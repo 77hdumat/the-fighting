@@ -19,6 +19,7 @@ const SFX_SAMPLES = {
   riser: 'riser.mp3',         // 뎀프시 게이지 단계 상승 · 가드 브레이크
   charge: 'charge.mp3',       // 필살기 차지
   engine: 'engine.mp3',       // 오토바이 필살 (뼈석원)
+  gaugefull: 'gaugefull.mp3', // 필살기 게이지 MAX (본인 화면에서만)
 };
 
 export class AudioManager {
@@ -434,6 +435,12 @@ export class AudioManager {
     src.connect(hp); hp.connect(g); g.connect(this.master);
     src.start(t); src.stop(t + 0.75);
     setTimeout(() => this.bassHit(), 330);
+  }
+
+  /** 필살기 게이지가 가득 찼을 때. 본인 화면에서만 울린다 (판정은 main 이 한다). */
+  gaugeFull() {
+    if (this._play('gaugefull', { gain: 0.95 })) return;
+    this.maxSpeedHit();   // 샘플 없으면 기존 연출
   }
 
   /** 차지 스택 상승음 */

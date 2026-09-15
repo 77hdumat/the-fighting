@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta name="build-id" content="1789496586">
+<meta name="build-id" content="1789496742">
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -391,7 +391,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   }
 }
 </script>
-<script>window.__BUILD_ID = "1789496586";</script>
+<script>window.__BUILD_ID = "1789496742";</script>
 </head>
 <body>
   <canvas id="gl" tabindex="0"></canvas>
@@ -3355,6 +3355,7 @@ const SFX_SAMPLES = {
   riser: 'riser.mp3',         // 뎀프시 게이지 단계 상승 · 가드 브레이크
   charge: 'charge.mp3',       // 필살기 차지
   engine: 'engine.mp3',       // 오토바이 필살 (뼈석원)
+  gaugefull: 'gaugefull.mp3', // 필살기 게이지 MAX (본인 화면에서만)
 };
 
 class AudioManager {
@@ -3772,6 +3773,12 @@ class AudioManager {
     setTimeout(() => this.bassHit(), 330);
   }
 
+  /** 필살기 게이지가 가득 찼을 때. 본인 화면에서만 울린다 (판정은 main 이 한다). */
+  gaugeFull() {
+    if (this._play('gaugefull', { gain: 0.95 })) return;
+    this.maxSpeedHit();   // 샘플 없으면 기존 연출
+  }
+
   /** 차지 스택 상승음 */
   chargeUp(level = 1) {
     if (!this.ctx) return;
@@ -4115,6 +4122,7 @@ class DempseyController {
     this.intensity = 0;
     this.blend = 0;
     this.maxSpeed = false;
+    this.maxJustReached = false;   // main 이 소비하는 1회성 플래그
     this.activeTime = 0;
     this.milestone = 0;
     this.hookTrigger = null;
@@ -4140,7 +4148,7 @@ class DempseyController {
 
   consume() {
     this.stop();
-    this.gauge = 0; this.maxSpeed = false; this.charge = 0; this.chargeT = 0; this.milestone = 0;
+    this.gauge = 0; this.maxSpeed = false; this.maxJustReached = false; this.charge = 0; this.chargeT = 0; this.milestone = 0;
   }
 
   /** 기 충전 (히트/피격/블록). MAX 상태에서는 3히트마다 차지 스택 */
@@ -4186,7 +4194,8 @@ class DempseyController {
     // MAX 판정: 게이지 100 (스탠스와 무관). 밀스톤 대사는 게이지 구간마다 한 번
     if (this.milestone < 1 && this.gauge >= 33) { this.milestone = 1; this.subs.show(this.lines[1], { duration: 1.3, mid: true }); this.audio.riser(0.35, 0.25); }
     if (this.milestone < 2 && this.gauge >= 66) { this.milestone = 2; this.subs.show(this.lines[2], { duration: 1.2, mid: true }); this.audio.riser(0.45, 0.4); }
-    if (!this.maxSpeed && this.gauge >= 100) { this.maxSpeed = true; this.milestone = 3; this.subs.show(this.lines[3], { duration: 2.0, strong: true }); this.audio.maxSpeedHit(); }
+    // MAX 도달음은 여기서 내지 않는다 — 본인 것만 울려야 해서, 로컬 판정이 가능한 main 이 처리한다
+    if (!this.maxSpeed && this.gauge >= 100) { this.maxSpeed = true; this.milestone = 3; this.subs.show(this.lines[3], { duration: 2.0, strong: true }); this.maxJustReached = true; }
     this.sway = Math.sin(this.theta) * this.blend;
     this.swayVel = this.active ? Math.cos(this.theta) * this.omega * this.blend : 0;
     return this;
@@ -9422,6 +9431,11 @@ class Game {
       f.updateVisualFx(rawDt);
       // ---- 충전 이펙트: 스탠스 중 발밑에서 기가 솟아오른다 (강도 ∝ 파티클), MAX 진입 시 폭발 ----
       const dd = f.dempsey;
+      // 게이지 MAX 도달음: 본인 것만 전용 사운드, 상대 것은 기존 연출로 구분해서 들린다
+      if (dd.maxJustReached) {
+        dd.maxJustReached = false;
+        if (f === local) this.audio.gaugeFull(); else this.audio.maxSpeedHit();
+      }
       if (dd.active && dd.intensity > 0.05) {
         const I = dd.intensity;
         f._chargeAcc = (f._chargeAcc || 0) + rawDt * (10 + 40 * I) * (this.quality === 0 ? 0.4 : 1);

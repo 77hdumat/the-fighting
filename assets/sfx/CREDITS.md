@@ -20,6 +20,7 @@
 | `riser.mp3` | Tension buildup riser v1 HD (MIGHTUSER) | 뎀프시 게이지 단계 상승 · 가드브레이크 | https://pixabay.com/sound-effects/id-270305/ |
 | `charge.mp3` | Energy Charge-Up Full Power (humordome) | 필살기 차지 | https://pixabay.com/sound-effects/id-452848/ |
 | `engine.mp3` | Motorcycle Engine Rev (TanwerAman) | 오토바이 필살 (뼈석원) | https://pixabay.com/sound-effects/id-337867/ |
+| `gaugefull.mp3` | energy drink effect (RibhavAgrawal) | 필살기 게이지 MAX — **본인 화면에서만** | https://pixabay.com/ko/sound-effects/energy-drink-effect-230559/ |
 
 ## 가공
 

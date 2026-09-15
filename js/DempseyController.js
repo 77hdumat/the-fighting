@@ -21,6 +21,7 @@ export class DempseyController {
     this.intensity = 0;
     this.blend = 0;
     this.maxSpeed = false;
+    this.maxJustReached = false;   // main 이 소비하는 1회성 플래그
     this.activeTime = 0;
     this.milestone = 0;
     this.hookTrigger = null;
@@ -46,7 +47,7 @@ export class DempseyController {
 
   consume() {
     this.stop();
-    this.gauge = 0; this.maxSpeed = false; this.charge = 0; this.chargeT = 0; this.milestone = 0;
+    this.gauge = 0; this.maxSpeed = false; this.maxJustReached = false; this.charge = 0; this.chargeT = 0; this.milestone = 0;
   }
 
   /** 기 충전 (히트/피격/블록). MAX 상태에서는 3히트마다 차지 스택 */
@@ -92,7 +93,8 @@ export class DempseyController {
     // MAX 판정: 게이지 100 (스탠스와 무관). 밀스톤 대사는 게이지 구간마다 한 번
     if (this.milestone < 1 && this.gauge >= 33) { this.milestone = 1; this.subs.show(this.lines[1], { duration: 1.3, mid: true }); this.audio.riser(0.35, 0.25); }
     if (this.milestone < 2 && this.gauge >= 66) { this.milestone = 2; this.subs.show(this.lines[2], { duration: 1.2, mid: true }); this.audio.riser(0.45, 0.4); }
-    if (!this.maxSpeed && this.gauge >= 100) { this.maxSpeed = true; this.milestone = 3; this.subs.show(this.lines[3], { duration: 2.0, strong: true }); this.audio.maxSpeedHit(); }
+    // MAX 도달음은 여기서 내지 않는다 — 본인 것만 울려야 해서, 로컬 판정이 가능한 main 이 처리한다
+    if (!this.maxSpeed && this.gauge >= 100) { this.maxSpeed = true; this.milestone = 3; this.subs.show(this.lines[3], { duration: 2.0, strong: true }); this.maxJustReached = true; }
     this.sway = Math.sin(this.theta) * this.blend;
     this.swayVel = this.active ? Math.cos(this.theta) * this.omega * this.blend : 0;
     return this;

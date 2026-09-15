@@ -1620,6 +1620,11 @@ class Game {
       f.updateVisualFx(rawDt);
       // ---- 충전 이펙트: 스탠스 중 발밑에서 기가 솟아오른다 (강도 ∝ 파티클), MAX 진입 시 폭발 ----
       const dd = f.dempsey;
+      // 게이지 MAX 도달음: 본인 것만 전용 사운드, 상대 것은 기존 연출로 구분해서 들린다
+      if (dd.maxJustReached) {
+        dd.maxJustReached = false;
+        if (f === local) this.audio.gaugeFull(); else this.audio.maxSpeedHit();
+      }
       if (dd.active && dd.intensity > 0.05) {
         const I = dd.intensity;
         f._chargeAcc = (f._chargeAcc || 0) + rawDt * (10 + 40 * I) * (this.quality === 0 ? 0.4 : 1);
