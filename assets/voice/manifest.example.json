@@ -1,0 +1,16 @@
+{
+  "dempsey_start": "dempsey_start.mp3",
+  "faster": "faster.mp3",
+  "notyet": "notyet.mp3",
+  "go": "go.mp3",
+  "finisher": ["finisher1.mp3", "finisher2.mp3"],
+  "finisher_hit": "finisher_hit.mp3",
+  "counter": "counter.mp3",
+  "down": "down.mp3",
+  "fight": "fight.mp3",
+  "grunt": ["grunt1.mp3", "grunt2.mp3", "grunt3.mp3"],
+  "hurt": ["hurt1.mp3", "hurt2.mp3"],
+  "mashiba:crush": "mashiba_crush.mp3",
+  "mashiba:grunt": ["mashiba_grunt1.mp3"],
+  "takamura:go": "takamura_go.mp3"
+}

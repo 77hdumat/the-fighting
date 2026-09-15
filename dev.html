@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a0b1f">
+<link rel="manifest" href="manifest.json">
+<title>더파이팅 — Anime Boxing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@900&family=Bangers&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+  <canvas id="gl" tabindex="0"></canvas>
+  <canvas id="fx"></canvas>
+
+  <div id="hud">
+    <div class="top" id="hud-fighters"></div>
+    <div class="hits" id="hits"></div>
+
+    <div class="skills"><div id="skill-u"></div><div id="skill-i"></div></div>
+    <div id="guard-badge" class="hidden">GUARD</div>
+    <div class="gauge-wrap" id="gauge-wrap">
+      <div class="gauge-label"><span id="gauge-name">DEMPSEY</span><span id="gauge-max">MAX SPEED!!</span></div>
+      <div class="bar gauge"><div class="fill" id="gauge-fill"></div></div>
+    </div>
+
+    <div class="controls">
+      <div><b>W A S D</b> 이동</div>
+      <div><b>기 게이지</b> 때릴수록 찬다 → MAX 에서 L</div>
+      <div><b>J / K</b> 펀치 &nbsp; <b>U</b> 반격기 (아머 · 적중 시 스턴) &nbsp; <b>I</b> 고유기</div>
+      <div><b>L</b> 필살기 (MAX 중 · 슈퍼아머 · 차지 ×3)</div>
+      <div><b>SHIFT</b> 가드 (필살기 포함 전부 방어) &nbsp; <b>R</b> 다음 경기 (종료 후) &nbsp; <b>V</b> 음성 &nbsp; <b>Q</b> 화질</div>
+      <div><b>마우스</b> 좌클릭 = 펀치 · 휠클릭 = U</div>
+      <div><b>로프</b> 로프 쪽으로 계속 밀면 힘을 모았다 튕겨 나감 (속도·파워 ↑)</div>
+    </div>
+    <div class="netinfo" id="netinfo"></div>
+    <button class="menubtn" id="btn-menu">MENU</button>
+    <button class="menubtn fsbtn" id="btn-fs" title="전체화면">FULL</button>
+    <div class="keydbg" id="keydbg"></div>
+  </div>
+
+  <div id="chat" class="hidden">
+    <div class="log" id="chat-log"></div>
+    <div class="typing-banner">채팅 입력 중 — Enter 전송 · Esc 닫기 (게임 키 비활성)</div>
+    <div class="row"><input id="chat-input" maxlength="120" placeholder="Enter 로 채팅 · Esc 닫기" autocomplete="off" spellcheck="false"></div>
+  </div>
+
+  <div id="coach" class="hidden"></div>
+  <div id="intro-name" class="hidden"><div class="nm"></div><div class="ch"></div></div>
+  <div id="countdown" class="hidden"></div>
+  <div id="skip-hint" class="hidden">SPACE / 클릭 = 스킵</div>
+  <div id="focus-warn" class="hidden">게임 창을 클릭하세요 — 키 입력이 들어오지 않고 있습니다</div>
+
+  <div id="subtitle"></div>
+  <div id="rotate-hint"><div class="rot"></div><p>가로 모드로 돌려주세요</p></div>
+
+  <div id="ko-overlay" class="hidden"><div class="ko-text">K.O.</div><div class="ko-sub">R 키로 재시작</div></div>
+  <div id="next-overlay" class="hidden">
+    <div class="next-title">NEXT MATCH — 캐릭터 선택</div>
+    <div class="charsel" id="charsel2"></div>
+    <div class="next-msg" id="next-msg"></div>
+    <div class="next-row">
+      <button id="btn-next">다음 경기 시작 (R)</button>
+      <button id="btn-next-lobby" class="alt">대기실로</button>
+    </div>
+    <button id="btn-next-leave" class="corner-leave">방 나가기</button>
+  </div>
+
+  <div id="pause-menu" class="hidden">
+    <div class="pm-title">MENU</div>
+    <button id="btn-pm-resume">▶ 계속</button>
+    <button id="btn-pm-lobby">대기실로</button>
+    <button id="btn-pm-leave" class="warn">방 나가기</button>
+    <div class="pm-hint">ESC = 닫기</div>
+  </div>
+
+  <div id="start-overlay">
+    <div class="bg-stripes"></div>
+    <div class="panel">
+      <div class="brand">
+        <div class="title">THE FIGHTING</div>
+        <div class="title-ko">더파이팅</div>
+        <div id="boot">LOADING…</div>
+      </div>
+
+      <div class="section-label">FIGHTER</div>
+      <div class="charsel" id="charsel"></div>
+
+      <div class="menu" id="menu">
+        <div class="fields">
+          <label class="field"><span>닉네임</span><input id="nick" maxlength="12" placeholder="예: 민규" autocomplete="off" spellcheck="false"></label>
+          <label class="field wide"><span>자기소개</span><input id="intro" maxlength="40" placeholder="등장할 때 외칠 한마디" autocomplete="off" spellcheck="false"></label>
+        </div>
+        <div class="buttons">
+          <button id="btn-solo" class="btn red">연습하기 <small>1:1 CPU · 이길수록 강해짐</small></button>
+          <button id="btn-host" class="btn blue">방 만들기</button>
+          <div class="joinrow">
+            <input id="join-code" maxlength="5" placeholder="방 코드" autocomplete="off" spellcheck="false">
+            <button id="btn-join" class="btn green">참가</button>
+          </div>
+        </div>
+        <div class="hint">J/K 펀치 · U 반격기 · I 고유기 · L 필살 · SHIFT 가드</div>
+        <button id="btn-fs-menu" class="fs-link">전체화면</button>
+      </div>
+
+      <div class="lobby hidden" id="lobby">
+        <div class="code">ROOM CODE <b id="room-code">-----</b></div>
+        <ul id="roster"></ul>
+        <div class="lobby-msg" id="lobby-msg"></div>
+        <div class="lobby-row">
+          <button id="btn-start" class="btn red big hidden">시작</button>
+        </div>
+        <button id="btn-leave" class="corner-leave dark">방 나가기</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ---- 부트스트랩: 모듈 로드 실패(구버전 캐시 / CDN 장애) 감지 → 1회 자동 새로고침, 그래도 안 되면 안내 ----
+    (function () {
+      var boot = document.getElementById('boot');
+      var failed = false;
+      function fail(msg) {
+        if (failed) return; failed = true;
+        var key = 'dr-reloaded';
+        if (!sessionStorage.getItem(key)) {
+          sessionStorage.setItem(key, '1');
+          boot.textContent = '업데이트 감지 — 새로고침 중…';
+          setTimeout(function () { location.reload(); }, 400);
+          return;
+        }
+        boot.innerHTML = '로드 실패: ' + msg + '<br><small>Cmd+Shift+R (강력 새로고침) 또는 시크릿 창으로 열어보세요</small>';
+        boot.classList.add('err');
+      }
+      window.__bootFail = fail;
+      window.addEventListener('error', function (e) { if (!window.game) fail(e.message || '스크립트 오류'); });
+      window.addEventListener('unhandledrejection', function (e) { if (!window.game) fail(String(e.reason)); });
+      setTimeout(function () { if (!window.game) fail('로딩이 너무 오래 걸립니다 (CDN 차단?)'); }, 12000);
+      // 정상 로드되면 표시 제거
+      var iv = setInterval(function () { if (window.game) { boot.remove(); sessionStorage.removeItem('dr-reloaded'); clearInterval(iv); } }, 100);
+    })();
+  </script>
+  <script type="module" src="js/main.js?v=1789395963" onerror="__bootFail('모듈 로드 실패 (구버전 캐시)')"></script>
+</body>
+</html>
