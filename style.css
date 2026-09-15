@@ -256,10 +256,10 @@ body.touch #skip-hint::after { content: ' (탭)'; }
 /* ---------- 방 나가기 / 대기실 / 일시 메뉴 ---------- */
 #next-overlay .next-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 /* 나가기는 시작 버튼과 멀리 (오른쪽 위 구석, 작게) — 오터치 방지 */
-.corner-leave { position: absolute; top: 6px; right: 8px; font-size: 12px !important; padding: 3px 9px !important; background: rgba(0,0,0,.35) !important; color: #ffb3a3 !important; border: 1px solid rgba(255,90,60,.6) !important; box-shadow: none !important; letter-spacing: 0 !important; font-family: "Noto Sans JP", sans-serif !important; cursor: pointer; border-radius: 6px; }
+.corner-leave { position: absolute; top: 6px; right: 8px; font-size: 12px !important; padding: 3px 10px !important; background: #fff !important; color: #c8321a !important; border: 2px solid #c8321a !important; box-shadow: none !important; letter-spacing: 0 !important; font-weight: 900; font-family: "Noto Sans JP", sans-serif !important; cursor: pointer; border-radius: 6px; }
 .corner-leave.dark { color: #c8321a !important; background: #fff !important; border: 2px solid #c8321a !important; font-weight: 900; }
 #lobby { position: relative; padding-top: 30px; }
-#next-overlay button.alt { background: rgba(255,255,255,.12); color: #fff; border: 2px solid rgba(255,255,255,.4); }
+#next-overlay button.alt { background: #fff; color: #1a0a0a; border: 3px solid #1a0a0a; box-shadow: 4px 4px 0 #000; }
 #next-overlay button.warn, #pause-menu button.warn { border-color: #ff5a3c; color: #ffb3a3; }
 .lobby-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .btn.gray { background: linear-gradient(#8a8aa0, #5a5a70); color: #fff; }

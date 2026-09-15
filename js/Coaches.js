@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { buildBoxer, defaultPose, applyPose, copyPose, COACH_DEFS } from './Rig.js';
 
-const CORNERS = [[3.9, 3.9], [-3.9, -3.9], [3.9, -3.9], [-3.9, 3.9]];
+const CORNERS = [[5.6, 5.6], [-5.6, -5.6], [5.6, -5.6], [-5.6, 5.6]];
 
 export class Coaches {
   constructor(scene) {

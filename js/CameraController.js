@@ -76,7 +76,7 @@ export class CameraController {
     _mid.copy(playerPos).lerp(oppPos, 0.55);
     _l.copy(_mid).addScaledVector(UP, 0.75).addScaledVector(new THREE.Vector3(sx, 0, sz), ctx.sway * 0.12 * b);
     // 카메라가 로프 밖으로 나가 로프가 화면을 가로지르지 않도록 링 안쪽으로 클램프
-    _p.x = Math.max(-3.0, Math.min(3.0, _p.x)); _p.z = Math.max(-3.0, Math.min(3.0, _p.z));
+    _p.x = Math.max(-4.5, Math.min(4.5, _p.x)); _p.z = Math.max(-4.5, Math.min(4.5, _p.z));
     _p2.copy(_p); _l2.copy(_l);
 
     _p.lerp(_p2, b);

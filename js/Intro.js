@@ -8,7 +8,7 @@ import { HIDDEN_LINES } from './Specials.js';
 const PER = 4.4;          // 선수 1명당 연출 시간 (걸어나오기 → 클로즈업 멘트 → 포즈 홀드)
 const WALK = 1.3;         // 걸어 나오는 시간
 // 링 안쪽 자기 코너(로프 안)에서 걸어 나온다
-const CORNERS = [[2.45, 2.45], [-2.45, -2.45], [2.45, -2.45], [-2.45, 2.45]];
+const CORNERS = [[3.7, 3.7], [-3.7, -3.7], [3.7, -3.7], [-3.7, 3.7]];
 
 export class Intro {
   constructor(game) {

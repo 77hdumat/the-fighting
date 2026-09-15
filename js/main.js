@@ -30,7 +30,7 @@ const _prevHead = new THREE.Vector3();
 const _camF = new THREE.Vector3();
 const _camR = new THREE.Vector3();
 const _sep = new THREE.Vector3();
-const SPAWNS = [[0, 1.6], [0, -1.6], [1.6, 0], [-1.6, 0]];
+const SPAWNS = [[0, 2.4], [0, -2.4], [2.4, 0], [-2.4, 0]];
 const AUDIO_FWD = ['whoosh', 'swoosh', 'impact', 'bassHit', 'riser', 'maxSpeedHit', 'stagger', 'ko', 'block', 'chargeUp', 'finisherWind', 'finisherHit', 'counter', 'cheer', 'engine', 'clang', 'nyang', 'shutter'];
 const SNAP_HZ = 20;
 

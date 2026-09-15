@@ -47,24 +47,24 @@ export function buildRing(scene) {
   scene.fog = new THREE.FogExp2(0x000000, 0.042);
 
   // ---- 링 바닥 ----
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(6.6, 6.6), new THREE.MeshToonMaterial({ map: canvasTexture(), gradientMap: toonRamp }));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(9.9, 9.9), new THREE.MeshToonMaterial({ map: canvasTexture(), gradientMap: toonRamp }));
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   group.add(floor);
 
-  const platform = new THREE.Mesh(new THREE.BoxGeometry(7.4, 0.7, 7.4), new THREE.MeshToonMaterial({ color: 0x1a1a22, gradientMap: toonRamp }));
+  const platform = new THREE.Mesh(new THREE.BoxGeometry(11.1, 0.7, 11.1), new THREE.MeshToonMaterial({ color: 0x1a1a22, gradientMap: toonRamp }));
   platform.position.y = -0.36;
   platform.receiveShadow = true;
   group.add(platform);
   // 에이프런 (스커트)
-  const apron = new THREE.Mesh(new THREE.BoxGeometry(7.42, 0.5, 7.42), new THREE.MeshToonMaterial({ color: 0x7a1d24, gradientMap: toonRamp }));
+  const apron = new THREE.Mesh(new THREE.BoxGeometry(11.13, 0.5, 11.13), new THREE.MeshToonMaterial({ color: 0x7a1d24, gradientMap: toonRamp }));
   apron.position.y = -0.28;
   group.add(apron);
 
   // ---- 포스트 / 코너 패드 / 로프 ----
   const postMat = new THREE.MeshToonMaterial({ color: 0x2a2a30, gradientMap: toonRamp });
   const padColors = [0xd0302c, 0x2438c8, 0xf0f0f0, 0xf0f0f0];
-  const corners = [[3.15, 3.15], [-3.15, -3.15], [3.15, -3.15], [-3.15, 3.15]];
+  const corners = [[4.72, 4.72], [-4.72, -4.72], [4.72, -4.72], [-4.72, 4.72]];
   corners.forEach(([x, z], i) => {
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.6, 12), postMat);
     post.position.set(x, 0.8, z);
@@ -79,10 +79,10 @@ export function buildRing(scene) {
   ropeHeights.forEach((h, i) => {
     const mat = new THREE.MeshToonMaterial({ color: ropeColors[i], gradientMap: toonRamp });
     for (let side = 0; side < 4; side++) {
-      const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 6.3, 8), mat);
+      const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 9.45, 8), mat);
       rope.rotation.z = Math.PI / 2;
       if (side % 2) rope.rotation.y = Math.PI / 2;
-      const off = 3.15;
+      const off = 4.72;
       if (side === 0) rope.position.set(0, h, off);
       if (side === 1) rope.position.set(off, h, 0);
       if (side === 2) rope.position.set(0, h, -off);

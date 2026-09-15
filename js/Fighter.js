@@ -6,7 +6,7 @@ import { DempseyController } from './DempseyController.js';
 import { createPunch, applyPunchToPose, pointSegmentDist, segSegDist, easeOutCubic } from './Punch.js';
 import { SPECIALS, KITS, HIDDEN_LINES } from './Specials.js';
 
-const RING_LIMIT = 2.75;
+const RING_LIMIT = 4.15;   // 링 1.5배 확장
 const _d = new THREE.Vector3();
 const _g = new THREE.Vector3();
 
@@ -548,7 +548,7 @@ export class Fighter {
         pushing = true;
         this.ropeAxis = axis; this.ropeDir = dir;
         this.ropeCharge = Math.min(0.45, this.ropeCharge + dt);
-        const stretch = 2.5 + 0.38 * (this.ropeCharge / 0.45);       // 로프가 늘어나는 만큼 밖으로
+        const stretch = 3.75 + 0.55 * (this.ropeCharge / 0.45);       // 로프가 늘어나는 만큼 밖으로
         this.pos[axis] = dir * Math.min(Math.abs(v), stretch);
       } else if (Math.abs(v) > RING_LIMIT) {
         // 그냥 밀려난 경우: 로프에 튕겨 절반 속도로 되돌아온다 (넉백 반사)

@@ -271,10 +271,10 @@ body.touch #skip-hint::after { content: ' (탭)'; }
 /* ---------- 방 나가기 / 대기실 / 일시 메뉴 ---------- */
 #next-overlay .next-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 /* 나가기는 시작 버튼과 멀리 (오른쪽 위 구석, 작게) — 오터치 방지 */
-.corner-leave { position: absolute; top: 6px; right: 8px; font-size: 12px !important; padding: 3px 9px !important; background: rgba(0,0,0,.35) !important; color: #ffb3a3 !important; border: 1px solid rgba(255,90,60,.6) !important; box-shadow: none !important; letter-spacing: 0 !important; font-family: "Noto Sans JP", sans-serif !important; cursor: pointer; border-radius: 6px; }
+.corner-leave { position: absolute; top: 6px; right: 8px; font-size: 12px !important; padding: 3px 10px !important; background: #fff !important; color: #c8321a !important; border: 2px solid #c8321a !important; box-shadow: none !important; letter-spacing: 0 !important; font-weight: 900; font-family: "Noto Sans JP", sans-serif !important; cursor: pointer; border-radius: 6px; }
 .corner-leave.dark { color: #c8321a !important; background: #fff !important; border: 2px solid #c8321a !important; font-weight: 900; }
 #lobby { position: relative; padding-top: 30px; }
-#next-overlay button.alt { background: rgba(255,255,255,.12); color: #fff; border: 2px solid rgba(255,255,255,.4); }
+#next-overlay button.alt { background: #fff; color: #1a0a0a; border: 3px solid #1a0a0a; box-shadow: 4px 4px 0 #000; }
 #next-overlay button.warn, #pause-menu button.warn { border-color: #ff5a3c; color: #ffb3a3; }
 .lobby-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .btn.gray { background: linear-gradient(#8a8aa0, #5a5a70); color: #fff; }
@@ -460,11 +460,6 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   <script type="module">
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { AfterimagePass } from 'three/addons/postprocessing/AfterimagePass.js';
-import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 const __M = {};
 // ===== Net.js =====
 __M.Net = (() => {
@@ -3094,116 +3089,226 @@ return { DempseyController };
 })();
 // ===== PostFX.js =====
 __M.PostFX = (() => {
-// PostFX.js — 프레임 블렌딩(AfterimagePass) + 커스텀 radial/directional blur + chromatic aberration
+// PostFX.js — 후처리: 씬을 렌더타깃에 그린 뒤 "잔상 누적 + 스피드 블러 + 수차/비네트/열왜곡 + 톤매핑/색공간"을
+// 단 하나의 풀스크린 패스로 합성한다. (기존 EffectComposer 체인: Render → Afterimage → SpeedBlur → Output = 최대 4패스)
+//
+// 구조
+//   1) scene → rtScene                      (항상)
+//   2) rtScene + rtPrev → rtAccum           (잔상이 필요할 때만. 없으면 건너뜀)
+//   3) (rtAccum | rtScene) → 화면            (블러/수차/비네트/열/지터/이중상 + 톤매핑 + sRGB 를 한 번에)
+//
+// EffectComposer/OutputPass 를 쓰지 않으므로 톤매핑·색공간 변환을 직접 셰이더 청크로 넣는다.
 
-const SpeedBlurShader = {
-  uniforms: {
-    tDiffuse: { value: null },
-    radial: { value: 0 },          // 방사형 블러 강도
-    center: { value: new THREE.Vector2(0.5, 0.5) },
-    dirBlur: { value: new THREE.Vector2(0, 0) }, // 방향성 블러 (uv 단위)
-    chroma: { value: 0 },
-    vignette: { value: 0.45 },
-    heat: { value: 0 },            // MAX SPEED 색 왜곡
-    jitter: { value: new THREE.Vector2(0, 0) }, // 화면 전체 진동 (uv 오프셋)
-    dv: { value: new THREE.Vector2(0, 0) },     // 이중상 오프셋
-    dvMix: { value: 0 },
-  },
-  vertexShader: /* glsl */`
-    varying vec2 vUv;
-    void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-  fragmentShader: /* glsl */`
-    uniform sampler2D tDiffuse;
-    uniform float radial;
-    uniform vec2 center;
-    uniform vec2 dirBlur;
-    uniform float chroma;
-    uniform float vignette;
-    uniform float heat;
-    uniform vec2 jitter;
-    uniform vec2 dv;
-    uniform float dvMix;
-    varying vec2 vUv;
-    void main() {
-      vec2 vUv2 = vUv + jitter;
-      vec2 toC = vUv2 - center;
-      vec3 col = vec3(0.0);
-      float wsum = 0.0;
-      const int N = 8;
-      for (int i = 0; i < N; i++) {
-        float t = float(i) / float(N - 1);
-        vec2 off = toC * radial * t + dirBlur * (t - 0.5);
-        float w = 1.0 - 0.6 * t;
-        vec2 uv = vUv2 - off;
-        vec2 ca = toC * chroma;
-        col.r += texture2D(tDiffuse, uv + ca).r * w;
-        col.g += texture2D(tDiffuse, uv).g * w;
-        col.b += texture2D(tDiffuse, uv - ca).b * w;
-        wsum += w;
-      }
-      col /= wsum;
-      if (dvMix > 0.001) {
-        vec3 c2 = texture2D(tDiffuse, vUv2 + dv).rgb;
-        vec3 c3 = texture2D(tDiffuse, vUv2 - dv * 0.6).rgb;
-        col = mix(col, max(col, (c2 + c3) * 0.5), dvMix);
-      }
-      float d = length(toC * vec2(1.0, 0.85));
-      col *= 1.0 - vignette * smoothstep(0.3, 0.95, d);
-      col = mix(col, col * vec3(1.15, 0.9, 0.75) + vec3(0.06, 0.0, 0.0), heat * smoothstep(0.2, 0.9, d));
-      gl_FragColor = vec4(col, 1.0);
-    }`,
-};
+const QUAD = new THREE.PlaneGeometry(2, 2);
+
+const VERT = /* glsl */`
+varying vec2 vUv;
+void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+
+// 잔상 누적: 이번 씬 프레임과 지난 누적 프레임을 damp 비율로 섞는다
+const ACCUM_FRAG = /* glsl */`
+uniform sampler2D tScene;
+uniform sampler2D tPrev;
+uniform float damp;
+varying vec2 vUv;
+void main() {
+  vec4 cur = texture2D(tScene, vUv);
+  vec4 prev = texture2D(tPrev, vUv);
+  // 어두운 쪽으로 서서히 붕괴시켜 잔상이 영원히 남지 않게 한다 (three AfterimagePass 와 동일한 감쇠)
+  vec4 decayed = max(prev * damp - 0.001, vec4(0.0));
+  gl_FragColor = max(cur, decayed);
+}`;
+
+const COMPOSITE_FRAG = /* glsl */`
+uniform sampler2D tDiffuse;
+uniform float radial;
+uniform vec2 center;
+uniform vec2 dirBlur;
+uniform float chroma;
+uniform float vignette;
+uniform float heat;
+uniform vec2 jitter;
+uniform vec2 dv;
+uniform float dvMix;
+uniform float samplesMix;      // 0 = 저품질(4탭), 1 = 고품질(8탭)
+varying vec2 vUv;
+// tonemapping_pars / colorspace_pars 는 three 가 프래그먼트 프리픽스에 이미 넣어 준다 (중복 선언 금지)
+
+void main() {
+  vec2 uv0 = vUv + jitter;
+  vec2 toC = uv0 - center;
+  vec3 col = vec3(0.0);
+  float wsum = 0.0;
+  // 블러가 필요 없는 프레임에서는 1탭만 (분기 없이 가중치로 처리하면 느려서 실제 분기 사용)
+  if (radial < 0.0008 && dot(dirBlur, dirBlur) < 1e-9 && chroma < 0.0004) {
+    col = texture2D(tDiffuse, uv0).rgb;
+  } else {
+    const int N = 8;
+    for (int i = 0; i < N; i++) {
+      float t = float(i) / float(N - 1);
+      // 저품질에서는 홀수 탭을 버린다 (가중치 0)
+      float use = (mod(float(i), 2.0) < 0.5) ? 1.0 : samplesMix;
+      vec2 off = toC * radial * t + dirBlur * (t - 0.5);
+      float w = (1.0 - 0.6 * t) * use;
+      vec2 uv = uv0 - off;
+      vec2 ca = toC * chroma;
+      col.r += texture2D(tDiffuse, uv + ca).r * w;
+      col.g += texture2D(tDiffuse, uv).g * w;
+      col.b += texture2D(tDiffuse, uv - ca).b * w;
+      wsum += w;
+    }
+    col /= max(wsum, 0.0001);
+  }
+  if (dvMix > 0.001) {
+    vec3 c2 = texture2D(tDiffuse, uv0 + dv).rgb;
+    vec3 c3 = texture2D(tDiffuse, uv0 - dv * 0.6).rgb;
+    col = mix(col, max(col, (c2 + c3) * 0.5), dvMix);
+  }
+  float d = length(toC * vec2(1.0, 0.85));
+  col *= 1.0 - vignette * smoothstep(0.3, 0.95, d);
+  col = mix(col, col * vec3(1.15, 0.9, 0.75) + vec3(0.06, 0.0, 0.0), heat * smoothstep(0.2, 0.9, d));
+
+  gl_FragColor = vec4(col, 1.0);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`;
 
 class PostFX {
   constructor(renderer, scene, camera) {
-    this.composer = new EffectComposer(renderer);
-    this.composer.addPass(new RenderPass(scene, camera));
-    this.afterimage = new AfterimagePass(0.0);
-    this.composer.addPass(this.afterimage);
-    this.blur = new ShaderPass(SpeedBlurShader);
-    this.composer.addPass(this.blur);
-    this.composer.addPass(new OutputPass());
+    this.renderer = renderer;
+    this.scene = scene;
+    this.camera = camera;
+    this.quality = 2;
     this.hitRadial = 0;
     this.hitDamp = 0;
-    this.quality = 2; // 2 = 풀, 1 = 블러 필요시만, 0 = 후처리 최소
+    this.damp = 0;
+
+    const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+    const opts = { type: THREE.HalfFloatType, depthBuffer: true, stencilBuffer: false };
+    this.rtScene = new THREE.WebGLRenderTarget(size.x, size.y, opts);
+    this.rtA = new THREE.WebGLRenderTarget(size.x, size.y, { ...opts, depthBuffer: false });
+    this.rtB = new THREE.WebGLRenderTarget(size.x, size.y, { ...opts, depthBuffer: false });
+    for (const rt of [this.rtScene, this.rtA, this.rtB]) {
+      rt.texture.minFilter = THREE.LinearFilter;
+      rt.texture.magFilter = THREE.LinearFilter;
+      rt.texture.generateMipmaps = false;
+    }
+    this.accumValid = false;
+
+    this.accumMat = new THREE.ShaderMaterial({
+      uniforms: { tScene: { value: null }, tPrev: { value: null }, damp: { value: 0 } },
+      vertexShader: VERT,
+      fragmentShader: ACCUM_FRAG,
+      depthTest: false, depthWrite: false,
+    });
+    this.compositeMat = new THREE.ShaderMaterial({
+      uniforms: {
+        tDiffuse: { value: null },
+        radial: { value: 0 },
+        center: { value: new THREE.Vector2(0.5, 0.5) },
+        dirBlur: { value: new THREE.Vector2(0, 0) },
+        chroma: { value: 0 },
+        vignette: { value: 0.45 },
+        heat: { value: 0 },
+        jitter: { value: new THREE.Vector2(0, 0) },
+        dv: { value: new THREE.Vector2(0, 0) },
+        dvMix: { value: 0 },
+        samplesMix: { value: 1 },
+      },
+      vertexShader: VERT,
+      fragmentShader: COMPOSITE_FRAG,
+      depthTest: false, depthWrite: false,
+    });
+
+    this.quadScene = new THREE.Scene();
+    this.quad = new THREE.Mesh(QUAD, this.compositeMat);
+    this.quad.frustumCulled = false;
+    this.quadScene.add(this.quad);
+    this.quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   }
 
-  setSize(w, h) { this.composer.setSize(w, h); }
+  setSize(w, h) {
+    const pr = this.renderer.getPixelRatio();
+    const dw = Math.max(1, Math.floor(w * pr)), dh = Math.max(1, Math.floor(h * pr));
+    this.rtScene.setSize(dw, dh); this.rtA.setSize(dw, dh); this.rtB.setSize(dw, dh);
+    this.accumValid = false;
+  }
 
   onHit(power, cx, cy) {
     this.hitRadial = 0.12 + 0.18 * power;
     this.hitDamp = 0.6;
-    this.blur.uniforms.center.value.set(cx, cy);
+    this.compositeMat.uniforms.center.value.set(cx, cy);
   }
 
   update(dt, s) {
-    // s: { intensity, dempseyActive, maxSpeed, dirX, dirY (uv/frame), focusX, focusY (uv) }
     const I = s.intensity;
     this.hitRadial *= Math.exp(-dt * 11);
     this.hitDamp *= Math.exp(-dt * 8);
-    const u = this.blur.uniforms;
+    const u = this.compositeMat.uniforms;
     if (this.hitRadial < 0.005) u.center.value.set(s.focusX, s.focusY);
     u.radial.value = this.hitRadial + (s.maxSpeed ? 0.012 + 0.006 * Math.sin(s.time * 30) : 0.006 * I * (s.dempseyActive ? 1 : 0));
     u.dirBlur.value.set(s.dirX, s.dirY);
     u.chroma.value = (s.dempseyActive ? 0.003 * I : 0) + (s.maxSpeed ? 0.003 : 0) + this.hitRadial * 0.05;
     u.vignette.value = 0.42 + 0.25 * I;
     u.heat.value = s.maxSpeed ? 0.6 + 0.2 * Math.sin(s.time * 18) : Math.max(0, (I - 0.7) * 1.5);
-    // 카운터 '골 흔들림': 화면 지터 + 이중상
     const r = s.rattle || 0;
     const rr = r * (0.5 + 0.5 * r);
     u.jitter.value.set(Math.sin(s.time * 71) * 0.012 * rr + Math.sin(s.time * 113) * 0.006 * rr, Math.cos(s.time * 89) * 0.009 * rr);
     u.dv.value.set(Math.sin(s.time * 47) * 0.03 * rr + 0.015 * rr, Math.cos(s.time * 39) * 0.012 * rr);
     u.dvMix.value = Math.min(1, r * 1.3);
+    u.samplesMix.value = this.quality > 1 ? 1 : 0;
+
     const damp = (s.dempseyActive ? 0.1 + 0.25 * I : 0) + (s.maxSpeed ? 0.05 : 0);
-    const dampV = Math.min(0.7, Math.max(damp, this.hitDamp));
-    this.afterimage.uniforms.damp.value = dampV;
-    // 필요 없을 땐 패스 자체를 끈다 (풀스크린 셰이더 2개 절감)
-    this.afterimage.enabled = dampV > 0.02 && this.quality > 0;
-    const blurNeeded = u.radial.value > 0.002 || Math.abs(s.dirX) + Math.abs(s.dirY) > 0.0005 || u.chroma.value > 0.0005 || (s.rattle || 0) > 0.02 || s.maxSpeed || u.heat.value > 0.02;
-    this.blur.enabled = blurNeeded || this.quality > 1;
+    this.damp = this.quality > 0 ? Math.min(0.7, Math.max(damp, this.hitDamp)) : 0;
   }
 
-  render() { this.composer.render(); }
+  /** 씬 렌더 + 합성. EffectComposer 없이 직접 돌린다 */
+  render() {
+    const r = this.renderer;
+    const prevTarget = r.getRenderTarget();
+    const useAccum = this.damp > 0.02;
+
+    // 1) 씬 → rtScene (톤매핑은 마지막 합성에서 한 번만 하므로 여기선 끈다)
+    const tm = r.toneMapping;
+    r.toneMapping = THREE.NoToneMapping;
+    r.setRenderTarget(this.rtScene);
+    r.render(this.scene, this.camera);
+
+    let src = this.rtScene.texture;
+    // 2) 잔상 누적 (필요할 때만)
+    if (useAccum) {
+      if (!this.accumValid) {
+        // 첫 프레임: 이전 버퍼를 현재 씬으로 채워 번쩍임 방지
+        this.accumMat.uniforms.damp.value = 0;
+        this.accumValid = true;
+      } else {
+        this.accumMat.uniforms.damp.value = this.damp;
+      }
+      this.accumMat.uniforms.tScene.value = this.rtScene.texture;
+      this.accumMat.uniforms.tPrev.value = this.rtA.texture;
+      this.quad.material = this.accumMat;
+      r.setRenderTarget(this.rtB);
+      r.render(this.quadScene, this.quadCam);
+      // 핑퐁
+      const t = this.rtA; this.rtA = this.rtB; this.rtB = t;
+      src = this.rtA.texture;
+    } else {
+      this.accumValid = false;
+    }
+
+    // 3) 최종 합성 → 화면 (톤매핑 + sRGB 포함)
+    r.toneMapping = tm;
+    this.compositeMat.uniforms.tDiffuse.value = src;
+    this.quad.material = this.compositeMat;
+    r.setRenderTarget(null);
+    r.render(this.quadScene, this.quadCam);
+    r.setRenderTarget(prevTarget);
+  }
+
+  dispose() {
+    for (const rt of [this.rtScene, this.rtA, this.rtB]) rt.dispose();
+    this.accumMat.dispose(); this.compositeMat.dispose();
+  }
 }
 return { PostFX };
 })();
@@ -3257,24 +3362,24 @@ function buildRing(scene) {
   scene.fog = new THREE.FogExp2(0x000000, 0.042);
 
   // ---- 링 바닥 ----
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(6.6, 6.6), new THREE.MeshToonMaterial({ map: canvasTexture(), gradientMap: toonRamp }));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(9.9, 9.9), new THREE.MeshToonMaterial({ map: canvasTexture(), gradientMap: toonRamp }));
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   group.add(floor);
 
-  const platform = new THREE.Mesh(new THREE.BoxGeometry(7.4, 0.7, 7.4), new THREE.MeshToonMaterial({ color: 0x1a1a22, gradientMap: toonRamp }));
+  const platform = new THREE.Mesh(new THREE.BoxGeometry(11.1, 0.7, 11.1), new THREE.MeshToonMaterial({ color: 0x1a1a22, gradientMap: toonRamp }));
   platform.position.y = -0.36;
   platform.receiveShadow = true;
   group.add(platform);
   // 에이프런 (스커트)
-  const apron = new THREE.Mesh(new THREE.BoxGeometry(7.42, 0.5, 7.42), new THREE.MeshToonMaterial({ color: 0x7a1d24, gradientMap: toonRamp }));
+  const apron = new THREE.Mesh(new THREE.BoxGeometry(11.13, 0.5, 11.13), new THREE.MeshToonMaterial({ color: 0x7a1d24, gradientMap: toonRamp }));
   apron.position.y = -0.28;
   group.add(apron);
 
   // ---- 포스트 / 코너 패드 / 로프 ----
   const postMat = new THREE.MeshToonMaterial({ color: 0x2a2a30, gradientMap: toonRamp });
   const padColors = [0xd0302c, 0x2438c8, 0xf0f0f0, 0xf0f0f0];
-  const corners = [[3.15, 3.15], [-3.15, -3.15], [3.15, -3.15], [-3.15, 3.15]];
+  const corners = [[4.72, 4.72], [-4.72, -4.72], [4.72, -4.72], [-4.72, 4.72]];
   corners.forEach(([x, z], i) => {
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.6, 12), postMat);
     post.position.set(x, 0.8, z);
@@ -3289,10 +3394,10 @@ function buildRing(scene) {
   ropeHeights.forEach((h, i) => {
     const mat = new THREE.MeshToonMaterial({ color: ropeColors[i], gradientMap: toonRamp });
     for (let side = 0; side < 4; side++) {
-      const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 6.3, 8), mat);
+      const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 9.45, 8), mat);
       rope.rotation.z = Math.PI / 2;
       if (side % 2) rope.rotation.y = Math.PI / 2;
-      const off = 3.15;
+      const off = 4.72;
       if (side === 0) rope.position.set(0, h, off);
       if (side === 1) rope.position.set(off, h, 0);
       if (side === 2) rope.position.set(0, h, -off);
@@ -3394,7 +3499,7 @@ const { DempseyController } = __M.DempseyController;
 const { createPunch, applyPunchToPose, pointSegmentDist, segSegDist, easeOutCubic } = __M.Punch;
 const { SPECIALS, KITS, HIDDEN_LINES } = __M.Specials;
 
-const RING_LIMIT = 2.75;
+const RING_LIMIT = 4.15;   // 링 1.5배 확장
 const _d = new THREE.Vector3();
 const _g = new THREE.Vector3();
 
@@ -3936,7 +4041,7 @@ class Fighter {
         pushing = true;
         this.ropeAxis = axis; this.ropeDir = dir;
         this.ropeCharge = Math.min(0.45, this.ropeCharge + dt);
-        const stretch = 2.5 + 0.38 * (this.ropeCharge / 0.45);       // 로프가 늘어나는 만큼 밖으로
+        const stretch = 3.75 + 0.55 * (this.ropeCharge / 0.45);       // 로프가 늘어나는 만큼 밖으로
         this.pos[axis] = dir * Math.min(Math.abs(v), stretch);
       } else if (Math.abs(v) > RING_LIMIT) {
         // 그냥 밀려난 경우: 로프에 튕겨 절반 속도로 되돌아온다 (넉백 반사)
@@ -4793,7 +4898,7 @@ class CameraController {
     _mid.copy(playerPos).lerp(oppPos, 0.55);
     _l.copy(_mid).addScaledVector(UP, 0.75).addScaledVector(new THREE.Vector3(sx, 0, sz), ctx.sway * 0.12 * b);
     // 카메라가 로프 밖으로 나가 로프가 화면을 가로지르지 않도록 링 안쪽으로 클램프
-    _p.x = Math.max(-3.0, Math.min(3.0, _p.x)); _p.z = Math.max(-3.0, Math.min(3.0, _p.z));
+    _p.x = Math.max(-4.5, Math.min(4.5, _p.x)); _p.z = Math.max(-4.5, Math.min(4.5, _p.z));
     _p2.copy(_p); _l2.copy(_l);
 
     _p.lerp(_p2, b);
@@ -5483,7 +5588,7 @@ __M.Coaches = (() => {
 // Coaches.js — 링 밖 코너에 서 있는 코치 NPC 4명. 파이터 슬롯별 담당 코치가 있고, 코치 대사가 나올 때 팔을 들고 외친다.
 const { buildBoxer, defaultPose, applyPose, copyPose, COACH_DEFS } = __M.Rig;
 
-const CORNERS = [[3.9, 3.9], [-3.9, -3.9], [3.9, -3.9], [-3.9, 3.9]];
+const CORNERS = [[5.6, 5.6], [-5.6, -5.6], [5.6, -5.6], [-5.6, 5.6]];
 
 class Coaches {
   constructor(scene) {
@@ -5543,7 +5648,7 @@ const { HIDDEN_LINES } = __M.Specials;
 const PER = 4.4;          // 선수 1명당 연출 시간 (걸어나오기 → 클로즈업 멘트 → 포즈 홀드)
 const WALK = 1.3;         // 걸어 나오는 시간
 // 링 안쪽 자기 코너(로프 안)에서 걸어 나온다
-const CORNERS = [[2.45, 2.45], [-2.45, -2.45], [2.45, -2.45], [-2.45, 2.45]];
+const CORNERS = [[3.7, 3.7], [-3.7, -3.7], [3.7, -3.7], [-3.7, 3.7]];
 
 class Intro {
   constructor(game) {
@@ -6135,7 +6240,7 @@ const _prevHead = new THREE.Vector3();
 const _camF = new THREE.Vector3();
 const _camR = new THREE.Vector3();
 const _sep = new THREE.Vector3();
-const SPAWNS = [[0, 1.6], [0, -1.6], [1.6, 0], [-1.6, 0]];
+const SPAWNS = [[0, 2.4], [0, -2.4], [2.4, 0], [-2.4, 0]];
 const AUDIO_FWD = ['whoosh', 'swoosh', 'impact', 'bassHit', 'riser', 'maxSpeedHit', 'stagger', 'ko', 'block', 'chargeUp', 'finisherWind', 'finisherHit', 'counter', 'cheer', 'engine', 'clang', 'nyang', 'shutter'];
 const SNAP_HZ = 20;
 
