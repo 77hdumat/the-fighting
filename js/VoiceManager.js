@@ -6,8 +6,35 @@ const TEXT_KEYS = [
   ['うおおお', 'finisher'], ['ぶっ飛べ', 'finisher_hit'], ['ダウン', 'down'], ['カウンター', 'counter'],
   ['ファイッ', 'fight'], ['潰す', 'crush'], ['ガード', 'guardbreak'], ['効いてる', 'effective'], ['効かねぇ', 'noeffect'],
 ];
-const PITCH = { ippo: 1.15, miyata: 1.05, mashiba: 0.72, takamura: 0.6, coach: 0.5 };
-const RATE = { ippo: 1.3, miyata: 1.25, mashiba: 1.05, takamura: 1.0, coach: 1.15 };
+import { CHARACTERS } from './Rig.js';
+
+// 캐릭터별 목소리 톤 (여성 캐릭터는 높고 빠르게)
+const PITCH = {
+  ippo: 1.15, miyata: 1.05, mashiba: 0.72, sendo: 0.65, coach: 0.5,
+  chaechae: 1.35, jjeonghyo: 1.15, ohsh: 1.45,         // 여성
+  ppyeo: 0.85, jungjuwon: 0.7, gokomong: 0.8,          // 남성
+};
+const RATE = {
+  ippo: 1.3, miyata: 1.25, mashiba: 1.05, sendo: 0.95, coach: 1.15,
+  chaechae: 1.45, jjeonghyo: 1.1, ohsh: 1.35,
+  ppyeo: 1.2, jungjuwon: 1.0, gokomong: 0.85,
+};
+const genderOf = (charKey) => (charKey === 'coach' ? 'm' : ((CHARACTERS[charKey] && CHARACTERS[charKey].gender) || 'm'));
+
+// 브라우저/OS 별 음성 이름 → 성별 (표준 API 엔 성별 필드가 없어서 이름으로 판별)
+const VOICE_GENDER = {
+  f: ['kyoko', 'o-ren', 'haruka', 'ayumi', 'nanami', 'sayaka', 'mizuki', 'female',
+      'yuna', 'heami', 'sunhi', 'seoyeon', 'jimin', 'sora', 'jiwon', '한국의', 'google 일본어',
+      '유나', '해미', '선히', '서연', '지민', '소라', '미사키', '교코'],
+  m: ['otoya', 'hattori', 'ichiro', 'daichi', 'keita', 'takumi', 'male',
+      'injoon', 'minsu', 'gyeong', 'jinho', 'bongjin', 'hyunsu',
+      '인준', '민수', '현수', '진호', '오토야', '핫토리'],
+};
+function guessGender(v) {
+  const n = (v.name || '').toLowerCase();
+  for (const g of ['f', 'm']) if (VOICE_GENDER[g].some((k) => n.includes(k))) return g;
+  return null;
+}
 
 export class VoiceManager {
   constructor(audio) {
@@ -23,14 +50,22 @@ export class VoiceManager {
     if ('speechSynthesis' in window) {
       const pick = () => {
         const vs = speechSynthesis.getVoices();
-        const ja = vs.filter((v) => /ja/i.test(v.lang));
-        const pref = ['Otoya', 'Hattori', 'Google 日本語', 'Microsoft Keita', 'Kyoko', 'O-Ren'];
-        this.voice = pref.map((n) => ja.find((v) => v.name.includes(n))).find(Boolean) || ja[0] || null;
-        // 한국어 음성 (한글 자막/자기소개용)
-        const ko = vs.filter((v) => /ko/i.test(v.lang));
-        const prefKo = ['Yuna', 'Google 한국의', 'Microsoft Heami', 'Suhyun', 'Jian'];
-        this.voiceKo = prefKo.map((n) => ko.find((v) => v.name.includes(n))).find(Boolean) || ko[0] || null;
-        this.ttsReady = !!(this.voice || this.voiceKo);
+        const byLang = (re) => vs.filter((v) => re.test(v.lang));
+        const ja = byLang(/ja/i), ko = byLang(/ko/i);
+        const split = (list) => {
+          const m = list.filter((v) => guessGender(v) === 'm');
+          const f = list.filter((v) => guessGender(v) === 'f');
+          const rest = list.filter((v) => !guessGender(v));
+          return { m: m[0] || rest[0] || list[0] || null, f: f[0] || rest[0] || list[0] || null, any: list[0] || null };
+        };
+        this.ja = split(ja); this.ko = split(ko);
+        this.voice = this.ja.m || this.ja.any;        // 하위 호환
+        this.voiceKo = this.ko.f || this.ko.any;
+        this.ttsReady = !!(this.ja.any || this.ko.any);
+        this.voiceInfo = {
+          ja: { m: this.ja.m && this.ja.m.name, f: this.ja.f && this.ja.f.name },
+          ko: { m: this.ko.m && this.ko.m.name, f: this.ko.f && this.ko.f.name },
+        };
       };
       pick();
       speechSynthesis.onvoiceschanged = pick;
@@ -99,10 +134,18 @@ export class VoiceManager {
     if (strong) speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(clean);
     const isKo = /[\uac00-\ud7a3]/.test(clean);
-    if (isKo && this.voiceKo) { u.voice = this.voiceKo; u.lang = 'ko-KR'; }
-    else if (isKo) { u.lang = 'ko-KR'; }
-    else { u.voice = this.voice; u.lang = 'ja-JP'; }
-    u.pitch = (PITCH[charKey] || 1) * (strong ? 0.95 : 1);
+    const gd = genderOf(charKey);
+    const pool = isKo ? this.ko : this.ja;
+    const chosen = pool ? (pool[gd] || pool.any) : null;
+    if (chosen) u.voice = chosen;
+    u.lang = isKo ? 'ko-KR' : 'ja-JP';
+    // 성별 전용 음성이 없어 남녀가 같은 목소리를 공유하면(예: 한국어 '유나' 하나뿐) 피치로 구분한다
+    const shared = chosen && pool && pool.m === pool.f;
+    const vg = chosen ? guessGender(chosen) : null;
+    let genderShift = 1;
+    if (shared && vg && vg !== gd) genderShift = gd === 'f' ? 1.45 : 0.6;   // 반대 성별 음성 → 크게 보정
+    else if (shared) genderShift = gd === 'f' ? 1.15 : 0.85;
+    u.pitch = Math.max(0.1, Math.min(2, (PITCH[charKey] || (gd === 'f' ? 1.4 : 0.95)) * genderShift * (strong ? 0.95 : 1)));
     u.rate = (RATE[charKey] || 1.2) * (strong ? 1.1 : 1);
     u.volume = 1;
     speechSynthesis.speak(u);
@@ -124,7 +167,10 @@ export class VoiceManager {
     const clean = text.replace(/[…！!？?・\s]+/g, ' ').trim();
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(clean);
-    if (/[\uac00-\ud7a3]/.test(clean) && this.voiceKo) { u.voice = this.voiceKo; u.lang = 'ko-KR'; } else { u.voice = this.voice; u.lang = 'ja-JP'; }
+    const isKo = /[\uac00-\ud7a3]/.test(clean);
+    const pool = isKo ? this.ko : this.ja;
+    if (pool && (pool.m || pool.any)) u.voice = pool.m || pool.any;
+    u.lang = isKo ? 'ko-KR' : 'ja-JP';
     u.pitch = PITCH.coach; u.rate = RATE.coach; u.volume = 1;
     speechSynthesis.speak(u);
   }
@@ -153,14 +199,17 @@ export class VoiceManager {
   _synthVoice(charKey, power, isHurt) {
     const ctx = this.audio.ctx; if (!ctx) return;
     const t = ctx.currentTime;
-    const base = (isHurt ? 150 : 200) * (PITCH[charKey] || 1) * (0.95 + Math.random() * 0.1);
+    const gd = genderOf(charKey);
+    const gMul = gd === 'f' ? 1.55 : 1;                    // 여성은 성대 기본 주파수가 높다
+    const base = (isHurt ? 150 : 200) * (PITCH[charKey] || (gd === 'f' ? 1.4 : 1)) * gMul * (0.95 + Math.random() * 0.1);
     const dur = isHurt ? 0.22 : 0.16 + 0.06 * power;
     const o = ctx.createOscillator(); o.type = 'sawtooth';
     o.frequency.setValueAtTime(base * (isHurt ? 1.1 : 1.3), t);
     o.frequency.exponentialRampToValueAtTime(base * (isHurt ? 0.7 : 0.95), t + dur);
     // 모음 포먼트: 기합 "あ"(700/1200) , 신음 "う"(350/900)
-    const f1 = ctx.createBiquadFilter(); f1.type = 'bandpass'; f1.Q.value = 6; f1.frequency.value = isHurt ? 350 : 700;
-    const f2 = ctx.createBiquadFilter(); f2.type = 'bandpass'; f2.Q.value = 8; f2.frequency.value = isHurt ? 900 : 1200;
+    const fScale = gd === 'f' ? 1.18 : 1;                  // 여성은 포먼트도 위로
+    const f1 = ctx.createBiquadFilter(); f1.type = 'bandpass'; f1.Q.value = 6; f1.frequency.value = (isHurt ? 350 : 700) * fScale;
+    const f2 = ctx.createBiquadFilter(); f2.type = 'bandpass'; f2.Q.value = 8; f2.frequency.value = (isHurt ? 900 : 1200) * fScale;
     const mix = ctx.createGain(); mix.gain.value = 1;
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);

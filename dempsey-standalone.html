@@ -1605,14 +1605,14 @@ function makeOutlineMaterial(ghost) {
 // 상대: 장신·마른 히트맨 (흑발 슬릭백, 가늘게 찢어진 눈, 다크 트렁크, 검은 글러브, 플리커 잽)
 const CHARACTERS = {
   ippo: {
-    name: 'IPPO', skin: 0xf1c39a, trunks: 0x1c8d4a, trunksTrim: 0xf7f7f7, trunksText: 'IPPO',
+    name: 'IPPO', gender: 'm', skin: 0xf1c39a, trunks: 0x1c8d4a, trunksTrim: 0xf7f7f7, trunksText: 'IPPO',
     gloves: 0xd42a2a, hair: 0x15151a, shoes: 0xc92626, shoesTrim: 0xffffff,
     hairStyle: 'spiky', brows: 'thick', eyes: 'round', mouth: 'grit',
     prop: { height: 0.95, torsoW: 1.14, torsoD: 1.12, armR: 1.18, armLen: 0.96, legR: 1.12, legLen: 0.95, headS: 1.02, headY: 1.0, neck: 0.9, muscle: 1 },
     hp: 140, powerMul: 1.05, speedMul: 1.05, style: 'infighter',
   },
   mashiba: {
-    name: 'MASHIBA', skin: 0xe4b892, trunks: 0x1d1226, trunksTrim: 0x9b4de0, trunksText: 'MASHIBA',
+    name: 'MASHIBA', gender: 'm', skin: 0xe4b892, trunks: 0x1d1226, trunksTrim: 0x9b4de0, trunksText: 'MASHIBA',
     gloves: 0x141218, hair: 0x0c0c10, shoes: 0x141218, shoesTrim: 0x9b4de0,
     hairStyle: 'slick', brows: 'thin', eyes: 'narrow', mouth: 'grin',
     prop: { height: 1.13, torsoW: 0.86, torsoD: 0.82, armR: 0.82, armLen: 1.24, legR: 0.84, legLen: 1.12, headS: 0.96, headY: 1.18, neck: 1.35, muscle: 0.35 },
@@ -1620,7 +1620,7 @@ const CHARACTERS = {
   },
   // 아웃복서: 늘씬하고 빠름, 갈색 머리, 남색/흰 트렁크
   miyata: {
-    name: 'MIYATA', skin: 0xf0cbb0, trunks: 0x1b2a6b, trunksTrim: 0xffffff, trunksText: 'MIYATA',
+    name: 'MIYATA', gender: 'm', skin: 0xf0cbb0, trunks: 0x1b2a6b, trunksTrim: 0xffffff, trunksText: 'MIYATA',
     gloves: 0xd42a2a, hair: 0x4a3220, shoes: 0x1b2a6b, shoesTrim: 0xffffff,
     hairStyle: 'spiky', brows: 'thin', eyes: 'round', mouth: 'grit',
     prop: { height: 1.02, torsoW: 0.92, torsoD: 0.9, armR: 0.9, armLen: 1.08, legR: 0.9, legLen: 1.04, headS: 0.98, headY: 1.05, neck: 1.1, muscle: 0.6 },
@@ -1628,7 +1628,7 @@ const CHARACTERS = {
   },
   // 나니와의 호랑이: 야성적인 갈색 스파이크 헤어, 검정/주황 트렁크, 강력한 스매시
   sendo: {
-    name: 'SENDO', skin: 0xe4b088, trunks: 0x141414, trunksTrim: 0xff7a00, trunksText: 'SENDO',
+    name: 'SENDO', gender: 'm', skin: 0xe4b088, trunks: 0x141414, trunksTrim: 0xff7a00, trunksText: 'SENDO',
     gloves: 0xff6a00, hair: 0x6b3a12, shoes: 0x141414, shoesTrim: 0xff7a00,
     hairStyle: 'spiky', brows: 'thick', eyes: 'narrow', mouth: 'grin',
     prop: { height: 1.06, torsoW: 1.22, torsoD: 1.15, armR: 1.22, armLen: 1.08, legR: 1.15, legLen: 1.04, headS: 1.03, headY: 1.0, neck: 1.0, muscle: 1 },
@@ -1637,7 +1637,7 @@ const CHARACTERS = {
   // ---- 히든 캐릭터 ----
   // 채채더킴: 작은 키, 단발머리 + 큰 눈. 냥냥펀치(빠르고 가벼움), 필살 = 릴스 (상대를 붙잡아 같이 춤)
   chaechae: {
-    name: 'CHAECHAE', skin: 0xffdcc4, trunks: 0x14141a, trunksTrim: 0x2a2a33, trunksText: '',
+    name: 'CHAECHAE', gender: 'f', skin: 0xffdcc4, trunks: 0x14141a, trunksTrim: 0x2a2a33, trunksText: '',
     bodyColor: 0x17171e, sleeves: 0xffdcc4, pants: 0xffdcc4,          // 검은 원피스 (팔·다리는 맨살)
     gloves: 0xffdcc4, noGloves: true, shoes: 0x1b1b22, shoesTrim: 0x3a3a46,   // 단화
     hair: 0x2a1a16, hairStyle: 'bob', brows: 'thin', eyes: 'big', mouth: 'grin',
@@ -1647,7 +1647,7 @@ const CHARACTERS = {
   },
   // 쩡효: 중간 키, 긴 생머리 + 흰 피부. 덤벨 펀치(무겁다), 필살 = 바벨 내려찍기
   jjeonghyo: {
-    name: 'JJEONGHYO', skin: 0xfdeade, trunks: 0x14141a, trunksTrim: 0x2a2a33, trunksText: '',
+    name: 'JJEONGHYO', gender: 'f', skin: 0xfdeade, trunks: 0x14141a, trunksTrim: 0x2a2a33, trunksText: '',
     bodyColor: 0xf4f4f0, sleeves: 0xfdeade, pants: 0x1a1a20,          // 흰 티 + 검정 레깅스
     chestText: 'HDEX', chestTextColor: '#111118',
     gloves: 0xfdeade, noGloves: true, shoes: 0xf0f0f0, shoesTrim: 0xc0f000,
@@ -1658,7 +1658,7 @@ const CHARACTERS = {
   },
   // 뼈석원: 큰 키, 구릿빛 피부에 마른 몸. 뼈펀치(리치 최장), 필살 = 오토바이 돌진
   ppyeo: {
-    name: 'PPYEO', skin: 0xb07848, trunks: 0x2f4f86, trunksTrim: 0x24406e, trunksText: '',
+    name: 'PPYEO', gender: 'm', skin: 0xb07848, trunks: 0x2f4f86, trunksTrim: 0x24406e, trunksText: '',
     bodyColor: 0xf2f2f4, sleeves: 0xb07848, pants: 0x2f4f86,          // 스티치 티 + 청바지
     chestText: 'STITCH', chestTextColor: '#2ba8e0', chestArt: 'stitch',
     gloves: 0xb07848, noGloves: true, shoes: 0xe8e8ec, shoesTrim: 0x2f4f86,
@@ -1669,7 +1669,7 @@ const CHARACTERS = {
   },
   // 오승현: 가장 작고 하얀 피부. 빵을 들고 계속 먹는다. 소심하지만 갑자기 때린다
   ohsh: {
-    name: 'OHSH', skin: 0xfff0e6, trunks: 0xfaf3ea, trunksTrim: 0xe8c9a0, trunksText: '',
+    name: 'OHSH', gender: 'f', skin: 0xfff0e6, trunks: 0xfaf3ea, trunksTrim: 0xe8c9a0, trunksText: '',
     bodyColor: 0xfdf6ec, sleeves: 0xfff0e6, pants: 0xe8dbc8,
     gloves: 0xfff0e6, noGloves: true, shoes: 0xf4e7d4, shoesTrim: 0xd9a95c,
     hair: 0x14131a, hairStyle: 'bobsharp', brows: 'thin', eyes: 'big', mouth: 'grit',
@@ -1679,7 +1679,7 @@ const CHARACTERS = {
   },
   // 정주원: 뚱뚱한 보통 체격, 헤드폰. 삼각김밥을 계속 먹는다
   jungjuwon: {
-    name: 'JUNGJUWON', skin: 0xf0c9a0, trunks: 0x2e2e38, trunksTrim: 0x5b5be0, trunksText: '',
+    name: 'JUNGJUWON', gender: 'm', skin: 0xf0c9a0, trunks: 0x2e2e38, trunksTrim: 0x5b5be0, trunksText: '',
     bodyColor: 0x3c4250, sleeves: 0xf0c9a0, pants: 0x2a2f3a,
     gloves: 0xf0c9a0, noGloves: true, shoes: 0x2e2e38, shoesTrim: 0x5b5be0,
     hair: 0x1c1712, hairStyle: 'spiky', brows: 'thick', eyes: 'round', mouth: 'grin',
@@ -1690,7 +1690,7 @@ const CHARACTERS = {
   },
   // 고코몽: 약간 작은 체격, 하늘색 긴 티. 감정이 없다
   gokomong: {
-    name: 'GOKOMONG', skin: 0xecc6a4, trunks: 0x2b3440, trunksTrim: 0x7fd4f5, trunksText: '',
+    name: 'GOKOMONG', gender: 'm', skin: 0xecc6a4, trunks: 0x2b3440, trunksTrim: 0x7fd4f5, trunksText: '',
     bodyColor: 0x8fd6f2, sleeves: 0x8fd6f2, pants: 0x3b4450,     // 하늘색 긴팔 티
     gloves: 0xecc6a4, noGloves: true, shoes: 0x2b3440, shoesTrim: 0x8fd6f2,
     hair: 0x1a1a20, hairStyle: 'bob', brows: 'thin', eyes: 'narrow', mouth: 'grit',
@@ -5218,8 +5218,35 @@ const TEXT_KEYS = [
   ['うおおお', 'finisher'], ['ぶっ飛べ', 'finisher_hit'], ['ダウン', 'down'], ['カウンター', 'counter'],
   ['ファイッ', 'fight'], ['潰す', 'crush'], ['ガード', 'guardbreak'], ['効いてる', 'effective'], ['効かねぇ', 'noeffect'],
 ];
-const PITCH = { ippo: 1.15, miyata: 1.05, mashiba: 0.72, takamura: 0.6, coach: 0.5 };
-const RATE = { ippo: 1.3, miyata: 1.25, mashiba: 1.05, takamura: 1.0, coach: 1.15 };
+const { CHARACTERS } = __M.Rig;
+
+// 캐릭터별 목소리 톤 (여성 캐릭터는 높고 빠르게)
+const PITCH = {
+  ippo: 1.15, miyata: 1.05, mashiba: 0.72, sendo: 0.65, coach: 0.5,
+  chaechae: 1.35, jjeonghyo: 1.15, ohsh: 1.45,         // 여성
+  ppyeo: 0.85, jungjuwon: 0.7, gokomong: 0.8,          // 남성
+};
+const RATE = {
+  ippo: 1.3, miyata: 1.25, mashiba: 1.05, sendo: 0.95, coach: 1.15,
+  chaechae: 1.45, jjeonghyo: 1.1, ohsh: 1.35,
+  ppyeo: 1.2, jungjuwon: 1.0, gokomong: 0.85,
+};
+const genderOf = (charKey) => (charKey === 'coach' ? 'm' : ((CHARACTERS[charKey] && CHARACTERS[charKey].gender) || 'm'));
+
+// 브라우저/OS 별 음성 이름 → 성별 (표준 API 엔 성별 필드가 없어서 이름으로 판별)
+const VOICE_GENDER = {
+  f: ['kyoko', 'o-ren', 'haruka', 'ayumi', 'nanami', 'sayaka', 'mizuki', 'female',
+      'yuna', 'heami', 'sunhi', 'seoyeon', 'jimin', 'sora', 'jiwon', '한국의', 'google 일본어',
+      '유나', '해미', '선히', '서연', '지민', '소라', '미사키', '교코'],
+  m: ['otoya', 'hattori', 'ichiro', 'daichi', 'keita', 'takumi', 'male',
+      'injoon', 'minsu', 'gyeong', 'jinho', 'bongjin', 'hyunsu',
+      '인준', '민수', '현수', '진호', '오토야', '핫토리'],
+};
+function guessGender(v) {
+  const n = (v.name || '').toLowerCase();
+  for (const g of ['f', 'm']) if (VOICE_GENDER[g].some((k) => n.includes(k))) return g;
+  return null;
+}
 
 class VoiceManager {
   constructor(audio) {
@@ -5235,14 +5262,22 @@ class VoiceManager {
     if ('speechSynthesis' in window) {
       const pick = () => {
         const vs = speechSynthesis.getVoices();
-        const ja = vs.filter((v) => /ja/i.test(v.lang));
-        const pref = ['Otoya', 'Hattori', 'Google 日本語', 'Microsoft Keita', 'Kyoko', 'O-Ren'];
-        this.voice = pref.map((n) => ja.find((v) => v.name.includes(n))).find(Boolean) || ja[0] || null;
-        // 한국어 음성 (한글 자막/자기소개용)
-        const ko = vs.filter((v) => /ko/i.test(v.lang));
-        const prefKo = ['Yuna', 'Google 한국의', 'Microsoft Heami', 'Suhyun', 'Jian'];
-        this.voiceKo = prefKo.map((n) => ko.find((v) => v.name.includes(n))).find(Boolean) || ko[0] || null;
-        this.ttsReady = !!(this.voice || this.voiceKo);
+        const byLang = (re) => vs.filter((v) => re.test(v.lang));
+        const ja = byLang(/ja/i), ko = byLang(/ko/i);
+        const split = (list) => {
+          const m = list.filter((v) => guessGender(v) === 'm');
+          const f = list.filter((v) => guessGender(v) === 'f');
+          const rest = list.filter((v) => !guessGender(v));
+          return { m: m[0] || rest[0] || list[0] || null, f: f[0] || rest[0] || list[0] || null, any: list[0] || null };
+        };
+        this.ja = split(ja); this.ko = split(ko);
+        this.voice = this.ja.m || this.ja.any;        // 하위 호환
+        this.voiceKo = this.ko.f || this.ko.any;
+        this.ttsReady = !!(this.ja.any || this.ko.any);
+        this.voiceInfo = {
+          ja: { m: this.ja.m && this.ja.m.name, f: this.ja.f && this.ja.f.name },
+          ko: { m: this.ko.m && this.ko.m.name, f: this.ko.f && this.ko.f.name },
+        };
       };
       pick();
       speechSynthesis.onvoiceschanged = pick;
@@ -5311,10 +5346,18 @@ class VoiceManager {
     if (strong) speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(clean);
     const isKo = /[\uac00-\ud7a3]/.test(clean);
-    if (isKo && this.voiceKo) { u.voice = this.voiceKo; u.lang = 'ko-KR'; }
-    else if (isKo) { u.lang = 'ko-KR'; }
-    else { u.voice = this.voice; u.lang = 'ja-JP'; }
-    u.pitch = (PITCH[charKey] || 1) * (strong ? 0.95 : 1);
+    const gd = genderOf(charKey);
+    const pool = isKo ? this.ko : this.ja;
+    const chosen = pool ? (pool[gd] || pool.any) : null;
+    if (chosen) u.voice = chosen;
+    u.lang = isKo ? 'ko-KR' : 'ja-JP';
+    // 성별 전용 음성이 없어 남녀가 같은 목소리를 공유하면(예: 한국어 '유나' 하나뿐) 피치로 구분한다
+    const shared = chosen && pool && pool.m === pool.f;
+    const vg = chosen ? guessGender(chosen) : null;
+    let genderShift = 1;
+    if (shared && vg && vg !== gd) genderShift = gd === 'f' ? 1.45 : 0.6;   // 반대 성별 음성 → 크게 보정
+    else if (shared) genderShift = gd === 'f' ? 1.15 : 0.85;
+    u.pitch = Math.max(0.1, Math.min(2, (PITCH[charKey] || (gd === 'f' ? 1.4 : 0.95)) * genderShift * (strong ? 0.95 : 1)));
     u.rate = (RATE[charKey] || 1.2) * (strong ? 1.1 : 1);
     u.volume = 1;
     speechSynthesis.speak(u);
@@ -5336,7 +5379,10 @@ class VoiceManager {
     const clean = text.replace(/[…！!？?・\s]+/g, ' ').trim();
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(clean);
-    if (/[\uac00-\ud7a3]/.test(clean) && this.voiceKo) { u.voice = this.voiceKo; u.lang = 'ko-KR'; } else { u.voice = this.voice; u.lang = 'ja-JP'; }
+    const isKo = /[\uac00-\ud7a3]/.test(clean);
+    const pool = isKo ? this.ko : this.ja;
+    if (pool && (pool.m || pool.any)) u.voice = pool.m || pool.any;
+    u.lang = isKo ? 'ko-KR' : 'ja-JP';
     u.pitch = PITCH.coach; u.rate = RATE.coach; u.volume = 1;
     speechSynthesis.speak(u);
   }
@@ -5365,14 +5411,17 @@ class VoiceManager {
   _synthVoice(charKey, power, isHurt) {
     const ctx = this.audio.ctx; if (!ctx) return;
     const t = ctx.currentTime;
-    const base = (isHurt ? 150 : 200) * (PITCH[charKey] || 1) * (0.95 + Math.random() * 0.1);
+    const gd = genderOf(charKey);
+    const gMul = gd === 'f' ? 1.55 : 1;                    // 여성은 성대 기본 주파수가 높다
+    const base = (isHurt ? 150 : 200) * (PITCH[charKey] || (gd === 'f' ? 1.4 : 1)) * gMul * (0.95 + Math.random() * 0.1);
     const dur = isHurt ? 0.22 : 0.16 + 0.06 * power;
     const o = ctx.createOscillator(); o.type = 'sawtooth';
     o.frequency.setValueAtTime(base * (isHurt ? 1.1 : 1.3), t);
     o.frequency.exponentialRampToValueAtTime(base * (isHurt ? 0.7 : 0.95), t + dur);
     // 모음 포먼트: 기합 "あ"(700/1200) , 신음 "う"(350/900)
-    const f1 = ctx.createBiquadFilter(); f1.type = 'bandpass'; f1.Q.value = 6; f1.frequency.value = isHurt ? 350 : 700;
-    const f2 = ctx.createBiquadFilter(); f2.type = 'bandpass'; f2.Q.value = 8; f2.frequency.value = isHurt ? 900 : 1200;
+    const fScale = gd === 'f' ? 1.18 : 1;                  // 여성은 포먼트도 위로
+    const f1 = ctx.createBiquadFilter(); f1.type = 'bandpass'; f1.Q.value = 6; f1.frequency.value = (isHurt ? 350 : 700) * fScale;
+    const f2 = ctx.createBiquadFilter(); f2.type = 'bandpass'; f2.Q.value = 8; f2.frequency.value = (isHurt ? 900 : 1200) * fScale;
     const mix = ctx.createGain(); mix.gain.value = 1;
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);

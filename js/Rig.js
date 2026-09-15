@@ -46,14 +46,14 @@ function makeOutlineMaterial(ghost) {
 // 상대: 장신·마른 히트맨 (흑발 슬릭백, 가늘게 찢어진 눈, 다크 트렁크, 검은 글러브, 플리커 잽)
 export const CHARACTERS = {
   ippo: {
-    name: 'IPPO', skin: 0xf1c39a, trunks: 0x1c8d4a, trunksTrim: 0xf7f7f7, trunksText: 'IPPO',
+    name: 'IPPO', gender: 'm', skin: 0xf1c39a, trunks: 0x1c8d4a, trunksTrim: 0xf7f7f7, trunksText: 'IPPO',
     gloves: 0xd42a2a, hair: 0x15151a, shoes: 0xc92626, shoesTrim: 0xffffff,
     hairStyle: 'spiky', brows: 'thick', eyes: 'round', mouth: 'grit',
     prop: { height: 0.95, torsoW: 1.14, torsoD: 1.12, armR: 1.18, armLen: 0.96, legR: 1.12, legLen: 0.95, headS: 1.02, headY: 1.0, neck: 0.9, muscle: 1 },
     hp: 140, powerMul: 1.05, speedMul: 1.05, style: 'infighter',
   },
   mashiba: {
-    name: 'MASHIBA', skin: 0xe4b892, trunks: 0x1d1226, trunksTrim: 0x9b4de0, trunksText: 'MASHIBA',
+    name: 'MASHIBA', gender: 'm', skin: 0xe4b892, trunks: 0x1d1226, trunksTrim: 0x9b4de0, trunksText: 'MASHIBA',
     gloves: 0x141218, hair: 0x0c0c10, shoes: 0x141218, shoesTrim: 0x9b4de0,
     hairStyle: 'slick', brows: 'thin', eyes: 'narrow', mouth: 'grin',
     prop: { height: 1.13, torsoW: 0.86, torsoD: 0.82, armR: 0.82, armLen: 1.24, legR: 0.84, legLen: 1.12, headS: 0.96, headY: 1.18, neck: 1.35, muscle: 0.35 },
@@ -61,7 +61,7 @@ export const CHARACTERS = {
   },
   // 아웃복서: 늘씬하고 빠름, 갈색 머리, 남색/흰 트렁크
   miyata: {
-    name: 'MIYATA', skin: 0xf0cbb0, trunks: 0x1b2a6b, trunksTrim: 0xffffff, trunksText: 'MIYATA',
+    name: 'MIYATA', gender: 'm', skin: 0xf0cbb0, trunks: 0x1b2a6b, trunksTrim: 0xffffff, trunksText: 'MIYATA',
     gloves: 0xd42a2a, hair: 0x4a3220, shoes: 0x1b2a6b, shoesTrim: 0xffffff,
     hairStyle: 'spiky', brows: 'thin', eyes: 'round', mouth: 'grit',
     prop: { height: 1.02, torsoW: 0.92, torsoD: 0.9, armR: 0.9, armLen: 1.08, legR: 0.9, legLen: 1.04, headS: 0.98, headY: 1.05, neck: 1.1, muscle: 0.6 },
@@ -69,7 +69,7 @@ export const CHARACTERS = {
   },
   // 나니와의 호랑이: 야성적인 갈색 스파이크 헤어, 검정/주황 트렁크, 강력한 스매시
   sendo: {
-    name: 'SENDO', skin: 0xe4b088, trunks: 0x141414, trunksTrim: 0xff7a00, trunksText: 'SENDO',
+    name: 'SENDO', gender: 'm', skin: 0xe4b088, trunks: 0x141414, trunksTrim: 0xff7a00, trunksText: 'SENDO',
     gloves: 0xff6a00, hair: 0x6b3a12, shoes: 0x141414, shoesTrim: 0xff7a00,
     hairStyle: 'spiky', brows: 'thick', eyes: 'narrow', mouth: 'grin',
     prop: { height: 1.06, torsoW: 1.22, torsoD: 1.15, armR: 1.22, armLen: 1.08, legR: 1.15, legLen: 1.04, headS: 1.03, headY: 1.0, neck: 1.0, muscle: 1 },
@@ -78,7 +78,7 @@ export const CHARACTERS = {
   // ---- 히든 캐릭터 ----
   // 채채더킴: 작은 키, 단발머리 + 큰 눈. 냥냥펀치(빠르고 가벼움), 필살 = 릴스 (상대를 붙잡아 같이 춤)
   chaechae: {
-    name: 'CHAECHAE', skin: 0xffdcc4, trunks: 0x14141a, trunksTrim: 0x2a2a33, trunksText: '',
+    name: 'CHAECHAE', gender: 'f', skin: 0xffdcc4, trunks: 0x14141a, trunksTrim: 0x2a2a33, trunksText: '',
     bodyColor: 0x17171e, sleeves: 0xffdcc4, pants: 0xffdcc4,          // 검은 원피스 (팔·다리는 맨살)
     gloves: 0xffdcc4, noGloves: true, shoes: 0x1b1b22, shoesTrim: 0x3a3a46,   // 단화
     hair: 0x2a1a16, hairStyle: 'bob', brows: 'thin', eyes: 'big', mouth: 'grin',
@@ -88,7 +88,7 @@ export const CHARACTERS = {
   },
   // 쩡효: 중간 키, 긴 생머리 + 흰 피부. 덤벨 펀치(무겁다), 필살 = 바벨 내려찍기
   jjeonghyo: {
-    name: 'JJEONGHYO', skin: 0xfdeade, trunks: 0x14141a, trunksTrim: 0x2a2a33, trunksText: '',
+    name: 'JJEONGHYO', gender: 'f', skin: 0xfdeade, trunks: 0x14141a, trunksTrim: 0x2a2a33, trunksText: '',
     bodyColor: 0xf4f4f0, sleeves: 0xfdeade, pants: 0x1a1a20,          // 흰 티 + 검정 레깅스
     chestText: 'HDEX', chestTextColor: '#111118',
     gloves: 0xfdeade, noGloves: true, shoes: 0xf0f0f0, shoesTrim: 0xc0f000,
@@ -99,7 +99,7 @@ export const CHARACTERS = {
   },
   // 뼈석원: 큰 키, 구릿빛 피부에 마른 몸. 뼈펀치(리치 최장), 필살 = 오토바이 돌진
   ppyeo: {
-    name: 'PPYEO', skin: 0xb07848, trunks: 0x2f4f86, trunksTrim: 0x24406e, trunksText: '',
+    name: 'PPYEO', gender: 'm', skin: 0xb07848, trunks: 0x2f4f86, trunksTrim: 0x24406e, trunksText: '',
     bodyColor: 0xf2f2f4, sleeves: 0xb07848, pants: 0x2f4f86,          // 스티치 티 + 청바지
     chestText: 'STITCH', chestTextColor: '#2ba8e0', chestArt: 'stitch',
     gloves: 0xb07848, noGloves: true, shoes: 0xe8e8ec, shoesTrim: 0x2f4f86,
@@ -110,7 +110,7 @@ export const CHARACTERS = {
   },
   // 오승현: 가장 작고 하얀 피부. 빵을 들고 계속 먹는다. 소심하지만 갑자기 때린다
   ohsh: {
-    name: 'OHSH', skin: 0xfff0e6, trunks: 0xfaf3ea, trunksTrim: 0xe8c9a0, trunksText: '',
+    name: 'OHSH', gender: 'f', skin: 0xfff0e6, trunks: 0xfaf3ea, trunksTrim: 0xe8c9a0, trunksText: '',
     bodyColor: 0xfdf6ec, sleeves: 0xfff0e6, pants: 0xe8dbc8,
     gloves: 0xfff0e6, noGloves: true, shoes: 0xf4e7d4, shoesTrim: 0xd9a95c,
     hair: 0x14131a, hairStyle: 'bobsharp', brows: 'thin', eyes: 'big', mouth: 'grit',
@@ -120,7 +120,7 @@ export const CHARACTERS = {
   },
   // 정주원: 뚱뚱한 보통 체격, 헤드폰. 삼각김밥을 계속 먹는다
   jungjuwon: {
-    name: 'JUNGJUWON', skin: 0xf0c9a0, trunks: 0x2e2e38, trunksTrim: 0x5b5be0, trunksText: '',
+    name: 'JUNGJUWON', gender: 'm', skin: 0xf0c9a0, trunks: 0x2e2e38, trunksTrim: 0x5b5be0, trunksText: '',
     bodyColor: 0x3c4250, sleeves: 0xf0c9a0, pants: 0x2a2f3a,
     gloves: 0xf0c9a0, noGloves: true, shoes: 0x2e2e38, shoesTrim: 0x5b5be0,
     hair: 0x1c1712, hairStyle: 'spiky', brows: 'thick', eyes: 'round', mouth: 'grin',
@@ -131,7 +131,7 @@ export const CHARACTERS = {
   },
   // 고코몽: 약간 작은 체격, 하늘색 긴 티. 감정이 없다
   gokomong: {
-    name: 'GOKOMONG', skin: 0xecc6a4, trunks: 0x2b3440, trunksTrim: 0x7fd4f5, trunksText: '',
+    name: 'GOKOMONG', gender: 'm', skin: 0xecc6a4, trunks: 0x2b3440, trunksTrim: 0x7fd4f5, trunksText: '',
     bodyColor: 0x8fd6f2, sleeves: 0x8fd6f2, pants: 0x3b4450,     // 하늘색 긴팔 티
     gloves: 0xecc6a4, noGloves: true, shoes: 0x2b3440, shoesTrim: 0x8fd6f2,
     hair: 0x1a1a20, hairStyle: 'bob', brows: 'thin', eyes: 'narrow', mouth: 'grit',
