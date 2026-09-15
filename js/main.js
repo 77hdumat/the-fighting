@@ -820,17 +820,28 @@ class Game {
 
   /** 팀전 교체: 쓰러진 팀의 다음 선수를 올린다 */
   updateSubs(dt) {
-    if (!this.teamMode || this.over || this.mode === 'client') return;
+    if (!this.teamMode || this.mode === 'client') return;
+    // 쓰러진 선수는 KO 연출 뒤 무대에서 내보낸다 (시체가 남아 "차례 아닌 사람이 서 있는" 것처럼 보이던 문제)
+    for (const f of this.fighters) {
+      if (f.ko && !f.benched && (f.koT > 2.2 || f.fallY > 6)) {
+        this.setBenched(f, true);
+        if (this.mode === 'host') this.pendingEvents.push({ t: 'out', s: f.slot });
+      }
+    }
+    if (this.over) return;
     const teams = {};
     for (const f of this.fighters) {
       const t = f.team;
       if (!teams[t]) teams[t] = { alive: [], active: [], bench: [] };
       if (!f.ko) teams[t].alive.push(f);
       if (!f.benched && !f.ko) teams[t].active.push(f);
-      if (f.benched && !f.ko) teams[t].bench.push(f);
+      if (f.benched && !f.ko) teams[t].bench.push(f);   // 퇴장한 시체(ko)는 후보에서 제외
     }
     for (const t in teams) {
       const T = teams[t];
+      // 아직 무대에 남아있는(퇴장 전) 쓰러진 선수가 있으면 교체를 기다린다
+      const corpseOnStage = this.fighters.some((f) => f.team == t && f.ko && !f.benched);
+      if (corpseOnStage) { if (this._subT) this._subT[t] = 0; continue; }
       if (T.active.length === 0 && T.bench.length > 0) {
         // 2.2초 뒤 다음 주자 등장
         this._subT = this._subT || {};
@@ -880,6 +891,9 @@ class Game {
   beginIntro() {
     this.phase = 'intro';
     this.skipVotes = new Set();
+    // 등장씬에는 후보 선수까지 전원 소개 (벤치는 인트로가 끝나면 다시 숨긴다)
+    this.introBench = this.fighters.filter((f) => f.benched);
+    for (const f of this.introBench) f.rig.root.visible = true;
     this.intro.start();
     document.getElementById('skip-hint').classList.remove('hidden');
     const humans = this.fighters.filter((f) => !f.isAI).length;
@@ -894,6 +908,7 @@ class Game {
     clearTimeout(this._introNameT); this._introNameT = setTimeout(() => el.classList.add('hidden'), 3000);
   }
   endIntro() {
+    if (this.introBench) { for (const f of this.introBench) if (f.benched) f.rig.root.visible = false; this.introBench = null; }
     if (this.phase !== 'intro') return;
     this.intro.finish();
     document.getElementById('intro-name').classList.add('hidden');
@@ -1448,6 +1463,7 @@ class Game {
         this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.34, '가드!!', 'dodge');
         if (b) this.sparks.burst(b.chestPos, a ? a.forward : new THREE.Vector3(0, 0, 1), 26, new THREE.Color(0.75, 0.9, 1), 1.4, 0.7);
       }
+      else if (e.t === 'out') { const f = this.fighters[e.s]; if (f) this.setBenched(f, true); }
       else if (e.t === 'sub') {
         const f = this.fighters[e.s];
         if (f) { this.setBenched(f, false); this.audio.bell(1); this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, `${f.nick || f.name} 등장!`, 'dodge'); }

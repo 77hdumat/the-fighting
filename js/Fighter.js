@@ -593,7 +593,7 @@ export class Fighter {
     let pushing = false;
     if (ARENA.kind === 'cliff') {
       // ---- 암벽: 로프가 없다. 가장자리를 넘으면 그대로 추락 ----
-      if (this.fallT <= 0 && !this.ko) {
+      if (this.fallT <= 0 && this.fallY <= 0.01) {
         const r = Math.hypot(this.pos.x, this.pos.z);
         const edge = ARENA.radius(this.pos.x, this.pos.z);
         if (r > edge) {
@@ -855,7 +855,7 @@ export class Fighter {
       p.shinL += 0.85 + Math.max(0, flail) * 0.5; p.shinR += 0.8 + Math.max(0, -flail) * 0.5;
       p.waistX += -0.35 - 0.25 * tip; p.headX += -0.55; p.headZ += flail * 0.25;
       this.queue.length = 0;
-      if (this.fallT <= 0) { this.fallT = 0; this.hp = 0; if (!this.ko) { this._die(); this.events.push({ type: 'fellDead' }); } }
+      if (this.fallT <= 0) { this.fallT = 0; this.hp = 0; if (!this.ko) { this._die(); this.events.push({ type: 'fellDead' }); } this.fellOut = true; }
     }
     // ---- 연출형 필살: 시전자 ----
     if (this.ultT > 0) {

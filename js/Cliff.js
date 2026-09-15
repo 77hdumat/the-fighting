@@ -184,7 +184,8 @@ export function buildCliff(scene) {
     /** 무너진 섹터는 반경 0 → 그 방향은 발판이 없다 */
     radius: (x, z) => {
       const sec = sectors[sectorOf(x, z)];
-      if (sec && sec.state === 'gone') return 0.0;
+      // 조각이 떨어져 나가기 시작하면 그 순간부터 발판이 없다
+      if (sec && (sec.state === 'gone' || sec.state === 'falling')) return 0.0;
       return cliffRadius(x, z, R);
     },
     /** 흔들리는 중인 섹터인지 (연출/경고용) */
