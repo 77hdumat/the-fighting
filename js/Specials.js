@@ -53,9 +53,9 @@ export const SPECIALS = {
   },
   rush: { name: 'ラッシュ', ko: '러시 3연 훅', burst: true, cd: 6 },
 
-  // ---- 히든: 채채더킴 (책) ----
-  bookSmash: {
-    name: 'ブックスマッシュ', ko: '책 후려치기', side: 'R', dur: 0.42, power: 1.25, cd: 6, heavy: true, staggerT: 1.6, step: 2.4,
+  // ---- 히든: 채채더킴 (마케터) ----
+  marketerPunch: {
+    name: 'マーケタパンチ', ko: '마케터 펀치', side: 'R', dur: 0.42, power: 1.25, cd: 6, heavy: true, staggerT: 1.6, step: 2.4,
     wind: { x: 0.7, y: 0.75, z: 0.85, el: -2.3 }, strike: { x: -1.95, y: -0.55, z: 0.6, el: -0.35 },
     body(p, w, s, sgn) {
       p.waistX += 0.35 * w - 0.3 * s; p.waistY += sgn * (0.6 * w - 1.0 * s); p.chestY += sgn * (0.3 * w - 0.5 * s);
@@ -129,7 +129,7 @@ export const KITS = {
   miyata:  { stance: 'counter', finisher: 'jolt',         U: 'jolt', I: 'backjab', cdU: 3.5 },
   sendo:   { stance: 'smash',   finisher: 'smash',        U: 'smash', I: 'rush', cdU: 10 },
   // 히든
-  chaechae:  { stance: 'flicker', finisher: 'reels',   U: 'bookSmash',     I: 'nyangRush', cdU: 5.5 },
+  chaechae:  { stance: 'flicker', finisher: 'reels',   U: 'marketerPunch', I: 'nyangRush', cdU: 5.5 },
   jjeonghyo: { stance: 'smash',   finisher: 'barbell', U: 'dumbbellPress', I: 'deadlift',  cdU: 6.5 },
   ppyeo:     { stance: 'counter', finisher: 'bike',    U: 'helmetBash',    I: 'teaThrow',  cdU: 5 },
 };
@@ -143,7 +143,7 @@ export const STANCE_LINES = {
 
 // 히든 캐릭터 전용 대사 (한국어 — 게이지/필살/등장)
 export const HIDDEN_LINES = {
-  chaechae: { intro: '난 문화생활을 좋아해~', max: '이거 릴스각인데?', fin: '자, 같이 춤춰!', u: '이 책 읽어봤어?', hit: ['냥!', '냥냥!', '이건 찍어야 해'] },
+  chaechae: { intro: '난 문화생활을 좋아해~', max: '이거 릴스각인데?', fin: '자, 같이 춤춰!', u: '이번 분기 KPI 찍고 간다!', hit: ['냥!', '냥냥!', '이건 찍어야 해'] },
   jjeonghyo: { intro: '3대 500 미만 대화 금지.', max: '무게 올린다.', fin: '데드리프트… 받아!', u: '마지막 한 개 더!', hit: ['하압!', '한 세트 더!', '가볍네'] },
   ppyeo: { intro: '난 먹어도 살 안 쪄.', max: '시동 건다.', fin: '부아아앙—!!', u: '헬멧은 필수지!', hit: ['뼈!', '뼈뼈!', '부릉'] },
 };

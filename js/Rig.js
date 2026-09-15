@@ -231,10 +231,15 @@ function buildHeldItem(kind, glove, part, sx) {
       rim.rotation.x = Math.PI / 2;
     }
   } else if (kind === 'helmet') {
-    const shell = part(new THREE.SphereGeometry(0.115, 16, 12), 0x15151c, glove, 0, -0.03, 0.06);
-    shell.scale.set(1, 0.95, 1.05);
-    const visor = part(new THREE.SphereGeometry(0.108, 16, 10, -0.9, 1.8, 0.7, 0.75), 0x3fd0ff, shell, 0, 0.005, 0.012, false);
-    const stripe = part(new THREE.BoxGeometry(0.03, 0.2, 0.2), 0xff2d2d, shell, 0, 0.02, -0.01, false);
+    // 하이바: 크고 밝은 흰/빨강 풀페이스 + 하늘색 바이저 (멀리서도 눈에 띈다)
+    const shell = part(new THREE.SphereGeometry(0.165, 18, 14), 0xf6f7fa, glove, 0, -0.06, 0.1);
+    shell.scale.set(1.0, 1.02, 1.08);
+    const chin = part(new THREE.BoxGeometry(0.2, 0.12, 0.16), 0xf6f7fa, shell, 0, -0.1, 0.09);
+    const visor = part(new THREE.SphereGeometry(0.158, 18, 12, -1.05, 2.1, 0.75, 0.62), 0x35c8ff, shell, 0, 0.015, 0.02, false);
+    visor.material.emissive = new THREE.Color(0x1a6f96); visor.material.emissiveIntensity = 0.8;
+    const stripe = part(new THREE.BoxGeometry(0.052, 0.3, 0.3), 0xe0222c, shell, 0, 0.02, -0.02, false);
+    const stripe2 = part(new THREE.BoxGeometry(0.19, 0.045, 0.3), 0xe0222c, shell, 0, 0.1, -0.02, false);
+    const vent = part(new THREE.BoxGeometry(0.1, 0.03, 0.06), 0x2b2b33, shell, 0, 0.12, 0.13, false);
   } else if (kind === 'bottle') {
     const body = part(new THREE.CylinderGeometry(0.045, 0.05, 0.22, 12), 0x2f7d32, glove, 0, -0.05, 0.05);
     const label = part(new THREE.CylinderGeometry(0.052, 0.052, 0.085, 12), 0xf3f6e8, body, 0, -0.01, 0, false);

@@ -226,7 +226,8 @@ export class Fighter {
       this.events.push({ type: 'special', kind });
       return true;
     }
-    if (kind === 'dumbbellPress' || kind === 'bookSmash') this.audio.clang(kind === 'bookSmash' ? 0.35 : 0.9);
+    if (kind === 'dumbbellPress') this.audio.clang(0.9);
+    else if (kind === 'marketerPunch') { this.audio.clang(0.3); this.audio.shutter(); }
     else if (kind === 'helmetBash') this.audio.engine(0.5);
     const ok = this.startPunch(spec.side, 'special', spec.dur, spec.power, { kind, heavy: !!spec.heavy, launch: spec.launch || 0, staggerT: uStag, zoneForce: spec.zone || null, liver: !!spec.liver, counterMul: spec.counterMul || 1, step: spec.step || 0, noTell: !!spec.quick, fromU: isU });
     if (!ok) { this.cd[slotKey] = 0; this.armor = 0; return false; }
@@ -766,10 +767,28 @@ export class Fighter {
         p.shLX += -0.95; p.elL += -2.35; p.shLY += -1.0; p.shRX += -0.9; p.elR += -2.35; p.shRY += 1.0;
         p.chestX += 0.12; p.headX += -0.1 + Math.sin(t * 3) * 0.06; p.hipsX += Math.sin(t * 1.6) * 0.04;
       } else if (k === 'bike') {
-        // 오토바이를 들어올리다 휘청 → 던지고 나동그라짐
+        // ① 웅크려 들어올림 → ② 머리 위에서 휘청 → ③ 미끄러져 놓침 → ④ 반동으로 뒤로 휘청
         const u = (3.0 - this.ultT);
-        if (u < 0.9) { p.shLX += -2.6; p.shRX += -2.6; p.elL += -0.5; p.elR += -0.5; p.waistX += -0.35 + Math.sin(t * 14) * 0.08; p.thighLX += -0.3; p.thighRX += -0.3; p.shinL += 0.5; p.shinR += 0.5; }
-        else { p.shLX += -1.4; p.shRX += -1.4; p.waistX += 0.5; p.headX += 0.25; p.hipsY += -0.12; }
+        if (u < 0.55) {
+          const kk = u / 0.55;
+          p.shLX += -1.0 - 1.5 * kk; p.shRX += -1.0 - 1.5 * kk; p.elL += -1.2 + 0.7 * kk; p.elR += -1.2 + 0.7 * kk;
+          p.hipsY += -0.35 + 0.3 * kk; p.thighLX += -0.75 + 0.6 * kk; p.thighRX += -0.75 + 0.6 * kk;
+          p.shinL += 1.25 - 1.0 * kk; p.shinR += 1.25 - 1.0 * kk; p.waistX += 0.45 - 0.75 * kk; p.headX += -0.2 * kk;
+        } else if (u < 1.05) {
+          const wob = Math.sin(t * 13) * 0.16;
+          p.shLX += -2.75; p.shRX += -2.75; p.elL += -0.4; p.elR += -0.4;
+          p.waistX += -0.4 + wob * 0.5; p.waistZ += wob; p.hipsX += wob * 0.12; p.headX += -0.45;
+          p.thighLX += -0.2 - wob * 0.3; p.thighRX += -0.2 + wob * 0.3; p.shinL += 0.35; p.shinR += 0.35;
+        } else if (u < 1.4) {
+          const kk = (u - 1.05) / 0.35;
+          p.shLX += -2.7 + 0.9 * kk; p.shRX += -2.7 + 0.9 * kk; p.shLZ += 0.5 * kk; p.shRZ += -0.5 * kk;
+          p.waistX += -0.3 + 0.9 * kk; p.headX += -0.3 + 0.6 * kk; p.hipsY += -0.05 * kk;
+        } else {
+          const kk = Math.min(1, (u - 1.4) / 0.6);
+          p.shLX += -1.2 + 0.5 * kk; p.shRX += -1.2 + 0.5 * kk; p.elL += -0.9; p.elR += -0.9;
+          p.waistX += 0.55 - 0.25 * kk; p.headX += 0.3 - 0.1 * kk; p.hipsY += -0.14 + 0.1 * kk;
+          p.hipsX += Math.sin(t * 6) * 0.05 * (1 - kk);
+        }
       }
       this.queue.length = 0;
       if (this.ultT <= 0) { this.ultT = 0; this.ultKind = null; this.ultTarget = null; this.armor = 0; }
