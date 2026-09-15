@@ -113,7 +113,20 @@ class Game {
     window.addEventListener('keydown', (e) => { this.lastKeyT = this.realTime; this.lastKey = e.code; }, true);
     canvas.addEventListener('pointerdown', () => { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); canvas.focus(); });
     this.setupLobby();
+    this.autoJoinFromUrl();
     requestAnimationFrame((t) => this.loop(t));
+  }
+
+  /** 주소에 ?r=코드 가 있으면 코드 채우고 바로 입장 시도 */
+  autoJoinFromUrl() {
+    let code = '';
+    try { code = (new URLSearchParams(location.search).get('r') || '').toUpperCase().trim(); } catch (e) {}
+    if (!/^[A-Z0-9]{5}$/.test(code)) return;
+    const input = document.getElementById('join-code');
+    if (input) input.value = code;
+    const hint = document.querySelector('#menu .hint');
+    if (hint) hint.textContent = `초대 링크로 입장 중… (방 ${code})`;
+    setTimeout(() => { if (this.net.role === 'none' && !this.started) { this.audio.init(); this.joinRoom(code); } }, 350);
   }
 
   // ================= 로비 =================
@@ -152,14 +165,20 @@ class Game {
     // 방코드 클릭 → 클립보드 복사 (URL 포함 텍스트도 함께)
     const codeEl = $('room-code');
     codeEl.title = '클릭하면 복사';
+    // 방 링크: 주소에 ?r=코드 를 붙여 두면 받는 쪽은 누르기만 하면 바로 입장
+    this.inviteUrl = (code) => `${location.origin}${location.pathname}?r=${code}`;
     const copyCode = async () => {
       const code = codeEl.textContent.trim();
       if (!code || code === '-----') return;
-      const text = `${location.origin}${location.pathname}  방코드: ${code}`;
-      try { await navigator.clipboard.writeText(text); }
-      catch (e) { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
+      const url = this.inviteUrl(code);
+      // 모바일이면 공유 시트로 (카톡/메신저 바로 전달)
+      if (navigator.share && this.isTouch) {
+        try { await navigator.share({ title: '더파이팅', text: `같이 하자! 방코드 ${code}`, url }); this.lobbyMsg('공유했습니다'); return; } catch (e) { /* 취소 시 복사로 폴백 */ }
+      }
+      try { await navigator.clipboard.writeText(url); }
+      catch (e) { const ta = document.createElement('textarea'); ta.value = url; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
       codeEl.classList.add('copied');
-      this.lobbyMsg(`복사됨: ${code} (URL 포함)`);
+      this.lobbyMsg('초대 링크 복사됨 — 붙여넣으면 바로 입장됩니다');
       setTimeout(() => codeEl.classList.remove('copied'), 900);
     };
     codeEl.addEventListener('click', copyCode);
@@ -376,6 +395,7 @@ class Game {
     this.net = new Net();
     this.roster = null; this.names = [this.myNick]; this.chars = [this.myChar]; this.intros = [this.myIntro];
     this.mode = 'solo'; this.kicked = false; this.migrating = false;
+    try { history.replaceState(null, '', location.pathname); } catch (e) {}
     this.showMenu();
     if (reason) this.lobbyMsg(reason);
     const hint = document.querySelector('#menu .hint'); if (hint && reason) { hint.textContent = reason; setTimeout(() => { hint.textContent = 'J/K 펀치 · U 반격기 · I 고유기 · L 필살 · SHIFT 가드'; }, 4000); }
@@ -475,7 +495,7 @@ class Game {
     const net = this.net;
     this.names = [this.myNick]; this.chars = [this.myChar]; this.intros = [this.myIntro];
     this.roster = [{ type: 'local', name: this.myNick, char: this.myChar }, { type: 'empty' }, { type: 'empty' }, { type: 'empty' }];
-    net.onOpen = (code) => { this.showLobby(code); this.renderRoster(this.roster); document.getElementById('btn-start').classList.remove('hidden'); this.lobbyMsg('친구에게 코드를 알려주세요. 참가한 사람끼리만 싸웁니다 (2~4명). 시작 버튼으로 시작'); this.broadcastLobby(); };
+    net.onOpen = (code) => { try { history.replaceState(null, '', `?r=${code}`); } catch (e) {} this.showLobby(code); this.renderRoster(this.roster); document.getElementById('btn-start').classList.remove('hidden'); this.lobbyMsg('친구에게 코드를 알려주세요. 참가한 사람끼리만 싸웁니다 (2~4명). 시작 버튼으로 시작'); this.broadcastLobby(); };
     net.onError = (e) => this.lobbyMsg('연결 오류: ' + (e.type || e));
     net.onJoin = (slot) => { this.names[slot] = 'P' + (slot + 1); this.roster[slot] = { type: 'remote', name: this.names[slot] }; this.renderRoster(this.roster); this.broadcastLobby(); if (this.started) this.net.conns[slot - 1].send({ t: 'full' }); };
     net.onLeave = (slot) => {

@@ -118,7 +118,7 @@
       </div>
 
       <div class="lobby hidden" id="lobby">
-        <div class="code">ROOM CODE <b id="room-code">-----</b></div>
+        <div class="code">ROOM CODE <b id="room-code" title="클릭 = 초대 링크 복사">-----</b><span class="code-hint">클릭하면 초대 링크 복사 (링크만 보내면 바로 입장)</span></div>
         <ul id="roster"></ul>
         <div class="lobby-msg" id="lobby-msg"></div>
         <div class="lobby-row">
@@ -154,6 +154,6 @@
       var iv = setInterval(function () { if (window.game) { boot.remove(); sessionStorage.removeItem('dr-reloaded'); clearInterval(iv); } }, 100);
     })();
   </script>
-  <script type="module" src="js/main.js?v=1789457262" onerror="__bootFail('모듈 로드 실패 (구버전 캐시)')"></script>
+  <script type="module" src="js/main.js?v=1789457536" onerror="__bootFail('모듈 로드 실패 (구버전 캐시)')"></script>
 </body>
 </html>

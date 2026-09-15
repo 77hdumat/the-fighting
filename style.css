@@ -299,3 +299,5 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
 #next-overlay .charsel .card.hidden-btn { flex: 0 0 74px; max-width: 74px; }
 #next-overlay .charsel .card.hidden-btn .q { font-size: 30px; }
 #skip-hint.voted { color: #ffd34d; border-color: #ffd34d; }
+
+#lobby .code .code-hint { display: block; font-size: 11px; font-weight: 700; color: #6b6b7a; letter-spacing: 0; margin-top: 2px; font-family: "Noto Sans JP", sans-serif; }
