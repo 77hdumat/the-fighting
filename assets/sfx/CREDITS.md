@@ -17,7 +17,6 @@
 | `lightning.mp3` | Lightning Strike (DRAGON-STUDIO) | 뎀프시롤 좌우 훅 | https://pixabay.com/ko/sound-effects/lightning-strike-386161/ |
 | `block.mp3` | Slap Hurt Pain Sound Effect (Homemade_SFX) | 가드로 막았을 때 | https://pixabay.com/ko/sound-effects/slap-hurt-pain-sound-effect-262618/ |
 | `dodge.mp3` | Whoosh Blow Flutter Short (freesound_community) | 회피 (주먹이 허공을 가름) | https://pixabay.com/ko/sound-effects/whoosh-blow-flutter-shortwav-14678/ |
-| `beep.mp3` | CountDown Beep (freesound_community) | 카운트다운 3·2·1·FIGHT | https://pixabay.com/sound-effects/id-104007/ |
 | `riser.mp3` | Tension buildup riser v1 HD (MIGHTUSER) | 뎀프시 게이지 단계 상승 · 가드브레이크 | https://pixabay.com/sound-effects/id-270305/ |
 | `charge.mp3` | Energy Charge-Up Full Power (humordome) | 필살기 차지 | https://pixabay.com/sound-effects/id-452848/ |
 | `engine.mp3` | Motorcycle Engine Rev (TanwerAman) | 오토바이 필살 (뼈석원) | https://pixabay.com/sound-effects/id-337867/ |
@@ -65,5 +64,8 @@ mp3 인코더 패딩(앞뒤 무음)을 루프 구간에서 제외한다.
 ## 남은 합성음
 
 `swoosh`(펀치 휘두름), `whoosh`(스웨이 바람), `bassHit`, `stagger`, `ko`, `clang`, `nyang`,
-`shutter`, `cheer`, `maxSpeed`, `guardHeavy`, `finisherWind` — 전부 노이즈/사인/삼각파 계열이라
-'도트음'으로 들리지 않는다. 사각파(square)·톱니파(sawtooth)를 쓰던 것은 모두 샘플로 교체됐다.
+`shutter`, `cheer`, `maxSpeed`, `guardHeavy`, `finisherWind`, `beep`(카운트다운) — 전부 노이즈/사인/삼각파 계열이라
+'도트음'으로 들리지 않는다.
+
+`beep`(카운트다운)은 사각파지만 샘플보다 기존 합성음이 낫다는 판단으로 되돌렸다.
+그 외 사각파·톱니파를 쓰던 것(`riser`, `chargeUp`, `engine`)은 모두 샘플로 교체됐다.

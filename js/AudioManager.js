@@ -16,7 +16,6 @@ const SFX_SAMPLES = {
   lightning: 'lightning.mp3', // 뎀프시롤 좌우 훅마다 터지는 번개
   block: 'block.mp3',         // 가드로 막았을 때
   dodge: 'dodge.mp3',         // 회피 (주먹이 허공을 가름)
-  beep: 'beep.mp3',           // 카운트다운 3·2·1·FIGHT
   riser: 'riser.mp3',         // 뎀프시 게이지 단계 상승 · 가드 브레이크
   charge: 'charge.mp3',       // 필살기 차지
   engine: 'engine.mp3',       // 오토바이 필살 (뼈석원)
@@ -535,10 +534,9 @@ export class AudioManager {
   }
 
   /** 카운트다운 비프 */
+  // 카운트다운은 합성 사각파 그대로 둔다 (샘플로 바꿔봤지만 기존 쪽이 더 낫다는 판단)
   beep(high = false) {
     if (!this.ctx) return;
-    // FIGHT! 은 같은 샘플을 높게 재생해 구분한다
-    if (this._play('beep', { gain: high ? 0.75 : 0.5, rate: high ? 1.5 : 1 })) return;
     const ctx = this.ctx, t = ctx.currentTime;
     const o = ctx.createOscillator(); o.type = 'square'; o.frequency.value = high ? 1320 : 880;
     const g = ctx.createGain(); g.gain.setValueAtTime(0.18, t); g.gain.exponentialRampToValueAtTime(0.001, t + (high ? 0.35 : 0.15));
