@@ -332,7 +332,14 @@ class Game {
       this.chars[0] = this.myChar;
       cfg = [];
       this.intros[0] = this.myIntro;
-      this.roster.forEach((r, i) => { if (r.type !== 'empty') cfg.push({ type: r.type, netSlot: i, name: this.names[i], char: this.chars[i] || this.charOf(i), intro: (this.intros && this.intros[i]) || '' }); });
+      const seats2 = this.seats && this.seats.length === 4 ? this.seats : [0, 1, 2, 3];
+      seats2.forEach((ns, seat) => {
+        const r = this.roster[ns];
+        if (!r || r.type === 'empty') return;
+        const c = { type: r.type, netSlot: ns, seat, name: this.names[ns], char: this.chars[ns] || this.charOf(ns), intro: (this.intros && this.intros[ns]) || '' };
+        if (this.myRule === 'team') c.team = seat % 2;
+        cfg.push(c);
+      });
       if (cfg.length < 2) { document.getElementById('next-msg').textContent = '2명 이상 필요'; return; }
       this.net.broadcast({ t: 'restart', cfg });
     }
@@ -524,39 +531,70 @@ class Game {
 
   renderRoster(list) {
     this.roster = this.roster || list;
+    if (!this.seats || this.seats.length !== 4) this.seats = [0, 1, 2, 3];
     const team = this.myRule === 'team';
+    const host = this.net.role === 'host';
     const wrap = document.getElementById('roster-wrap');
     const teams = document.getElementById('roster-teams');
     if (wrap) wrap.classList.toggle('hidden', team);
     if (teams) teams.classList.toggle('hidden', !team);
-    const row = (r, i) => {
+
+    const swapSeats = (a, b) => {
+      if (a === b) return;
+      const t = this.seats[a]; this.seats[a] = this.seats[b]; this.seats[b] = t;
+      this.renderRoster(this.roster);
+      this.broadcastLobby();
+    };
+
+    const row = (seat) => {
+      const ns = this.seats[seat];
+      const r = list[ns] || { type: 'empty' };
       const li = document.createElement('li');
       li.className = r.type === 'empty' ? 'empty' : '';
-      const who = r.type === 'empty' ? '빈 자리' : (r.name || this.nickOf(i)) + (r.type === 'local' ? ' (YOU)' : '');
-      const ch = r.type === 'empty' ? '—' : CHARACTERS[r.char || this.charOf(i)].name;
-      li.textContent = `${ch} · ${who}`;
-      if (this.net.role === 'host' && r.type === 'remote') {
-        const kb = document.createElement('button'); kb.className = 'kick'; kb.textContent = '강퇴'; kb.title = '강퇴';
-        kb.addEventListener('click', (e) => { e.stopPropagation(); this.kickPlayer(i); });
+      li.dataset.seat = seat;
+      const who = r.type === 'empty' ? '빈 자리' : (r.name || this.nickOf(ns)) + (r.type === 'local' ? ' (YOU)' : '');
+      const ch = r.type === 'empty' ? '—' : CHARACTERS[r.char || this.charOf(ns)].name;
+      li.appendChild(document.createTextNode(`${ch} · ${who}`));
+      if (host && r.type === 'remote') {
+        const kb = document.createElement('button'); kb.className = 'kick'; kb.textContent = '강퇴';
+        kb.addEventListener('click', (e) => { e.stopPropagation(); this.kickPlayer(ns); });
         li.appendChild(kb);
+      }
+      // ---- 방장 전용 드래그앤드랍: 좌석끼리 교환 (빈 자리에 놓으면 이동) ----
+      if (host) {
+        li.draggable = r.type !== 'empty';
+        if (li.draggable) li.classList.add('drag');
+        li.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', String(seat)); e.dataTransfer.effectAllowed = 'move'; li.classList.add('dragging'); });
+        li.addEventListener('dragend', () => li.classList.remove('dragging'));
+        li.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; li.classList.add('dragover'); });
+        li.addEventListener('dragleave', () => li.classList.remove('dragover'));
+        li.addEventListener('drop', (e) => {
+          e.preventDefault(); li.classList.remove('dragover');
+          const from = parseInt(e.dataTransfer.getData('text/plain'), 10);
+          if (!isNaN(from)) swapSeats(from, seat);
+        });
       }
       return li;
     };
+
     if (team) {
       const a = document.getElementById('roster-a'), b = document.getElementById('roster-b');
       a.innerHTML = ''; b.innerHTML = '';
-      list.forEach((r, i) => (i % 2 === 0 ? a : b).appendChild(row(r, i)));
+      for (let seat = 0; seat < 4; seat++) (seat % 2 === 0 ? a : b).appendChild(row(seat));
     } else {
       const ul = document.getElementById('roster');
       ul.innerHTML = '';
-      list.forEach((r, i) => ul.appendChild(row(r, i)));
+      for (let seat = 0; seat < 4; seat++) ul.appendChild(row(seat));
     }
+    const hintEl = document.getElementById('roster-hint');
+    if (hintEl) hintEl.textContent = host ? '선수를 끌어다 자리를 바꿀 수 있습니다 (서로 교환)' : '';
   }
 
   hostRoom(code = null) {
     const net = this.net;
     this.names = [this.myNick]; this.chars = [this.myChar]; this.intros = [this.myIntro];
     this.roster = [{ type: 'local', name: this.myNick, char: this.myChar }, { type: 'empty' }, { type: 'empty' }, { type: 'empty' }];
+    this.seats = [0, 1, 2, 3];   // 좌석 → netSlot (방장이 드래그로 바꾼다)
     net.onOpen = (code) => { try { history.replaceState(null, '', `?r=${code}`); } catch (e) {} this.showLobby(code); this.showRoomRules(); this.renderRoster(this.roster); document.getElementById('btn-start').classList.remove('hidden'); this.lobbyMsg('친구에게 코드를 알려주세요. 참가한 사람끼리만 싸웁니다 (2~4명). 시작 버튼으로 시작'); this.broadcastLobby(); };
     net.onError = (e) => this.lobbyMsg('연결 오류: ' + (e.type || e));
     net.onJoin = (slot) => { this.names[slot] = 'P' + (slot + 1); this.roster[slot] = { type: 'remote', name: this.names[slot] }; this.renderRoster(this.roster); this.broadcastLobby(); if (this.started) this.net.conns[slot - 1].send({ t: 'full' }); };
@@ -592,17 +630,22 @@ class Game {
     net.host(3, code);
   }
 
-  broadcastLobby() { this.net.broadcast({ t: 'lobby', roster: this.roster, names: this.names, chars: this.chars, map: this.myMap, rule: this.myRule }); }
+  broadcastLobby() { this.net.broadcast({ t: 'lobby', roster: this.roster, names: this.names, chars: this.chars, map: this.myMap, rule: this.myRule, seats: this.seats }); }
 
   hostStart() {
     if (this.started) return;
     // 참가한 사람만 (빈 자리는 CPU 로 채우지 않음). netSlot = 접속 슬롯, 배열 인덱스 = 파이터 번호
     const cfg = [];
-    this.roster.forEach((r, i) => { if (r.type !== 'empty') cfg.push({ type: r.type, netSlot: i, name: this.names[i], char: this.chars[i] || this.charOf(i), intro: (this.intros && this.intros[i]) || '' }); });
+    const seats = this.seats && this.seats.length === 4 ? this.seats : [0, 1, 2, 3];
+    seats.forEach((ns, seat) => {
+      const r = this.roster[ns];
+      if (!r || r.type === 'empty') return;
+      cfg.push({ type: r.type, netSlot: ns, seat, name: this.names[ns], char: this.chars[ns] || this.charOf(ns), intro: (this.intros && this.intros[ns]) || '' });
+    });
     if (cfg.length < 2) { this.lobbyMsg('2명 이상 참가해야 시작할 수 있습니다'); return; }
     if (this.myRule === 'team') {
       if (cfg.length < 4) { this.lobbyMsg('2:2 팀전은 4명이 필요합니다 (지금 ' + cfg.length + '명)'); return; }
-      cfg.forEach((c, i) => { c.team = i % 2; });
+      cfg.forEach((c) => { c.team = (c.seat !== undefined ? c.seat : 0) % 2; });
     }
     this.net.started = true;
     this.net.broadcast({ t: 'start', cfg, map: this.myMap });
@@ -626,7 +669,7 @@ class Game {
     };
     net.onMessage = (m) => {
       if (m.t === 'welcome') { this.migrating = false; this.migrateTries = 0; this.lastSlot = m.slot; this.names = []; this.chars = []; net.send({ t: 'hello', name: this.myNick, char: this.myChar, intro: this.myIntro }); }
-      else if (m.t === 'lobby') { if (m.map) this.myMap = m.map; if (m.rule) this.myRule = m.rule; this.showRoomRules(); this.rosterRaw = m.roster; this.names = m.names || []; this.chars = m.chars || []; this.renderRoster(m.roster.map((r, i) => (i === net.mySlot ? { type: 'local', name: r.name } : i === 0 ? { type: 'remote', name: r.name } : r))); }
+      else if (m.t === 'lobby') { if (m.map) this.myMap = m.map; if (m.rule) this.myRule = m.rule; if (m.seats) this.seats = m.seats; this.showRoomRules(); this.rosterRaw = m.roster; this.names = m.names || []; this.chars = m.chars || []; this.renderRoster(m.roster.map((r, i) => (i === net.mySlot ? { type: 'local', name: r.name } : i === 0 ? { type: 'remote', name: r.name } : r))); }
       else if (m.t === 'full') this.lobbyMsg('방이 가득 찼거나 이미 시작됨');
       else if (m.t === 'start') { this.setMap(m.map || 'ring'); this.names = []; m.cfg.forEach((c) => { this.names[c.netSlot] = c.name; }); this.localSlot = Math.max(0, m.cfg.findIndex((c) => c.netSlot === net.mySlot)); this.startMatch('client', m.cfg); }
       else if (m.t === 'snap') { if (this.phase === 'fight') this.onSnapshot(m); }
@@ -689,7 +732,7 @@ class Game {
   startMatch(mode, cfg) {
     this.mode = mode;
     this.cfg = cfg;
-    if (mode !== 'client') this.localSlot = 0;
+    if (mode !== 'client') this.localSlot = Math.max(0, cfg.findIndex((c) => (c.netSlot ?? 0) === 0));
     this.buildFighters(cfg);
     this.started = true; this.over = false;
     if (this.isTouch) this.touch.setVisible(true);

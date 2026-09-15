@@ -330,3 +330,9 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
 /* 팀전 중 HUD 카드도 코너 색으로 */
 .fcard.team0 { border-left-color: #2f6fe0 !important; }
 .fcard.team1 { border-left-color: #e03a2f !important; }
+
+#lobby .roster-hint { font-size: 11px; color: #8a8a99; font-weight: 700; }
+#roster-teams li.drag, #roster li.drag { cursor: grab; }
+#roster-teams li.dragging, #roster li.dragging { opacity: .45; }
+#roster-teams li.dragover, #roster li.dragover { outline: 2px dashed #1c1c2e; outline-offset: 1px; background: #fffbe6; }
+#roster li { display: flex; align-items: center; gap: 8px; }
