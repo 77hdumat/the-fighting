@@ -1020,6 +1020,12 @@ class Game {
     const involved = mine || hurt;
     const P = ev.power;
     const body = ev.zone === 'body';
+    // 타격음 샘플 선택: 훅·카운터·필살기는 묵직하게, 잽·플리커는 가볍게,
+    // 뎀프시 연타는 후속타 샘플, 보디/리버는 둔탁한 샘플
+    const sfxKind = (ev.finisher || ev.counter || ev.kind || ev.heavy || ev.type === 'hook') ? 'hook'
+      : (body || ev.liver) ? 'body'
+      : ev.dempsey ? 'follow'
+      : 'jab';
     if (attacker) attacker.squash[ev.side] = 1;
     if (res.ignore) return;
     if (res.dance) {
@@ -1062,7 +1068,7 @@ class Game {
     }
     if (res.downed) {
       // ---- 쓰러지는 상대에게 추가타: 몸이 날아가고, 코치가 말린다 ----
-      this.audio.impact(0.6 + 0.4 * P); if (P > 0.8) this.audio.bassHit();
+      this.audio.impact(0.6 + 0.4 * P, 'body'); if (P > 0.8) this.audio.bassHit();
       this.sparks.burst(pos, dir, 18 + Math.round(20 * P), new THREE.Color(1, 0.9, 0.7), 1.4, 0.5);
       this.fx.addImpact(px, py, 0.6 * P, false);
       if (target) target.flash = 1;
@@ -1098,14 +1104,14 @@ class Game {
       else if (mine && Math.random() < 0.3) this.subs.show('固ぇ…！', { duration: 0.8, speaker: 'opp' });
       if (res.guardBreak) {
         this.subs.show('ガードが…！！', { duration: 1.2, mid: true, speaker: hurt ? 'player' : 'opp' });
-        this.audio.impact(1); this.audio.bassHit(); this.camCtl.onHit(dir, 1);
+        this.audio.impact(1, 'hook'); this.audio.bassHit(); this.camCtl.onHit(dir, 1);
       }
       return;
     }
     if (res.blocked && res.ko) {
       // 칩 데미지로 KO — 일반 KO 연출로 넘긴다
       this.stopPair(ev, 0.14, 1.6, 0.25);
-      this.audio.impact(1);
+      this.audio.impact(1, 'hook');
       if (involved) this.subs.show('ダウン！！', { duration: 2.4, strong: true, speaker: hurt ? 'opp' : 'player' });
       return;
     }
@@ -1114,12 +1120,12 @@ class Game {
       this.fx.addImpact(px, py, 0.25, false);
       this.sparks.burst(pos, dir, 8, new THREE.Color(0.8, 0.85, 1), 0.7, 0.35);
       this.stopPair(ev, 0.025); if (involved) this.camCtl.shakeAmp = Math.max(this.camCtl.shakeAmp, 0.02);
-      if (res.guardBreak && involved) { this.subs.show('ガードが…！！', { duration: 1.2, mid: true, speaker: hurt ? 'player' : 'opp' }); this.audio.impact(0.8); this.camCtl.onHit(dir, 0.9); }
+      if (res.guardBreak && involved) { this.subs.show('ガードが…！！', { duration: 1.2, mid: true, speaker: hurt ? 'player' : 'opp' }); this.audio.impact(0.8, 'hook'); this.camCtl.onHit(dir, 0.9); }
       else if (mine && Math.random() < 0.3) this.subs.show(Math.random() < 0.5 ? '読めてる…' : 'そんなもんか？', { duration: 0.9, speaker: 'opp' });
       return;
     }
     if (res.armored) {
-      this.audio.impact(0.4);
+      this.audio.impact(0.4, 'follow');
       this.fx.addImpact(px, py, 0.3, false);
       this.sparks.burst(pos, dir, 10, new THREE.Color(1, 0.6, 0.3), 0.8, 0.4);
       if (mine) this.subs.show('効かねぇ…！！', { duration: 0.9, mid: true, speaker: 'opp' });
@@ -1164,7 +1170,7 @@ class Game {
       this.fx.hurtFlash(P);
       setTimeout(() => { this.camCtl.shakeAmp = Math.max(this.camCtl.shakeAmp, 0.04 + 0.06 * P); }, 90); // 2차 진동
       this.fx.addImpact(px, py, 0.5 * P, false);
-      this.audio.impact(0.35 + 0.5 * P);
+      this.audio.impact(0.35 + 0.5 * P, sfxKind);
       if (ev.dempsey && P > 0.9) this.audio.bassHit();
       if (res.staggered) this.subs.show('ぐぅっ…！', { duration: 1.0, mid: true });
       else if (res.interrupted) this.subs.show('しまっ…！', { duration: 0.9, mid: true });
@@ -1173,7 +1179,7 @@ class Game {
       this.stopPair(ev, 0.05 + 0.05 * P + (body ? 0.02 : 0));
       if (mine) { this.camCtl.onHit(dir, P); this.post.onHit(P, uv.x, uv.y); this.fx.addImpact(px, py, P, ev.maxSpeed); }
       else this.fx.addImpact(px, py, 0.35 * P, false);
-      this.audio.impact(mine ? P : P * 0.6);
+      this.audio.impact(mine ? P : P * 0.6, sfxKind);
       if (mine && P >= 0.75) this.audio.bassHit();
       if (P >= 0.95) this.stopPair(ev, 0, 0.25, 0.45);
       if (mine && !res.ko) {
@@ -1354,7 +1360,7 @@ class Game {
         if (e.type === 'rushHit') {
           // 0.1초 도트라 연출은 솎아서 (소리/흔들림 폭주 방지)
           this._rushFxT = (this._rushFxT || 0) + 1;
-          if (this._rushFxT % 3 === 0) { this.camCtl.onHit(f.forward, 0.45); this.audio.impact(0.5); }
+          if (this._rushFxT % 3 === 0) { this.camCtl.onHit(f.forward, 0.45); this.audio.impact(0.5, 'follow'); }
           const tg = this.fighters[e.target];
           if (tg && this._rushFxT % 2 === 0) this.sparks.burst(tg.chestPos, f.forward, 8, new THREE.Color(1, 0.85, 0.5), 0.9, 0.35);
           if (this.mode === 'host' && this._rushFxT % 3 === 0) this.pendingEvents.push({ t: 'rush', s: f.slot, b: e.target });
@@ -1686,14 +1692,20 @@ class Game {
     // 카메라 (인트로 중엔 Intro 가 직접 제어)
     const f = new THREE.Vector3().subVectors(opp.pos, view.pos); f.y = 0; if (f.lengthSq() < 1e-6) f.set(0, 0, -1); f.normalize();
     const s = new THREE.Vector3(f.z, 0, -f.x);
-    if (this.phase !== 'intro') this.camCtl.update(rawDt, { playerPos: view.pos, oppPos: opp.pos, f, s, intensity: I, dempseyActive: d.active || !!view.finisher, sway: d.sway, maxSpeed: d.maxSpeed || !!view.finisher, hitStop: this.hitStop });
     // ---- 낙사 카메라: 떨어지는 선수를 따라 내려가며 지켜본다 ----
-    const faller = (view && (view.fallT > 0 || (view.ko && view.fallY > 0.5))) ? view
-      : this.fighters.find((x) => x.fallT > 0 && (x.slot === this.localSlot || (local && local.target === x)));
+    // 낙하 카메라는 '떨어지는 본인'(관전 중이면 관전 대상)에게만 적용한다.
+    // 예전에는 local.target 이 떨어져도 따라 내려가서, 밀어낸 쪽 화면까지 같이 끌려갔다.
+    // 낙하 중에는 benched/ko 가 아니므로 viewPair() 가 항상 본인을 view 로 준다 → 이 한 줄로 충분하다.
+    const faller = (view && (view.fallT > 0 || (view.ko && view.fallY > 0.5))) ? view : null;
+    // 낙하 중에는 camCtl 이 카메라를 쓰지 않게 한다 (apply:false).
+    // 예전에는 camCtl 이 매 프레임 카메라를 통째로 덮어써서, 아래 위치 lerp·FOV 가 거의 상쇄되고
+    // 전체 덮어쓰기인 lookAt 만 살아남았다 → 제자리에서 고개만 돌리는 그림이 됐다.
+    if (this.phase !== 'intro') this.camCtl.update(rawDt, { playerPos: view.pos, oppPos: opp.pos, f, s, intensity: I, dempseyActive: d.active || !!view.finisher, sway: d.sway, maxSpeed: d.maxSpeed || !!view.finisher, hitStop: this.hitStop, apply: !faller });
     if (faller) {
       const y = -(faller.fallY || 0);
       const want = faller.pos.clone().add(new THREE.Vector3(0, y + 2.2, 0)).addScaledVector(faller.forward, -2.6);
       this.camera.position.lerp(want, Math.min(1, rawDt * 5));
+      this.camera.up.set(0, 1, 0);   // camCtl 의 롤킥이 남아 수평선이 기울지 않도록
       this.camera.lookAt(faller.pos.x, y + 0.7, faller.pos.z);
       const wantFov = 62;
       this.camera.fov += (wantFov - this.camera.fov) * Math.min(1, rawDt * 3);

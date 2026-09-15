@@ -350,7 +350,7 @@ export class UltimateFx {
       p.m.rotation.x += p.spin.x * dt; p.m.rotation.y += p.spin.y * dt; p.m.rotation.z += p.spin.z * dt;
       if (p.m.position.y <= 0.32) {
         p.m.position.y = 0.32; p.landed = 0.0001;
-        this.audio.impact(0.4);
+        this.audio.impact(0.4, 'follow');
         if (this.fx) this.fx.flash = Math.max(this.fx.flash || 0, 0.08);
       }
     }
@@ -387,7 +387,7 @@ export class UltimateFx {
     }
     if (u > 2.05 && !it.cutDone) {
       it.cutDone = true;
-      this.audio.counter(); this.audio.impact(0.9);
+      this.audio.counter(); this.audio.impact(0.9, 'hook');
       if (this.fx) this.fx.flash = Math.max(this.fx.flash || 0, 0.55);
       for (const sh of it.shards) { sh.m.visible = true; sh.m.position.copy(tp).add(new THREE.Vector3((Math.random() - 0.5) * 0.9, 2.05, (Math.random() - 0.5) * 0.4)); }
       if (it.slash) { it.slash.visible = true; it.slash.position.copy(tp).add(new THREE.Vector3(0, 2.05, 0)); }
@@ -494,7 +494,7 @@ export class UltimateFx {
       b.rotation.z += dt * 9; b.rotation.y += dt * 3;
       if (k >= 1) {
         it.crashed = true;
-        this.audio.bassHit(); this.audio.impact(1); this.audio.clang(1.3);
+        this.audio.bassHit(); this.audio.impact(1, 'hook'); this.audio.clang(1.3);
         if (this.fx) this.fx.flash = Math.max(this.fx.flash || 0, 0.5);
       }
     } else {

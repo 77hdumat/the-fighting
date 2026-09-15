@@ -1,5 +1,16 @@
-// AudioManager.js — Web Audio API 절차적 효과음 (외부 음원 없음)
+// AudioManager.js — Web Audio API 절차적 효과음 + 타격음 샘플
 // whoosh(스웨이 동기, 패닝/피치), swoosh(펀치), impact(적중), bassHit(강타), drone(뎀프시 지속음), riser, maxSpeed, stagger, ko, block
+//
+// 타격음만 외부 mp3 샘플을 쓴다 (assets/sfx/). 나머지는 전부 합성음이다.
+// 샘플 로드에 실패하면(file:// 로 열었거나 오프라인) 기존 합성 타격음으로 자동 대체된다.
+// 출처: Pixabay (Universfield) — assets/sfx/CREDITS.md
+
+const HIT_SAMPLES = {
+  jab: 'punch-jab.mp3',       // 잽 · 플리커 — 가볍고 짧다
+  hook: 'punch-hook.mp3',     // 훅 · 카운터 · 필살기 — 묵직하다
+  follow: 'punch-follow.mp3', // 뎀프시 연타 등 후속타
+  body: 'punch-body.mp3',     // 보디 · 리버
+};
 
 export class AudioManager {
   constructor() {
@@ -7,6 +18,45 @@ export class AudioManager {
     this.master = null;
     this.noise = null;
     this.drone = null;
+    this.sfx = null;          // { jab, hook, follow, body } AudioBuffer — 로드 전엔 null
+    this._sfxLoading = false;
+  }
+
+  /** 타격음 샘플을 비동기로 받아 디코드한다. 실패해도 게임은 합성음으로 계속 돈다. */
+  async _loadHitSamples() {
+    if (this.sfx || this._sfxLoading || !this.ctx) return;
+    this._sfxLoading = true;
+    const out = {};
+    await Promise.all(Object.entries(HIT_SAMPLES).map(async ([key, file]) => {
+      try {
+        const res = await fetch('assets/sfx/' + file);
+        if (!res.ok) return;
+        out[key] = await this.ctx.decodeAudioData(await res.arrayBuffer());
+      } catch { /* 합성음으로 대체된다 */ }
+    }));
+    if (Object.keys(out).length) this.sfx = out;
+    this._sfxLoading = false;
+  }
+
+  /**
+   * 샘플 타격음 재생. 같은 소리가 반복되지 않도록 피치를 살짝 흔든다.
+   * @returns 샘플을 실제로 재생했으면 true (false 면 호출부가 합성음으로 대체)
+   */
+  _playHitSample(kind, power, pan = 0) {
+    const buf = this.sfx && (this.sfx[kind] || this.sfx.jab);
+    if (!buf) return false;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    // 약한 타격일수록 살짝 높고 빠르게 → 같은 샘플이어도 세기가 구분된다
+    src.playbackRate.value = (1.16 - 0.18 * Math.min(1, power)) * (0.96 + Math.random() * 0.08);
+    const g = ctx.createGain();
+    g.gain.value = Math.min(1.5, 0.45 + 0.85 * power);
+    const p = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    if (p) { p.pan.value = Math.max(-1, Math.min(1, pan * 0.5)); src.connect(g); g.connect(p); p.connect(this.master); }
+    else { src.connect(g); g.connect(this.master); }
+    src.start(t);
+    return true;
   }
 
   init() {
@@ -36,6 +86,8 @@ export class AudioManager {
     for (let i = 0; i < 1024; i++) { const x = (i / 1023) * 2 - 1; curve[i] = Math.tanh(x * 3.2); }
     this.shaper.curve = curve;
     this.shaper.connect(this.master);
+
+    this._loadHitSamples();   // 비동기 — 도착 전 타격은 합성음으로 난다
   }
 
   get ready() { return !!this.ctx; }
@@ -164,20 +216,27 @@ export class AudioManager {
     o.start(t); o.stop(t + 0.16);
   }
 
-  /** 적중음: 노이즈 타격 + 저음 바디 + 클릭 */
-  impact(power = 0.5) {
+  /**
+   * 적중음. 샘플이 있으면 샘플 + 저음 바디, 없으면 기존 합성음(노이즈 + 저음 바디).
+   * @param kind 'jab' | 'hook' | 'follow' | 'body' — 샘플 선택용
+   */
+  impact(power = 0.5, kind = 'jab', pan = 0) {
     if (!this.ctx) return;
     const ctx = this.ctx, t = ctx.currentTime;
-    const src = this._noiseSrc();
-    const lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.setValueAtTime(2400, t);
-    lp.frequency.exponentialRampToValueAtTime(180, t + 0.16);
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(1.1 + 0.4 * power, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 0.22 + 0.12 * power);
-    src.connect(lp); lp.connect(g); g.connect(this.master);
-    src.start(t); src.stop(t + 0.35);
+    // 저음 바디는 샘플이 있든 없든 항상 깔아 준다 — 샘플만으론 묵직함이 부족하다
+    const usedSample = this._playHitSample(kind, power, pan);
+    if (!usedSample) {
+      const src = this._noiseSrc();
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(2400, t);
+      lp.frequency.exponentialRampToValueAtTime(180, t + 0.16);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(1.1 + 0.4 * power, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.22 + 0.12 * power);
+      src.connect(lp); lp.connect(g); g.connect(this.master);
+      src.start(t); src.stop(t + 0.35);
+    }
 
     const o = ctx.createOscillator();
     o.type = 'sine';
@@ -189,14 +248,17 @@ export class AudioManager {
     o.connect(og); og.connect(this.shaper);
     o.start(t); o.stop(t + 0.3);
 
-    const c = ctx.createOscillator();
-    c.type = 'square';
-    c.frequency.value = 1800;
-    const cg = ctx.createGain();
-    cg.gain.setValueAtTime(0.15, t);
-    cg.gain.exponentialRampToValueAtTime(0.001, t + 0.012);
-    c.connect(cg); cg.connect(this.master);
-    c.start(t); c.stop(t + 0.02);
+    // 클릭(어택 강조)은 합성음일 때만. 샘플에는 이미 자체 어택이 있어 겹치면 탁하다
+    if (!usedSample) {
+      const c = ctx.createOscillator();
+      c.type = 'square';
+      c.frequency.value = 1800;
+      const cg = ctx.createGain();
+      cg.gain.setValueAtTime(0.15, t);
+      cg.gain.exponentialRampToValueAtTime(0.001, t + 0.012);
+      c.connect(cg); cg.connect(this.master);
+      c.start(t); c.stop(t + 0.02);
+    }
   }
 
   /** 강타 시 추가 베이스 */

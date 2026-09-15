@@ -109,6 +109,11 @@ export class CameraController {
     this.fovPunch *= Math.exp(-dt * 9);
     const fov = this.fovBase - 4 * b * I + this.fovPunch;
 
+    // ctx.apply === false: 낙사 카메라처럼 바깥에서 카메라를 직접 잡는 구간.
+    // 위의 스프링·셰이크·FOV 감쇠는 그대로 돌려 두고 카메라에 쓰는 것만 건너뛴다.
+    // (여기서 통째로 return 해버리면 제어권이 돌아올 때 킥·셰이크가 그대로 남아 화면이 튄다)
+    if (ctx.apply === false) return;
+
     this.cam.position.copy(this.pos).add(this.kick).add(_shake);
     _look.copy(this.look).addScaledVector(_shake, 0.4);
     this.cam.up.set(Math.sin(this.rollKick), Math.cos(this.rollKick), 0);

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta name="build-id" content="1789491213">
+<meta name="build-id" content="1789494946">
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -391,7 +391,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   }
 }
 </script>
-<script>window.__BUILD_ID = "1789491213";</script>
+<script>window.__BUILD_ID = "1789494946";</script>
 </head>
 <body>
   <canvas id="gl" tabindex="0"></canvas>
@@ -1549,7 +1549,7 @@ class UltimateFx {
       p.m.rotation.x += p.spin.x * dt; p.m.rotation.y += p.spin.y * dt; p.m.rotation.z += p.spin.z * dt;
       if (p.m.position.y <= 0.32) {
         p.m.position.y = 0.32; p.landed = 0.0001;
-        this.audio.impact(0.4);
+        this.audio.impact(0.4, 'follow');
         if (this.fx) this.fx.flash = Math.max(this.fx.flash || 0, 0.08);
       }
     }
@@ -1586,7 +1586,7 @@ class UltimateFx {
     }
     if (u > 2.05 && !it.cutDone) {
       it.cutDone = true;
-      this.audio.counter(); this.audio.impact(0.9);
+      this.audio.counter(); this.audio.impact(0.9, 'hook');
       if (this.fx) this.fx.flash = Math.max(this.fx.flash || 0, 0.55);
       for (const sh of it.shards) { sh.m.visible = true; sh.m.position.copy(tp).add(new THREE.Vector3((Math.random() - 0.5) * 0.9, 2.05, (Math.random() - 0.5) * 0.4)); }
       if (it.slash) { it.slash.visible = true; it.slash.position.copy(tp).add(new THREE.Vector3(0, 2.05, 0)); }
@@ -1693,7 +1693,7 @@ class UltimateFx {
       b.rotation.z += dt * 9; b.rotation.y += dt * 3;
       if (k >= 1) {
         it.crashed = true;
-        this.audio.bassHit(); this.audio.impact(1); this.audio.clang(1.3);
+        this.audio.bassHit(); this.audio.impact(1, 'hook'); this.audio.clang(1.3);
         if (this.fx) this.fx.flash = Math.max(this.fx.flash || 0, 0.5);
       }
     } else {
@@ -3333,8 +3333,19 @@ return { AfterImageEffect };
 })();
 // ===== AudioManager.js =====
 __M.AudioManager = (() => {
-// AudioManager.js — Web Audio API 절차적 효과음 (외부 음원 없음)
+// AudioManager.js — Web Audio API 절차적 효과음 + 타격음 샘플
 // whoosh(스웨이 동기, 패닝/피치), swoosh(펀치), impact(적중), bassHit(강타), drone(뎀프시 지속음), riser, maxSpeed, stagger, ko, block
+//
+// 타격음만 외부 mp3 샘플을 쓴다 (assets/sfx/). 나머지는 전부 합성음이다.
+// 샘플 로드에 실패하면(file:// 로 열었거나 오프라인) 기존 합성 타격음으로 자동 대체된다.
+// 출처: Pixabay (Universfield) — assets/sfx/CREDITS.md
+
+const HIT_SAMPLES = {
+  jab: 'punch-jab.mp3',       // 잽 · 플리커 — 가볍고 짧다
+  hook: 'punch-hook.mp3',     // 훅 · 카운터 · 필살기 — 묵직하다
+  follow: 'punch-follow.mp3', // 뎀프시 연타 등 후속타
+  body: 'punch-body.mp3',     // 보디 · 리버
+};
 
 class AudioManager {
   constructor() {
@@ -3342,6 +3353,45 @@ class AudioManager {
     this.master = null;
     this.noise = null;
     this.drone = null;
+    this.sfx = null;          // { jab, hook, follow, body } AudioBuffer — 로드 전엔 null
+    this._sfxLoading = false;
+  }
+
+  /** 타격음 샘플을 비동기로 받아 디코드한다. 실패해도 게임은 합성음으로 계속 돈다. */
+  async _loadHitSamples() {
+    if (this.sfx || this._sfxLoading || !this.ctx) return;
+    this._sfxLoading = true;
+    const out = {};
+    await Promise.all(Object.entries(HIT_SAMPLES).map(async ([key, file]) => {
+      try {
+        const res = await fetch('assets/sfx/' + file);
+        if (!res.ok) return;
+        out[key] = await this.ctx.decodeAudioData(await res.arrayBuffer());
+      } catch { /* 합성음으로 대체된다 */ }
+    }));
+    if (Object.keys(out).length) this.sfx = out;
+    this._sfxLoading = false;
+  }
+
+  /**
+   * 샘플 타격음 재생. 같은 소리가 반복되지 않도록 피치를 살짝 흔든다.
+   * @returns 샘플을 실제로 재생했으면 true (false 면 호출부가 합성음으로 대체)
+   */
+  _playHitSample(kind, power, pan = 0) {
+    const buf = this.sfx && (this.sfx[kind] || this.sfx.jab);
+    if (!buf) return false;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    // 약한 타격일수록 살짝 높고 빠르게 → 같은 샘플이어도 세기가 구분된다
+    src.playbackRate.value = (1.16 - 0.18 * Math.min(1, power)) * (0.96 + Math.random() * 0.08);
+    const g = ctx.createGain();
+    g.gain.value = Math.min(1.5, 0.45 + 0.85 * power);
+    const p = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    if (p) { p.pan.value = Math.max(-1, Math.min(1, pan * 0.5)); src.connect(g); g.connect(p); p.connect(this.master); }
+    else { src.connect(g); g.connect(this.master); }
+    src.start(t);
+    return true;
   }
 
   init() {
@@ -3371,6 +3421,8 @@ class AudioManager {
     for (let i = 0; i < 1024; i++) { const x = (i / 1023) * 2 - 1; curve[i] = Math.tanh(x * 3.2); }
     this.shaper.curve = curve;
     this.shaper.connect(this.master);
+
+    this._loadHitSamples();   // 비동기 — 도착 전 타격은 합성음으로 난다
   }
 
   get ready() { return !!this.ctx; }
@@ -3499,20 +3551,27 @@ class AudioManager {
     o.start(t); o.stop(t + 0.16);
   }
 
-  /** 적중음: 노이즈 타격 + 저음 바디 + 클릭 */
-  impact(power = 0.5) {
+  /**
+   * 적중음. 샘플이 있으면 샘플 + 저음 바디, 없으면 기존 합성음(노이즈 + 저음 바디).
+   * @param kind 'jab' | 'hook' | 'follow' | 'body' — 샘플 선택용
+   */
+  impact(power = 0.5, kind = 'jab', pan = 0) {
     if (!this.ctx) return;
     const ctx = this.ctx, t = ctx.currentTime;
-    const src = this._noiseSrc();
-    const lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.setValueAtTime(2400, t);
-    lp.frequency.exponentialRampToValueAtTime(180, t + 0.16);
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(1.1 + 0.4 * power, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 0.22 + 0.12 * power);
-    src.connect(lp); lp.connect(g); g.connect(this.master);
-    src.start(t); src.stop(t + 0.35);
+    // 저음 바디는 샘플이 있든 없든 항상 깔아 준다 — 샘플만으론 묵직함이 부족하다
+    const usedSample = this._playHitSample(kind, power, pan);
+    if (!usedSample) {
+      const src = this._noiseSrc();
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(2400, t);
+      lp.frequency.exponentialRampToValueAtTime(180, t + 0.16);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(1.1 + 0.4 * power, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.22 + 0.12 * power);
+      src.connect(lp); lp.connect(g); g.connect(this.master);
+      src.start(t); src.stop(t + 0.35);
+    }
 
     const o = ctx.createOscillator();
     o.type = 'sine';
@@ -3524,14 +3583,17 @@ class AudioManager {
     o.connect(og); og.connect(this.shaper);
     o.start(t); o.stop(t + 0.3);
 
-    const c = ctx.createOscillator();
-    c.type = 'square';
-    c.frequency.value = 1800;
-    const cg = ctx.createGain();
-    cg.gain.setValueAtTime(0.15, t);
-    cg.gain.exponentialRampToValueAtTime(0.001, t + 0.012);
-    c.connect(cg); cg.connect(this.master);
-    c.start(t); c.stop(t + 0.02);
+    // 클릭(어택 강조)은 합성음일 때만. 샘플에는 이미 자체 어택이 있어 겹치면 탁하다
+    if (!usedSample) {
+      const c = ctx.createOscillator();
+      c.type = 'square';
+      c.frequency.value = 1800;
+      const cg = ctx.createGain();
+      cg.gain.setValueAtTime(0.15, t);
+      cg.gain.exponentialRampToValueAtTime(0.001, t + 0.012);
+      c.connect(cg); cg.connect(this.master);
+      c.start(t); c.stop(t + 0.02);
+    }
   }
 
   /** 강타 시 추가 베이스 */
@@ -5322,6 +5384,13 @@ class Fighter {
     if (ev.finisher && !this.ko && ev.kind !== 'jolt') {   // 속공형(미야타 졸트)은 다운 없음
       this.downT = this.downDur; this.stagger = 0; this.punch = null; this.queue.length = 0; this.finisher = null; this.dempsey.stop();
       this.airY = 0; this.airV = 0;
+      // 다운 중엔 추가타가 불가능하다 → 넉백을 키워도 연타 밸런스에 영향이 없다.
+      // 위의 knock 은 콤보 스케일(comboScale)로 줄어들어 있어서 맞은 횟수에 따라 거리가 들쭉날쭉했다.
+      // 다운만은 콤보 스케일과 무관하게 뒤로 확실히 밀어낸다 → 암벽 맵에서 낙사를 노릴 수 있다.
+      // 감쇠가 exp(-dt*6.5) 이므로 이동 거리 ≈ DOWN_KNOCK / 6.5 ≈ 2.2 (암벽 반경 8.6 기준)
+      const DOWN_KNOCK = 14;
+      if (this.knock.lengthSq() > 1e-6) this.knock.setLength(Math.max(this.knock.length(), DOWN_KNOCK));
+      else this.knock.copy(ev.dir).setLength(DOWN_KNOCK);
       down = true;
     }
     return { dmg, staggered, interrupted, ko: this.ko, down };
@@ -5396,7 +5465,7 @@ class Fighter {
     // 띄워짐
     if (this.airY > 0 || this.airV > 0) {
       this.airV -= 14 * dt; this.airY += this.airV * dt;
-      if (this.airY <= 0) { this.airY = 0; if (this.airV < -1) { this.audio.impact(0.5); } this.airV = 0; }
+      if (this.airY <= 0) { this.airY = 0; if (this.airV < -1) { this.audio.impact(0.5, 'body'); } this.airV = 0; }
     }
     // ---- 로프: 밀어붙이면 로프가 늘어나며 힘을 모으고(최대 0.45초), 놓거나 다 모이면 안쪽으로 튕겨나가 부스트 ----
     this.pos.addScaledVector(this.dash, dt);
@@ -5764,7 +5833,7 @@ class Fighter {
               o.hp = Math.max(0, o.hp - tickDmg);
               o.rattle = Math.max(o.rattle, 0.55);
               o.react.headX = -0.22; o.react.waistX = -0.12;
-              o.audio.impact(0.45);
+              o.audio.impact(0.45, 'follow');
               if (o.hp <= 0) o._die();
               this.events.push({ type: 'rushHit', target: o.slot });
             }
@@ -6323,6 +6392,11 @@ class CameraController {
     // --- FOV: 뎀프시롤 중 살짝 망원 + 히트 줌 ---
     this.fovPunch *= Math.exp(-dt * 9);
     const fov = this.fovBase - 4 * b * I + this.fovPunch;
+
+    // ctx.apply === false: 낙사 카메라처럼 바깥에서 카메라를 직접 잡는 구간.
+    // 위의 스프링·셰이크·FOV 감쇠는 그대로 돌려 두고 카메라에 쓰는 것만 건너뛴다.
+    // (여기서 통째로 return 해버리면 제어권이 돌아올 때 킥·셰이크가 그대로 남아 화면이 튄다)
+    if (ctx.apply === false) return;
 
     this.cam.position.copy(this.pos).add(this.kick).add(_shake);
     _look.copy(this.look).addScaledVector(_shake, 0.4);
@@ -8637,6 +8711,12 @@ class Game {
     const involved = mine || hurt;
     const P = ev.power;
     const body = ev.zone === 'body';
+    // 타격음 샘플 선택: 훅·카운터·필살기는 묵직하게, 잽·플리커는 가볍게,
+    // 뎀프시 연타는 후속타 샘플, 보디/리버는 둔탁한 샘플
+    const sfxKind = (ev.finisher || ev.counter || ev.kind || ev.heavy || ev.type === 'hook') ? 'hook'
+      : (body || ev.liver) ? 'body'
+      : ev.dempsey ? 'follow'
+      : 'jab';
     if (attacker) attacker.squash[ev.side] = 1;
     if (res.ignore) return;
     if (res.dance) {
@@ -8679,7 +8759,7 @@ class Game {
     }
     if (res.downed) {
       // ---- 쓰러지는 상대에게 추가타: 몸이 날아가고, 코치가 말린다 ----
-      this.audio.impact(0.6 + 0.4 * P); if (P > 0.8) this.audio.bassHit();
+      this.audio.impact(0.6 + 0.4 * P, 'body'); if (P > 0.8) this.audio.bassHit();
       this.sparks.burst(pos, dir, 18 + Math.round(20 * P), new THREE.Color(1, 0.9, 0.7), 1.4, 0.5);
       this.fx.addImpact(px, py, 0.6 * P, false);
       if (target) target.flash = 1;
@@ -8715,14 +8795,14 @@ class Game {
       else if (mine && Math.random() < 0.3) this.subs.show('固ぇ…！', { duration: 0.8, speaker: 'opp' });
       if (res.guardBreak) {
         this.subs.show('ガードが…！！', { duration: 1.2, mid: true, speaker: hurt ? 'player' : 'opp' });
-        this.audio.impact(1); this.audio.bassHit(); this.camCtl.onHit(dir, 1);
+        this.audio.impact(1, 'hook'); this.audio.bassHit(); this.camCtl.onHit(dir, 1);
       }
       return;
     }
     if (res.blocked && res.ko) {
       // 칩 데미지로 KO — 일반 KO 연출로 넘긴다
       this.stopPair(ev, 0.14, 1.6, 0.25);
-      this.audio.impact(1);
+      this.audio.impact(1, 'hook');
       if (involved) this.subs.show('ダウン！！', { duration: 2.4, strong: true, speaker: hurt ? 'opp' : 'player' });
       return;
     }
@@ -8731,12 +8811,12 @@ class Game {
       this.fx.addImpact(px, py, 0.25, false);
       this.sparks.burst(pos, dir, 8, new THREE.Color(0.8, 0.85, 1), 0.7, 0.35);
       this.stopPair(ev, 0.025); if (involved) this.camCtl.shakeAmp = Math.max(this.camCtl.shakeAmp, 0.02);
-      if (res.guardBreak && involved) { this.subs.show('ガードが…！！', { duration: 1.2, mid: true, speaker: hurt ? 'player' : 'opp' }); this.audio.impact(0.8); this.camCtl.onHit(dir, 0.9); }
+      if (res.guardBreak && involved) { this.subs.show('ガードが…！！', { duration: 1.2, mid: true, speaker: hurt ? 'player' : 'opp' }); this.audio.impact(0.8, 'hook'); this.camCtl.onHit(dir, 0.9); }
       else if (mine && Math.random() < 0.3) this.subs.show(Math.random() < 0.5 ? '読めてる…' : 'そんなもんか？', { duration: 0.9, speaker: 'opp' });
       return;
     }
     if (res.armored) {
-      this.audio.impact(0.4);
+      this.audio.impact(0.4, 'follow');
       this.fx.addImpact(px, py, 0.3, false);
       this.sparks.burst(pos, dir, 10, new THREE.Color(1, 0.6, 0.3), 0.8, 0.4);
       if (mine) this.subs.show('効かねぇ…！！', { duration: 0.9, mid: true, speaker: 'opp' });
@@ -8781,7 +8861,7 @@ class Game {
       this.fx.hurtFlash(P);
       setTimeout(() => { this.camCtl.shakeAmp = Math.max(this.camCtl.shakeAmp, 0.04 + 0.06 * P); }, 90); // 2차 진동
       this.fx.addImpact(px, py, 0.5 * P, false);
-      this.audio.impact(0.35 + 0.5 * P);
+      this.audio.impact(0.35 + 0.5 * P, sfxKind);
       if (ev.dempsey && P > 0.9) this.audio.bassHit();
       if (res.staggered) this.subs.show('ぐぅっ…！', { duration: 1.0, mid: true });
       else if (res.interrupted) this.subs.show('しまっ…！', { duration: 0.9, mid: true });
@@ -8790,7 +8870,7 @@ class Game {
       this.stopPair(ev, 0.05 + 0.05 * P + (body ? 0.02 : 0));
       if (mine) { this.camCtl.onHit(dir, P); this.post.onHit(P, uv.x, uv.y); this.fx.addImpact(px, py, P, ev.maxSpeed); }
       else this.fx.addImpact(px, py, 0.35 * P, false);
-      this.audio.impact(mine ? P : P * 0.6);
+      this.audio.impact(mine ? P : P * 0.6, sfxKind);
       if (mine && P >= 0.75) this.audio.bassHit();
       if (P >= 0.95) this.stopPair(ev, 0, 0.25, 0.45);
       if (mine && !res.ko) {
@@ -8971,7 +9051,7 @@ class Game {
         if (e.type === 'rushHit') {
           // 0.1초 도트라 연출은 솎아서 (소리/흔들림 폭주 방지)
           this._rushFxT = (this._rushFxT || 0) + 1;
-          if (this._rushFxT % 3 === 0) { this.camCtl.onHit(f.forward, 0.45); this.audio.impact(0.5); }
+          if (this._rushFxT % 3 === 0) { this.camCtl.onHit(f.forward, 0.45); this.audio.impact(0.5, 'follow'); }
           const tg = this.fighters[e.target];
           if (tg && this._rushFxT % 2 === 0) this.sparks.burst(tg.chestPos, f.forward, 8, new THREE.Color(1, 0.85, 0.5), 0.9, 0.35);
           if (this.mode === 'host' && this._rushFxT % 3 === 0) this.pendingEvents.push({ t: 'rush', s: f.slot, b: e.target });
@@ -9303,14 +9383,20 @@ class Game {
     // 카메라 (인트로 중엔 Intro 가 직접 제어)
     const f = new THREE.Vector3().subVectors(opp.pos, view.pos); f.y = 0; if (f.lengthSq() < 1e-6) f.set(0, 0, -1); f.normalize();
     const s = new THREE.Vector3(f.z, 0, -f.x);
-    if (this.phase !== 'intro') this.camCtl.update(rawDt, { playerPos: view.pos, oppPos: opp.pos, f, s, intensity: I, dempseyActive: d.active || !!view.finisher, sway: d.sway, maxSpeed: d.maxSpeed || !!view.finisher, hitStop: this.hitStop });
     // ---- 낙사 카메라: 떨어지는 선수를 따라 내려가며 지켜본다 ----
-    const faller = (view && (view.fallT > 0 || (view.ko && view.fallY > 0.5))) ? view
-      : this.fighters.find((x) => x.fallT > 0 && (x.slot === this.localSlot || (local && local.target === x)));
+    // 낙하 카메라는 '떨어지는 본인'(관전 중이면 관전 대상)에게만 적용한다.
+    // 예전에는 local.target 이 떨어져도 따라 내려가서, 밀어낸 쪽 화면까지 같이 끌려갔다.
+    // 낙하 중에는 benched/ko 가 아니므로 viewPair() 가 항상 본인을 view 로 준다 → 이 한 줄로 충분하다.
+    const faller = (view && (view.fallT > 0 || (view.ko && view.fallY > 0.5))) ? view : null;
+    // 낙하 중에는 camCtl 이 카메라를 쓰지 않게 한다 (apply:false).
+    // 예전에는 camCtl 이 매 프레임 카메라를 통째로 덮어써서, 아래 위치 lerp·FOV 가 거의 상쇄되고
+    // 전체 덮어쓰기인 lookAt 만 살아남았다 → 제자리에서 고개만 돌리는 그림이 됐다.
+    if (this.phase !== 'intro') this.camCtl.update(rawDt, { playerPos: view.pos, oppPos: opp.pos, f, s, intensity: I, dempseyActive: d.active || !!view.finisher, sway: d.sway, maxSpeed: d.maxSpeed || !!view.finisher, hitStop: this.hitStop, apply: !faller });
     if (faller) {
       const y = -(faller.fallY || 0);
       const want = faller.pos.clone().add(new THREE.Vector3(0, y + 2.2, 0)).addScaledVector(faller.forward, -2.6);
       this.camera.position.lerp(want, Math.min(1, rawDt * 5));
+      this.camera.up.set(0, 1, 0);   // camCtl 의 롤킥이 남아 수평선이 기울지 않도록
       this.camera.lookAt(faller.pos.x, y + 0.7, faller.pos.z);
       const wantFov = 62;
       this.camera.fov += (wantFov - this.camera.fov) * Math.min(1, rawDt * 3);

@@ -521,6 +521,13 @@ export class Fighter {
     if (ev.finisher && !this.ko && ev.kind !== 'jolt') {   // 속공형(미야타 졸트)은 다운 없음
       this.downT = this.downDur; this.stagger = 0; this.punch = null; this.queue.length = 0; this.finisher = null; this.dempsey.stop();
       this.airY = 0; this.airV = 0;
+      // 다운 중엔 추가타가 불가능하다 → 넉백을 키워도 연타 밸런스에 영향이 없다.
+      // 위의 knock 은 콤보 스케일(comboScale)로 줄어들어 있어서 맞은 횟수에 따라 거리가 들쭉날쭉했다.
+      // 다운만은 콤보 스케일과 무관하게 뒤로 확실히 밀어낸다 → 암벽 맵에서 낙사를 노릴 수 있다.
+      // 감쇠가 exp(-dt*6.5) 이므로 이동 거리 ≈ DOWN_KNOCK / 6.5 ≈ 2.2 (암벽 반경 8.6 기준)
+      const DOWN_KNOCK = 14;
+      if (this.knock.lengthSq() > 1e-6) this.knock.setLength(Math.max(this.knock.length(), DOWN_KNOCK));
+      else this.knock.copy(ev.dir).setLength(DOWN_KNOCK);
       down = true;
     }
     return { dmg, staggered, interrupted, ko: this.ko, down };
@@ -595,7 +602,7 @@ export class Fighter {
     // 띄워짐
     if (this.airY > 0 || this.airV > 0) {
       this.airV -= 14 * dt; this.airY += this.airV * dt;
-      if (this.airY <= 0) { this.airY = 0; if (this.airV < -1) { this.audio.impact(0.5); } this.airV = 0; }
+      if (this.airY <= 0) { this.airY = 0; if (this.airV < -1) { this.audio.impact(0.5, 'body'); } this.airV = 0; }
     }
     // ---- 로프: 밀어붙이면 로프가 늘어나며 힘을 모으고(최대 0.45초), 놓거나 다 모이면 안쪽으로 튕겨나가 부스트 ----
     this.pos.addScaledVector(this.dash, dt);
@@ -963,7 +970,7 @@ export class Fighter {
               o.hp = Math.max(0, o.hp - tickDmg);
               o.rattle = Math.max(o.rattle, 0.55);
               o.react.headX = -0.22; o.react.waistX = -0.12;
-              o.audio.impact(0.45);
+              o.audio.impact(0.45, 'follow');
               if (o.hp <= 0) o._die();
               this.events.push({ type: 'rushHit', target: o.slot });
             }
