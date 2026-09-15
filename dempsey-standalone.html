@@ -317,6 +317,14 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
 
 #lobby .code .code-hint { display: block; font-size: 11px; font-weight: 700; color: #6b6b7a; letter-spacing: 0; margin-top: 2px; font-family: "Noto Sans JP", sans-serif; }
 
+/* ---------- 맵 / 규칙 선택 ---------- */
+#start-overlay .modes { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; margin-top: 4px; }
+#start-overlay .mode-row { display: flex; align-items: center; gap: 6px; }
+#start-overlay .mode-row > span { font-size: 12px; font-weight: 900; color: #6b6b7a; margin-right: 2px; }
+#start-overlay .opt { font-family: "Noto Sans JP", sans-serif; font-weight: 900; font-size: 13px; padding: 6px 14px; border-radius: 999px; border: 2px solid #d4d4e0; background: #fff; color: #5a5a6a; cursor: pointer; }
+#start-overlay .opt.sel { background: #1c1c2e; border-color: #1c1c2e; color: #fff; }
+#start-overlay .opt:hover { border-color: #1c1c2e; }
+
 </style>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script type="importmap">
@@ -409,6 +417,18 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
         <div class="fields">
           <label class="field"><span>닉네임</span><input id="nick" maxlength="12" placeholder="예: 민규" autocomplete="off" spellcheck="false"></label>
           <label class="field wide"><span>자기소개</span><input id="intro" maxlength="40" placeholder="등장할 때 외칠 한마디" autocomplete="off" spellcheck="false"></label>
+        </div>
+        <div class="modes">
+          <div class="mode-row">
+            <span>맵</span>
+            <button class="opt sel" data-map="ring">복싱 링</button>
+            <button class="opt" data-map="cliff">암벽 (낙사)</button>
+          </div>
+          <div class="mode-row">
+            <span>규칙</span>
+            <button class="opt sel" data-rule="ffa">난투</button>
+            <button class="opt" data-rule="team">2:2 팀전</button>
+          </div>
         </div>
         <div class="buttons">
           <button id="btn-solo" class="btn red">연습하기 <small>1:1 CPU · 이길수록 강해짐</small></button>
@@ -3471,7 +3491,15 @@ function buildRing(scene) {
   let crowdT = 0, jump = 0, frame = 0;
   return {
     group,
+    kind: 'ring',
     fill,
+    dispose() {
+      scene.remove(group);
+      scene.remove(crowdLight);
+      if (typeof spot !== 'undefined') { scene.remove(spot); scene.remove(spot.target); }
+      scene.remove(fill);
+      group.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (Array.isArray(o.material)) o.material.forEach((m) => m.dispose()); else o.material.dispose(); } });
+    },
     cheer() { jump = 1; },
     update(dt, excitement = 0) {
       crowdT += dt;
@@ -3492,6 +3520,174 @@ function buildRing(scene) {
 }
 return { buildRing };
 })();
+// ===== Cliff.js =====
+__M.Cliff = (() => {
+// Cliff.js — 암벽 맵: 링 대신 거대한 바위 고원 위에서 싸운다. 가장자리 밖으로 나가면 낙사.
+// buildRing 과 같은 인터페이스({ update, cheer, fill, dispose })를 제공해 Game 이 그대로 쓸 수 있게 한다.
+
+const toonRamp = (() => {
+  const data = new Uint8Array([60, 60, 150, 255]);
+  const tex = new THREE.DataTexture(data, 4, 1, THREE.RedFormat);
+  tex.minFilter = tex.magFilter = THREE.NearestFilter;
+  tex.needsUpdate = true;
+  return tex;
+})();
+
+function rockTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 1024;
+  const g = c.getContext('2d');
+  g.fillStyle = '#8a7d6f';
+  g.fillRect(0, 0, 1024, 1024);
+  // 암반 결 + 균열
+  for (let i = 0; i < 1400; i++) {
+    const x = Math.random() * 1024, y = Math.random() * 1024;
+    const r = 10 + Math.random() * 90;
+    g.fillStyle = `rgba(${90 + Math.random() * 60 | 0},${78 + Math.random() * 50 | 0},${66 + Math.random() * 40 | 0},0.35)`;
+    g.beginPath(); g.ellipse(x, y, r, r * (0.4 + Math.random() * 0.5), Math.random() * 3, 0, Math.PI * 2); g.fill();
+  }
+  g.strokeStyle = 'rgba(40,32,26,0.55)';
+  for (let i = 0; i < 34; i++) {
+    g.lineWidth = 1 + Math.random() * 3;
+    g.beginPath();
+    let x = Math.random() * 1024, y = Math.random() * 1024;
+    g.moveTo(x, y);
+    for (let k = 0; k < 6; k++) { x += (Math.random() - 0.5) * 260; y += (Math.random() - 0.5) * 260; g.lineTo(x, y); }
+    g.stroke();
+  }
+  // 중앙 투기장 마크
+  g.strokeStyle = 'rgba(210,60,40,0.55)'; g.lineWidth = 12;
+  g.beginPath(); g.arc(512, 512, 250, 0, Math.PI * 2); g.stroke();
+  g.lineWidth = 5;
+  g.beginPath(); g.arc(512, 512, 180, 0, Math.PI * 2); g.stroke();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+/** 고원 가장자리 반경 (각도에 따라 울퉁불퉁) */
+function cliffRadius(x, z, R = 6.2) {
+  const a = Math.atan2(z, x);
+  return R + Math.sin(a * 3.1) * 0.45 + Math.sin(a * 5.7 + 1.2) * 0.25;
+}
+
+function buildCliff(scene) {
+  const group = new THREE.Group();
+  scene.add(group);
+  scene.background = new THREE.Color(0x0a0d14);
+  scene.fog = new THREE.FogExp2(0x0a0d14, 0.028);
+
+  const rockMat = new THREE.MeshToonMaterial({ map: rockTexture(), gradientMap: toonRamp });
+  const rockDark = new THREE.MeshToonMaterial({ color: 0x5c5046, gradientMap: toonRamp });
+
+  // ---- 고원 상판: 원판을 각도별로 찌그러뜨려 자연스러운 바위 실루엣 ----
+  const SEG = 48, R = 6.2;
+  const topGeo = new THREE.CircleGeometry(1, SEG);
+  {
+    const pos = topGeo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i);
+      const len = Math.hypot(x, y);
+      if (len < 1e-4) continue;
+      const r = cliffRadius(x, y, R);
+      pos.setXY(i, (x / len) * r, (y / len) * r);
+    }
+    topGeo.computeVertexNormals();
+  }
+  const top = new THREE.Mesh(topGeo, rockMat);
+  top.rotation.x = -Math.PI / 2;
+  top.receiveShadow = true;
+  group.add(top);
+
+  // ---- 절벽 옆면: 아래로 갈수록 살짝 좁아지는 기둥 ----
+  const sideGeo = new THREE.CylinderGeometry(1, 0.82, 9, SEG, 1, true);
+  {
+    const pos = sideGeo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      const len = Math.hypot(x, z);
+      if (len < 1e-4) continue;
+      const scale = cliffRadius(x, z, R) * (y > 0 ? 1 : 0.86);
+      const jag = 1 + Math.sin(y * 1.7 + Math.atan2(z, x) * 4) * 0.035;
+      pos.setXYZ(i, (x / len) * scale * jag, y, (z / len) * scale * jag);
+    }
+    sideGeo.computeVertexNormals();
+  }
+  const side = new THREE.Mesh(sideGeo, rockDark);
+  side.position.y = -4.5;
+  group.add(side);
+
+  // ---- 주변 봉우리 (멀리 솟은 바위 기둥들) ----
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * Math.PI * 2 + Math.random() * 0.3;
+    const dist = 11 + Math.random() * 9;
+    const h = 5 + Math.random() * 12;
+    const rr = 0.8 + Math.random() * 1.9;
+    const peak = new THREE.Mesh(new THREE.ConeGeometry(rr, h, 6 + (i % 3)), rockDark);
+    peak.position.set(Math.cos(a) * dist, -6 + h / 2, Math.sin(a) * dist);
+    peak.rotation.y = Math.random() * 3;
+    group.add(peak);
+  }
+
+  // ---- 가장자리 경고 링 (여기 넘으면 떨어진다) ----
+  const edgeGeo = new THREE.RingGeometry(1, 1.06, SEG);
+  {
+    const pos = edgeGeo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i);
+      const len = Math.hypot(x, y) || 1;
+      const base = cliffRadius(x, y, R);
+      const r = len > 1.03 ? base : base - 0.55;     // 안쪽/바깥쪽 링
+      pos.setXY(i, (x / len) * r, (y / len) * r);
+    }
+  }
+  const edge = new THREE.Mesh(edgeGeo, new THREE.MeshBasicMaterial({ color: 0xff3b2f, transparent: true, opacity: 0.35, side: THREE.DoubleSide }));
+  edge.rotation.x = -Math.PI / 2;
+  edge.position.y = 0.012;
+  group.add(edge);
+
+  // ---- 바닥 없는 어둠 + 아래쪽 안개 ----
+  const abyss = new THREE.Mesh(new THREE.CylinderGeometry(40, 40, 60, 24, 1, true), new THREE.MeshBasicMaterial({ color: 0x05070c, side: THREE.BackSide }));
+  abyss.position.y = -28;
+  group.add(abyss);
+
+  // ---- 조명: 위에서 내리쬐는 햇빛 + 협곡 반사광 ----
+  const sun = new THREE.DirectionalLight(0xfff4e2, 2.6);
+  sun.position.set(6, 14, 4);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.camera.left = -9; sun.shadow.camera.right = 9;
+  sun.shadow.camera.top = 9; sun.shadow.camera.bottom = -9;
+  sun.shadow.bias = -0.0006;
+  scene.add(sun);
+  const hemi = new THREE.HemisphereLight(0xa8c8ff, 0x4a3c30, 0.95);
+  scene.add(hemi);
+  const fill = new THREE.PointLight(0xffe7c4, 11, 16, 2);
+  fill.position.set(0, 3.4, 2.5);
+  scene.add(fill);
+
+  const flashes = [];   // 링 인터페이스 맞추기용 (암벽엔 카메라 플래시 없음)
+
+  return {
+    group,
+    kind: 'cliff',
+    fill,
+    radius: (x, z) => cliffRadius(x, z, R),
+    update(dt, excitement) {
+      // 가장자리 경고 링 맥동
+      edge.material.opacity = 0.25 + 0.18 * (0.5 + 0.5 * Math.sin(performance.now() * 0.004));
+    },
+    cheer() {},
+    setCrowd() {},
+    dispose() {
+      scene.remove(group); scene.remove(sun); scene.remove(hemi); scene.remove(fill);
+      group.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+    },
+  };
+}
+return { cliffRadius, buildCliff };
+})();
 // ===== Fighter.js =====
 __M.Fighter = (() => {
 // Fighter.js — 4인 난투용 통합 복서: 사람(로컬/네트워크) 또는 AI(AIBrain)가 InputState 로 조작.
@@ -3502,6 +3698,10 @@ const { createPunch, applyPunchToPose, pointSegmentDist, segSegDist, easeOutCubi
 const { SPECIALS, KITS, HIDDEN_LINES } = __M.Specials;
 
 const RING_LIMIT = 4.15;   // 링 1.5배 확장
+
+// 현재 경기장 (Game 이 맵을 만들 때 설정). cliff 는 로프가 없고 가장자리 밖은 낙사
+let ARENA = { kind: 'ring', radius: () => RING_LIMIT };
+function setArena(a) { ARENA = a || { kind: 'ring', radius: () => RING_LIMIT }; }
 const _d = new THREE.Vector3();
 const _g = new THREE.Vector3();
 
@@ -3568,6 +3768,7 @@ class Fighter {
     this.danceT = 0; this.danceVictim = false; this.dancePartner = null;   // (구) 릴스 댄스
     // 히든 필살 연출: 시전자(ultT) / 당하는 쪽(ultVictimT)
     this.ultT = 0; this.ultKind = null; this.ultTarget = null;
+    this.fallT = 0; this.fallY = 0; this.benched = false; this.team = null;   // 낙사 / 팀전 교체 대기
     this.ultVictimT = 0; this.ultVictimKind = null; this.ultDmg = 0;
     this.groggy = 0;   // 뎀프시 연타 누적 → 4 이면 그로기
     this.downT = 0; this.downDur = 2.7;   // 필살기 피격 다운 → 넘어졌다 고개 흔들며 일어남 (무적·행동불가)
@@ -3591,7 +3792,7 @@ class Fighter {
 
   get dempseyActive() { return this.dempsey.active; }
   get stanceStyle() { return this.dempsey.style; }
-  get busy() { return this.ko || this.stagger > 0 || !!this.finisher || this.airY > 0.01 || this.downT > 0 || this.danceT > 0 || this.ultT > 0 || this.ultVictimT > 0; }
+  get busy() { return this.ko || this.fallT > 0 || this.stagger > 0 || !!this.finisher || this.airY > 0.01 || this.downT > 0 || this.danceT > 0 || this.ultT > 0 || this.ultVictimT > 0; }
   get rolling() { return this.rollT > 0; }
   get alive() { return !this.ko; }
   get isCounterWindow() { return !!this.punch && this.punch.t / this.punch.dur < 0.55; }
@@ -4016,7 +4217,8 @@ class Fighter {
     if (this.target && this.target.ko && this.target.koT < 1.2 && this.target.pos.distanceTo(this.pos) < 1.8) return;
     let best = null, bd = 1e9;
     for (const f of fighters) {
-      if (f === this || f.ko) continue;
+      if (f === this || f.ko || f.benched) continue;
+      if (this.team !== null && f.team !== null && f.team === this.team) continue;   // 팀전: 같은 편은 노리지 않는다
       const dd = f.pos.distanceToSquared(this.pos);
       let w = f === this.target ? dd * 0.7 : dd;
       if (this.brain) {
@@ -4077,7 +4279,19 @@ class Fighter {
     if (this.ropeCool > 0) this.ropeCool -= dt;
     if (this.boostT > 0) this.boostT -= dt;
     let pushing = false;
-    for (const axis of ['x', 'z']) {
+    if (ARENA.kind === 'cliff') {
+      // ---- 암벽: 로프가 없다. 가장자리를 넘으면 그대로 추락 ----
+      if (this.fallT <= 0 && !this.ko) {
+        const r = Math.hypot(this.pos.x, this.pos.z);
+        const edge = ARENA.radius(this.pos.x, this.pos.z);
+        if (r > edge) {
+          this.fallT = 1.5; this.punch = null; this.queue.length = 0; this.finisher = null;
+          this.dempsey.stop(); this.ultT = 0; this.ultVictimT = 0;
+          this.audio.stagger();
+          this.events.push({ type: 'fell' });
+        }
+      }
+    } else for (const axis of ['x', 'z']) {
       const v = this.pos[axis];
       if (Math.abs(v) <= 2.5) continue;
       const dir = Math.sign(v);
@@ -4236,7 +4450,7 @@ class Fighter {
     d.applyToPose(p);
 
     let hitEvent = null;
-    const others = fighters.filter((f) => f !== this && (!f.ko || f.koT < 1.2) && !(f.downT > 0));
+    const others = fighters.filter((f) => f !== this && !f.benched && (!f.ko || f.koT < 1.2) && !(f.downT > 0));
     const _hit = { zone: 'head', point: new THREE.Vector3(), t: 0 };
     const tryHit = (side, radius, mk, useFoot = false) => {
       const glove = useFoot ? (side === 'L' ? this.footL : this.footR) : (side === 'L' ? this.gloveL : this.gloveR);
@@ -4303,6 +4517,19 @@ class Fighter {
       }
     }
 
+    // ---- 낙사: 허우적대며 아래로 ----
+    if (this.fallT > 0) {
+      this.fallT -= dt;
+      const u = 1.5 - this.fallT;
+      this.fallY += (2.5 + u * 9) * dt;                       // 점점 빨라지는 낙하
+      this.pos.addScaledVector(this.vel.clone().setY(0).normalize(), 0.6 * dt);
+      p.shLX += -2.6 + Math.sin(t * 22) * 0.5; p.shRX += -2.6 - Math.sin(t * 22) * 0.5;
+      p.elL += -0.6; p.elR += -0.6; p.shLZ += 0.7; p.shRZ += -0.7;
+      p.thighLX += -0.9 + Math.sin(t * 18) * 0.5; p.thighRX += -0.9 - Math.sin(t * 18) * 0.5;
+      p.shinL += 0.9; p.shinR += 0.9; p.waistX += -0.5; p.headX += -0.6;
+      this.queue.length = 0;
+      if (this.fallT <= 0) { this.fallT = 0; this.hp = 0; if (!this.ko) { this._die(); this.events.push({ type: 'fellDead' }); } }
+    }
     // ---- 연출형 필살: 시전자 ----
     if (this.ultT > 0) {
       this.ultT -= dt;
@@ -4434,7 +4661,8 @@ class Fighter {
       }
       this.queue.length = 0;
       if (this.ultT <= 0) {
-        this.ultT = 0; this.ultKind = null; this.ultTarget = null; this.armor = 0;
+        this.ultT = 0; this.ultKind = null; this.ultTarget = null;
+    this.fallT = 0; this.fallY = 0; this.benched = false; this.team = null;   // 낙사 / 팀전 교체 대기 this.armor = 0;
         if (this.rushHits) { for (const f2 of fighters) f2._rushReleased = false; this.rushHits.clear(); }
       }
     }
@@ -4668,7 +4896,7 @@ class Fighter {
   }
 
   _applyNow(p) {
-    this.rig.root.position.set(this.pos.x, this.airY, this.pos.z);
+    this.rig.root.position.set(this.pos.x, this.airY - (this.fallY || 0), this.pos.z);
     this.rig.root.rotation.y = this.yaw + this.koAngle;
     applyPose(this.rig, p);
     this.updateWorldPoints();
@@ -4679,12 +4907,12 @@ class Fighter {
     const d = this.dempsey;
     let flags = 0;
     if (this.ko) flags |= 1; if (d.active) flags |= 2; if (d.maxSpeed) flags |= 4; if (this.guard) flags |= 8;
-    if (this.stagger > 0) flags |= 16; if (this.finisher) flags |= 32; if (this.boostT > 0) flags |= 64; if (this.ropeCharge > 0) flags |= 128; if (this.downT > 0) flags |= 256;
+    if (this.stagger > 0) flags |= 16; if (this.finisher) flags |= 32; if (this.boostT > 0) flags |= 64; if (this.ropeCharge > 0) flags |= 128; if (this.downT > 0) flags |= 256; if (this.benched) flags |= 512; if (this.fallT > 0) flags |= 1024;
     const po = new Array(29);
     let i = 0; for (const k in this.pose) po[i++] = +this.pose[k].toFixed(2);   // 소수 2자리면 시각 차이 없음, 페이로드는 20~30% 감소
     return {
       x: +this.pos.x.toFixed(2), z: +this.pos.z.toFixed(2), y: +(this.yaw + this.koAngle).toFixed(3), rx: +this.rig.root.rotation.x.toFixed(2), ay: +this.airY.toFixed(2),
-      hp: +this.hp.toFixed(1), f: flags, dI: +d.intensity.toFixed(3), sw: +d.sway.toFixed(3), sv: +d.swayVel.toFixed(2),
+      hp: +this.hp.toFixed(1), f: flags, fy: +(this.fallY || 0).toFixed(2), dI: +d.intensity.toFixed(3), sw: +d.sway.toFixed(3), sv: +d.swayVel.toFixed(2),
       bl: +d.blend.toFixed(2), ga: +d.gauge.toFixed(1), ch: d.charge, ra: +this.rattle.toFixed(2),
       ps: this.punch ? (this.punch.side === 'L' ? 1 : 2) : 0, pp: +this.punchProgress.toFixed(2),
       tg: this.target ? this.target.slot : -1, cb: this.combo, cu: +this.cd.U.toFixed(1), ci: +this.cd.I.toFixed(1), po,
@@ -4696,6 +4924,7 @@ class Fighter {
     this.koAngle = 0;
     this.pos.set(L(a.x, b.x), 0, L(a.z, b.z));
     this.airY = L(a.ay || 0, b.ay || 0);
+    this.fallY = L(a.fy || 0, b.fy || 0);
     let dy = b.y - a.y; if (dy > Math.PI) dy -= Math.PI * 2; if (dy < -Math.PI) dy += Math.PI * 2;
     this.yaw = a.y + dy * t;
     this.rig.root.rotation.x = L(a.rx, b.rx);
@@ -4704,6 +4933,9 @@ class Fighter {
     this.ko = !!(f & 1); this.guard = !!(f & 8); this.stagger = (f & 16) ? 1 : 0;
     this.finisher = (f & 32) ? { t: 0 } : null;
     this.boostT = (f & 64) ? 1 : 0; this.ropeCharge = (f & 128) ? 0.3 : 0; this.downT = (f & 256) ? 1 : 0;
+    const bench = !!(f & 512);
+    if (bench !== this.benched) { this.benched = bench; this.rig.root.visible = !bench; }
+    if (f & 1024) this.fallY += (b.fy !== undefined ? 0 : 0);   // 낙하 높이는 아래 fy 로 직접 동기화
     const d = this.dempsey;
     d.active = !!(f & 2); d.maxSpeed = !!(f & 4); d.intensity = L(a.dI, b.dI); d.sway = L(a.sw, b.sw); d.swayVel = L(a.sv, b.sv);
     d.blend = L(a.bl, b.bl); d.gauge = L(a.ga, b.ga); d.charge = b.ch;
@@ -4714,7 +4946,7 @@ class Fighter {
     this._applyNow(this.pose);
   }
 }
-return { Fighter };
+return { setArena, Fighter };
 })();
 // ===== AIBrain.js =====
 __M.AIBrain = (() => {
@@ -5609,10 +5841,14 @@ class Coaches {
       for (const m of rig.bodyMats) if (m.emissive) m.emissive.setRGB(0.16, 0.14, 0.13);
       scene.add(rig.root);
       const pose = defaultPose();
-      return { rig, pose, phase: Math.random() * 6.28, shout: 0, x, z };
+      return {
+      rig, pose, phase: Math.random() * 6.28, shout: 0, x, z };
     });
     this.t = 0;
   }
+
+  /** 코치 전체 표시/숨김 (암벽 맵에선 숨긴다) */
+  setVisible(v) { for (const c of this.list) c.rig.root.visible = v; }
 
   /** 슬롯의 담당 코치가 외친다 */
   shout(slot, sec = 2.2) { const c = this.list[slot % this.list.length]; if (c) c.shout = sec; }
@@ -6219,7 +6455,8 @@ return { Music };
 __M.main = (() => {
 // main.js — Game: 4인 난투. 모드: solo(로컬+CPU3) / host(방장 권위 시뮬 + 브로드캐스트) / client(입력 전송 + 스냅샷 보간 렌더)
 const { buildRing } = __M.Ring;
-const { Fighter } = __M.Fighter;
+const { buildCliff } = __M.Cliff;
+const { Fighter, setArena } = __M.Fighter;
 const { AIBrain } = __M.AIBrain;
 const { InputState } = __M.InputState;
 const { AfterImageEffect } = __M.AfterImageEffect;
@@ -6278,7 +6515,9 @@ class Game {
     this.fx = new FxOverlay(document.getElementById('fx'));
     this.post = new PostFX(this.renderer, this.scene, this.camera);
     this.camCtl = new CameraController(this.camera);
+    this.mapKind = 'ring';
     this.ring = buildRing(this.scene);
+    setArena({ kind: 'ring', radius: () => 4.15 });
     this.coaches = new Coaches(this.scene);
     this.intro = new Intro(this);
     this.phase = 'fight'; this.countT = 0; this.countStep = -1;
@@ -6352,6 +6591,7 @@ class Game {
     const $ = (id) => document.getElementById(id);
     $('btn-solo').addEventListener('click', () => {
       this.audio.init();
+      this.setMap(this.myMap);
       this.startMatch('solo', this.soloCfg());
     });
     $('btn-host').addEventListener('click', () => { this.audio.init(); this.hostRoom(); });
@@ -6359,6 +6599,23 @@ class Game {
     $('join-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btn-join').click(); e.stopPropagation(); });
     $('btn-start').addEventListener('click', () => this.hostStart());
     $('btn-leave').addEventListener('click', () => this.confirmLeave());
+    // ---- 맵 / 규칙 선택 ----
+    try { this.myMap = localStorage.getItem('dr-map') || 'ring'; this.myRule = localStorage.getItem('dr-rule') || 'ffa'; } catch (e) { this.myMap = 'ring'; this.myRule = 'ffa'; }
+    const syncOpts = () => {
+      document.querySelectorAll('[data-map]').forEach((b) => b.classList.toggle('sel', b.dataset.map === this.myMap));
+      document.querySelectorAll('[data-rule]').forEach((b) => b.classList.toggle('sel', b.dataset.rule === this.myRule));
+    };
+    document.querySelectorAll('[data-map]').forEach((b) => b.addEventListener('click', () => {
+      this.myMap = b.dataset.map; try { localStorage.setItem('dr-map', this.myMap); } catch (e) {}
+      syncOpts();
+      if (this.net.role === 'host' && this.roster) this.broadcastLobby();
+    }));
+    document.querySelectorAll('[data-rule]').forEach((b) => b.addEventListener('click', () => {
+      this.myRule = b.dataset.rule; try { localStorage.setItem('dr-rule', this.myRule); } catch (e) {}
+      syncOpts();
+      if (this.net.role === 'host' && this.roster) this.broadcastLobby();
+    }));
+    syncOpts();
     // 전체화면: 사용자 제스처 안에서만 가능. iOS Safari 는 미지원 → '홈 화면에 추가' 안내
     const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     this.goFullscreen = () => {
@@ -6518,6 +6775,7 @@ class Game {
     let cfg;
     if (this.mode === 'solo') {
       cfg = this.soloCfg();
+      this.setMap(this.myMap);
     } else {
       this.chars[0] = this.myChar;
       cfg = [];
@@ -6539,7 +6797,16 @@ class Game {
   soloCfg() {
     const others = CHARACTER_ORDER.filter((k) => k !== this.myChar);
     const opp = others[(this.soloLevel - 1) % others.length];
-    return [{ type: 'local', char: this.myChar, intro: this.myIntro }, { type: 'ai', char: opp, level: this.soloLevel }];
+    if (this.myRule === 'team') {
+      // 2:2 팀전 (나 + CPU 파트너 vs CPU 2명)
+      return [
+        { type: 'local', char: this.myChar, intro: this.myIntro, team: 0 },
+        { type: 'ai', char: opp, level: this.soloLevel, team: 1 },
+        { type: 'ai', char: others[(this.soloLevel) % others.length], level: this.soloLevel, team: 0 },
+        { type: 'ai', char: others[(this.soloLevel + 1) % others.length], level: this.soloLevel, team: 1 },
+      ];
+    }
+    return [{ type: 'local', char: this.myChar, intro: this.myIntro, team: 0 }, { type: 'ai', char: opp, level: this.soloLevel, team: 1 }];
   }
   soloLabel() { const lv = this.soloLevel; return `연습 LV ${lv} · 난이도 ×${this.soloDiff(lv).toFixed(1)}`; }
 
@@ -6756,8 +7023,13 @@ class Game {
     const cfg = [];
     this.roster.forEach((r, i) => { if (r.type !== 'empty') cfg.push({ type: r.type, netSlot: i, name: this.names[i], char: this.chars[i] || this.charOf(i), intro: (this.intros && this.intros[i]) || '' }); });
     if (cfg.length < 2) { this.lobbyMsg('2명 이상 참가해야 시작할 수 있습니다'); return; }
+    if (this.myRule === 'team') {
+      if (cfg.length < 4) { this.lobbyMsg('2:2 팀전은 4명이 필요합니다 (지금 ' + cfg.length + '명)'); return; }
+      cfg.forEach((c, i) => { c.team = i % 2; });
+    }
     this.net.started = true;
-    this.net.broadcast({ t: 'start', cfg });
+    this.net.broadcast({ t: 'start', cfg, map: this.myMap });
+    this.setMap(this.myMap);
     this.startMatch('host', cfg);
   }
 
@@ -6779,13 +7051,13 @@ class Game {
       if (m.t === 'welcome') { this.migrating = false; this.migrateTries = 0; this.lastSlot = m.slot; this.names = []; this.chars = []; net.send({ t: 'hello', name: this.myNick, char: this.myChar, intro: this.myIntro }); }
       else if (m.t === 'lobby') { this.rosterRaw = m.roster; this.names = m.names || []; this.chars = m.chars || []; this.renderRoster(m.roster.map((r, i) => (i === net.mySlot ? { type: 'local', name: r.name } : i === 0 ? { type: 'remote', name: r.name } : r))); }
       else if (m.t === 'full') this.lobbyMsg('방이 가득 찼거나 이미 시작됨');
-      else if (m.t === 'start') { this.names = []; m.cfg.forEach((c) => { this.names[c.netSlot] = c.name; }); this.localSlot = Math.max(0, m.cfg.findIndex((c) => c.netSlot === net.mySlot)); this.startMatch('client', m.cfg); }
+      else if (m.t === 'start') { this.setMap(m.map || 'ring'); this.names = []; m.cfg.forEach((c) => { this.names[c.netSlot] = c.name; }); this.localSlot = Math.max(0, m.cfg.findIndex((c) => c.netSlot === net.mySlot)); this.startMatch('client', m.cfg); }
       else if (m.t === 'snap') { if (this.phase === 'fight') this.onSnapshot(m); }
       else if (m.t === 'pong') { const r = performance.now() - m.t0; this.rtt = this.rtt ? this.rtt * 0.8 + r * 0.2 : r; }
       else if (m.t === 'skipv') { this.showSkipHint(m.n, m.total); }
       else if (m.t === 'phase') { if (m.p === 'countdown') this.endIntro(); else if (m.p === 'fight') { this.phase = 'fight'; document.getElementById('countdown').classList.add('hidden'); } }
       else if (m.t === 'chat') this.addChat(m.from, String(m.text).slice(0, 120), !!m.sys);
-      else if (m.t === 'over') this.showWinner(m.winner);
+      else if (m.t === 'over') this.showWinner(m.winner, m.team !== undefined ? m.team : null);
       else if (m.t === 'tolobby') { this.mode = 'client'; this.returnToLobby(); }
       else if (m.t === 'kicked') { this.kicked = true; this.leaveRoom('방장이 강퇴했습니다'); }
       else if (m.t === 'restart') { if (m.cfg) { this.cfg = m.cfg; this.localSlot = Math.max(0, m.cfg.findIndex((c) => c.netSlot === net.mySlot)); } document.getElementById('next-overlay').classList.add('hidden'); this.resetMatch(); }
@@ -6795,6 +7067,22 @@ class Game {
     document.getElementById('lobby').classList.remove('hidden');
     document.getElementById('room-code').textContent = code.toUpperCase();
     net.join(code);
+  }
+
+  /** 맵 교체 (ring | cliff). 경기 시작 전에 부른다 */
+  setMap(kind) {
+    if (kind === this.mapKind && this.ring) return;
+    if (this.ring && this.ring.dispose) this.ring.dispose();
+    else if (this.ring && this.ring.group) this.scene.remove(this.ring.group);
+    this.mapKind = kind;
+    if (kind === 'cliff') {
+      this.ring = buildCliff(this.scene);
+      setArena({ kind: 'cliff', radius: (x, z) => this.ring.radius(x, z) });
+    } else {
+      this.ring = buildRing(this.scene);
+      setArena({ kind: 'ring', radius: () => 4.15 });
+    }
+    this.coaches.setVisible ? this.coaches.setVisible(kind !== 'cliff') : null;
   }
 
   // ================= 매치 =================
@@ -6846,6 +7134,7 @@ class Game {
       const px = this.makeProxies(i);
       const f = new Fighter(this.scene, i, CHARACTERS[c.char] ? c.char : CHARACTER_ORDER[(c.netSlot ?? i) % 4], px.audio, px.subs);
       f.netSlot = c.netSlot ?? i;
+      f.team = c.team !== undefined ? c.team : null;   // 팀전에서만 지정 (난투는 null)
       f.nick = c.name || (c.type === 'ai' ? 'CPU' : this.nickOf(f.netSlot));
       f.intro = c.intro || '';
       f.pos.set(SPAWNS[i][0], 0, SPAWNS[i][1]);
@@ -6865,6 +7154,19 @@ class Game {
     for (const k in this.ghostFx) { for (const g of this.ghostFx[k].ghosts) this.scene.remove(g.root); }
     this.ghostFx = {};
     for (const f of this.fighters) this.ghostFx[f.slot] = new AfterImageEffect(this.scene, f.def, f.slot === this.localSlot ? 7 : 5);
+    // 팀전: 팀마다 첫 주자만 링 위에, 나머지는 대기(벤치)
+    this.teamMode = !!(this.cfg && this.cfg.some((c) => c.team !== undefined));
+    if (this.teamMode) {
+      const started = {};
+      for (const f of this.fighters) {
+        const first = !started[f.team];
+        started[f.team] = true;
+        this.setBenched(f, !first);
+      }
+      this.subT = 0;
+    } else {
+      for (const f of this.fighters) this.setBenched(f, false);
+    }
     this.hud.build(this.fighters, this.localSlot);
     this.hud.showKO(false);
     this.coachBrains = {};
@@ -6876,6 +7178,48 @@ class Game {
   }
 
   resetMatch() { this.buildFighters(this.cfg); this.over = false; this.music.setDuck(1); this.music.play('battle'); if (this.mode === 'solo') document.getElementById('netinfo').textContent = this.soloLabel(); document.getElementById('next-overlay').classList.add('hidden'); this.hud.showKO(false); this.beginIntro(); }
+
+  /** 교체 대기 처리: 화면 밖으로 내리고 판정에서 제외 */
+  setBenched(f, on) {
+    f.benched = on;
+    f.rig.root.visible = !on;
+    if (on) { f.punch = null; f.queue.length = 0; f.dempsey.stop(); f.guard = false; }
+  }
+
+  /** 팀전 교체: 쓰러진 팀의 다음 선수를 올린다 */
+  updateSubs(dt) {
+    if (!this.teamMode || this.over || this.mode === 'client') return;
+    const teams = {};
+    for (const f of this.fighters) {
+      const t = f.team;
+      if (!teams[t]) teams[t] = { alive: [], active: [], bench: [] };
+      if (!f.ko) teams[t].alive.push(f);
+      if (!f.benched && !f.ko) teams[t].active.push(f);
+      if (f.benched && !f.ko) teams[t].bench.push(f);
+    }
+    for (const t in teams) {
+      const T = teams[t];
+      if (T.active.length === 0 && T.bench.length > 0) {
+        // 2.2초 뒤 다음 주자 등장
+        this._subT = this._subT || {};
+        this._subT[t] = (this._subT[t] || 0) + dt;
+        if (this._subT[t] >= 2.2) {
+          this._subT[t] = 0;
+          const next = T.bench[0];
+          const sp = SPAWNS[next.slot % 4];
+          next.pos.set(sp[0], 0, sp[1]);
+          next.forward.set(-sp[0], 0, -sp[1]).normalize();
+          next.yaw = Math.atan2(next.forward.x, next.forward.z);
+          next.hp = next.maxHp; next.fallY = 0; next.fallT = 0;
+          this.setBenched(next, false);
+          next.subs.show('교대다—!', { duration: 1.4, strong: true });
+          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, `${next.nick || next.name} 등장!`, 'dodge');
+          this.audio.bell(1);
+          if (this.mode === 'host') this.pendingEvents.push({ t: 'sub', s: next.slot });
+        }
+      }
+    }
+  }
 
   // ================= 인트로 스킵 (전원 동의) =================
   /** 사람 참가자 전원이 스킵을 눌러야 인트로가 끝난다 */
@@ -7181,7 +7525,7 @@ class Game {
     }
   }
 
-  showWinner(slot) {
+  showWinner(slot, team = null) {
     this.over = true;
     this.music.setDuck(0.45);
     const w = this.fighters[slot];
@@ -7190,7 +7534,7 @@ class Game {
     // 승자 표기: 캐릭터명이 아니라 닉네임 (CPU 면 "CPU 캐릭터명")
     const who = w ? (w.isAI ? `CPU ${w.name}` : (w.nick || w.name)) : '';
     if (this.mode === 'solo') { if (me) { this.soloLevel = this.soloLevel + 1; } this.soloResult = me ? `클리어! 다음: ${this.soloLabel()}` : `패배… 다시: ${this.soloLabel()}`; }
-    const title = me ? 'WINNER' : (w ? `${who} WIN` : 'DRAW');
+    const title = team !== null ? (w && w.team === (this.localFighter && this.localFighter.team) ? 'TEAM WIN' : `TEAM ${team + 1} WIN`) : (me ? 'WINNER' : (w ? `${who} WIN` : 'DRAW'));
     const sub = (me ? '승리! ' : (w ? `${who} (${w.name}) 승리. ` : '')) + (canRestart ? '아래에서 캐릭터를 고르고 R / 버튼' : '캐릭터를 고르고 방장을 기다리세요');
     setTimeout(() => this.hud.showKO(true, title, sub), 900);
     setTimeout(() => { if (this.over) this.showNextPanel(); }, 1800);
@@ -7295,6 +7639,7 @@ class Game {
     const hits = [];
     for (const f of fs) {
       const sl = f.slot;
+      if (f.benched) continue;        // 교체 대기 중인 선수는 시뮬레이션하지 않는다 (벤치에서 낙사하던 버그)
       if (this.fStop[sl] > 0) this.fStop[sl] -= rawDt; else if (this.fSlow[sl][0] > 0) this.fSlow[sl][0] -= rawDt;
       const simDt = rawDt * this.timeScaleOf(sl);
       let inp;
@@ -7376,6 +7721,7 @@ class Game {
       this.hitFx(ev);
       if (this.mode === 'host') this.pendingEvents.push(ev);
     }
+    this.updateSubs(rawDt);
     // 코치 판단 (사람 파이터만). 로컬이면 바로 표시, 원격이면 이벤트로 전달
     for (const slot in this.coachBrains) {
       const f = fs[slot]; const key = this.coachBrains[slot].update(rawDt, f, fs);
@@ -7386,7 +7732,15 @@ class Game {
     }
     if (!this.over) {
       const alive = fs.filter((f) => !f.ko);
-      if (alive.length <= 1) {
+      if (this.teamMode) {
+        const teamsAlive = new Set(alive.map((f) => f.team));
+        if (teamsAlive.size <= 1) {
+          const wt = [...teamsAlive][0];
+          const w = alive.find((f) => f.team === wt);
+          this.showWinner(w ? w.slot : -1, wt);
+          if (this.mode === 'host') this.net.broadcast({ t: 'over', winner: w ? w.slot : -1, team: wt });
+        }
+      } else if (alive.length <= 1) {
         const w = alive[0] ? alive[0].slot : -1;
         this.showWinner(w);
         if (this.mode === 'host') this.net.broadcast({ t: 'over', winner: w });
@@ -7461,6 +7815,10 @@ class Game {
         if (a) this.camCtl.onHit(a.forward, 0.7);
         this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.34, '가드!!', 'dodge');
         if (b) this.sparks.burst(b.chestPos, a ? a.forward : new THREE.Vector3(0, 0, 1), 26, new THREE.Color(0.75, 0.9, 1), 1.4, 0.7);
+      }
+      else if (e.t === 'sub') {
+        const f = this.fighters[e.s];
+        if (f) { this.setBenched(f, false); this.audio.bell(1); this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, `${f.nick || f.name} 등장!`, 'dodge'); }
       }
       else if (e.t === 'rush') {
         const a = this.fighters[e.s], b = this.fighters[e.b];

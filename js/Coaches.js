@@ -15,10 +15,14 @@ export class Coaches {
       for (const m of rig.bodyMats) if (m.emissive) m.emissive.setRGB(0.16, 0.14, 0.13);
       scene.add(rig.root);
       const pose = defaultPose();
-      return { rig, pose, phase: Math.random() * 6.28, shout: 0, x, z };
+      return {
+      rig, pose, phase: Math.random() * 6.28, shout: 0, x, z };
     });
     this.t = 0;
   }
+
+  /** 코치 전체 표시/숨김 (암벽 맵에선 숨긴다) */
+  setVisible(v) { for (const c of this.list) c.rig.root.visible = v; }
 
   /** 슬롯의 담당 코치가 외친다 */
   shout(slot, sec = 2.2) { const c = this.list[slot % this.list.length]; if (c) c.shout = sec; }

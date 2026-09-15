@@ -7,6 +7,10 @@ import { createPunch, applyPunchToPose, pointSegmentDist, segSegDist, easeOutCub
 import { SPECIALS, KITS, HIDDEN_LINES } from './Specials.js';
 
 const RING_LIMIT = 4.15;   // 링 1.5배 확장
+
+// 현재 경기장 (Game 이 맵을 만들 때 설정). cliff 는 로프가 없고 가장자리 밖은 낙사
+let ARENA = { kind: 'ring', radius: () => RING_LIMIT };
+export function setArena(a) { ARENA = a || { kind: 'ring', radius: () => RING_LIMIT }; }
 const _d = new THREE.Vector3();
 const _g = new THREE.Vector3();
 
@@ -73,6 +77,7 @@ export class Fighter {
     this.danceT = 0; this.danceVictim = false; this.dancePartner = null;   // (구) 릴스 댄스
     // 히든 필살 연출: 시전자(ultT) / 당하는 쪽(ultVictimT)
     this.ultT = 0; this.ultKind = null; this.ultTarget = null;
+    this.fallT = 0; this.fallY = 0; this.benched = false; this.team = null;   // 낙사 / 팀전 교체 대기
     this.ultVictimT = 0; this.ultVictimKind = null; this.ultDmg = 0;
     this.groggy = 0;   // 뎀프시 연타 누적 → 4 이면 그로기
     this.downT = 0; this.downDur = 2.7;   // 필살기 피격 다운 → 넘어졌다 고개 흔들며 일어남 (무적·행동불가)
@@ -96,7 +101,7 @@ export class Fighter {
 
   get dempseyActive() { return this.dempsey.active; }
   get stanceStyle() { return this.dempsey.style; }
-  get busy() { return this.ko || this.stagger > 0 || !!this.finisher || this.airY > 0.01 || this.downT > 0 || this.danceT > 0 || this.ultT > 0 || this.ultVictimT > 0; }
+  get busy() { return this.ko || this.fallT > 0 || this.stagger > 0 || !!this.finisher || this.airY > 0.01 || this.downT > 0 || this.danceT > 0 || this.ultT > 0 || this.ultVictimT > 0; }
   get rolling() { return this.rollT > 0; }
   get alive() { return !this.ko; }
   get isCounterWindow() { return !!this.punch && this.punch.t / this.punch.dur < 0.55; }
@@ -521,7 +526,8 @@ export class Fighter {
     if (this.target && this.target.ko && this.target.koT < 1.2 && this.target.pos.distanceTo(this.pos) < 1.8) return;
     let best = null, bd = 1e9;
     for (const f of fighters) {
-      if (f === this || f.ko) continue;
+      if (f === this || f.ko || f.benched) continue;
+      if (this.team !== null && f.team !== null && f.team === this.team) continue;   // 팀전: 같은 편은 노리지 않는다
       const dd = f.pos.distanceToSquared(this.pos);
       let w = f === this.target ? dd * 0.7 : dd;
       if (this.brain) {
@@ -582,7 +588,19 @@ export class Fighter {
     if (this.ropeCool > 0) this.ropeCool -= dt;
     if (this.boostT > 0) this.boostT -= dt;
     let pushing = false;
-    for (const axis of ['x', 'z']) {
+    if (ARENA.kind === 'cliff') {
+      // ---- 암벽: 로프가 없다. 가장자리를 넘으면 그대로 추락 ----
+      if (this.fallT <= 0 && !this.ko) {
+        const r = Math.hypot(this.pos.x, this.pos.z);
+        const edge = ARENA.radius(this.pos.x, this.pos.z);
+        if (r > edge) {
+          this.fallT = 1.5; this.punch = null; this.queue.length = 0; this.finisher = null;
+          this.dempsey.stop(); this.ultT = 0; this.ultVictimT = 0;
+          this.audio.stagger();
+          this.events.push({ type: 'fell' });
+        }
+      }
+    } else for (const axis of ['x', 'z']) {
       const v = this.pos[axis];
       if (Math.abs(v) <= 2.5) continue;
       const dir = Math.sign(v);
@@ -741,7 +759,7 @@ export class Fighter {
     d.applyToPose(p);
 
     let hitEvent = null;
-    const others = fighters.filter((f) => f !== this && (!f.ko || f.koT < 1.2) && !(f.downT > 0));
+    const others = fighters.filter((f) => f !== this && !f.benched && (!f.ko || f.koT < 1.2) && !(f.downT > 0));
     const _hit = { zone: 'head', point: new THREE.Vector3(), t: 0 };
     const tryHit = (side, radius, mk, useFoot = false) => {
       const glove = useFoot ? (side === 'L' ? this.footL : this.footR) : (side === 'L' ? this.gloveL : this.gloveR);
@@ -808,6 +826,19 @@ export class Fighter {
       }
     }
 
+    // ---- 낙사: 허우적대며 아래로 ----
+    if (this.fallT > 0) {
+      this.fallT -= dt;
+      const u = 1.5 - this.fallT;
+      this.fallY += (2.5 + u * 9) * dt;                       // 점점 빨라지는 낙하
+      this.pos.addScaledVector(this.vel.clone().setY(0).normalize(), 0.6 * dt);
+      p.shLX += -2.6 + Math.sin(t * 22) * 0.5; p.shRX += -2.6 - Math.sin(t * 22) * 0.5;
+      p.elL += -0.6; p.elR += -0.6; p.shLZ += 0.7; p.shRZ += -0.7;
+      p.thighLX += -0.9 + Math.sin(t * 18) * 0.5; p.thighRX += -0.9 - Math.sin(t * 18) * 0.5;
+      p.shinL += 0.9; p.shinR += 0.9; p.waistX += -0.5; p.headX += -0.6;
+      this.queue.length = 0;
+      if (this.fallT <= 0) { this.fallT = 0; this.hp = 0; if (!this.ko) { this._die(); this.events.push({ type: 'fellDead' }); } }
+    }
     // ---- 연출형 필살: 시전자 ----
     if (this.ultT > 0) {
       this.ultT -= dt;
@@ -939,7 +970,8 @@ export class Fighter {
       }
       this.queue.length = 0;
       if (this.ultT <= 0) {
-        this.ultT = 0; this.ultKind = null; this.ultTarget = null; this.armor = 0;
+        this.ultT = 0; this.ultKind = null; this.ultTarget = null;
+    this.fallT = 0; this.fallY = 0; this.benched = false; this.team = null;   // 낙사 / 팀전 교체 대기 this.armor = 0;
         if (this.rushHits) { for (const f2 of fighters) f2._rushReleased = false; this.rushHits.clear(); }
       }
     }
@@ -1173,7 +1205,7 @@ export class Fighter {
   }
 
   _applyNow(p) {
-    this.rig.root.position.set(this.pos.x, this.airY, this.pos.z);
+    this.rig.root.position.set(this.pos.x, this.airY - (this.fallY || 0), this.pos.z);
     this.rig.root.rotation.y = this.yaw + this.koAngle;
     applyPose(this.rig, p);
     this.updateWorldPoints();
@@ -1184,12 +1216,12 @@ export class Fighter {
     const d = this.dempsey;
     let flags = 0;
     if (this.ko) flags |= 1; if (d.active) flags |= 2; if (d.maxSpeed) flags |= 4; if (this.guard) flags |= 8;
-    if (this.stagger > 0) flags |= 16; if (this.finisher) flags |= 32; if (this.boostT > 0) flags |= 64; if (this.ropeCharge > 0) flags |= 128; if (this.downT > 0) flags |= 256;
+    if (this.stagger > 0) flags |= 16; if (this.finisher) flags |= 32; if (this.boostT > 0) flags |= 64; if (this.ropeCharge > 0) flags |= 128; if (this.downT > 0) flags |= 256; if (this.benched) flags |= 512; if (this.fallT > 0) flags |= 1024;
     const po = new Array(29);
     let i = 0; for (const k in this.pose) po[i++] = +this.pose[k].toFixed(2);   // 소수 2자리면 시각 차이 없음, 페이로드는 20~30% 감소
     return {
       x: +this.pos.x.toFixed(2), z: +this.pos.z.toFixed(2), y: +(this.yaw + this.koAngle).toFixed(3), rx: +this.rig.root.rotation.x.toFixed(2), ay: +this.airY.toFixed(2),
-      hp: +this.hp.toFixed(1), f: flags, dI: +d.intensity.toFixed(3), sw: +d.sway.toFixed(3), sv: +d.swayVel.toFixed(2),
+      hp: +this.hp.toFixed(1), f: flags, fy: +(this.fallY || 0).toFixed(2), dI: +d.intensity.toFixed(3), sw: +d.sway.toFixed(3), sv: +d.swayVel.toFixed(2),
       bl: +d.blend.toFixed(2), ga: +d.gauge.toFixed(1), ch: d.charge, ra: +this.rattle.toFixed(2),
       ps: this.punch ? (this.punch.side === 'L' ? 1 : 2) : 0, pp: +this.punchProgress.toFixed(2),
       tg: this.target ? this.target.slot : -1, cb: this.combo, cu: +this.cd.U.toFixed(1), ci: +this.cd.I.toFixed(1), po,
@@ -1201,6 +1233,7 @@ export class Fighter {
     this.koAngle = 0;
     this.pos.set(L(a.x, b.x), 0, L(a.z, b.z));
     this.airY = L(a.ay || 0, b.ay || 0);
+    this.fallY = L(a.fy || 0, b.fy || 0);
     let dy = b.y - a.y; if (dy > Math.PI) dy -= Math.PI * 2; if (dy < -Math.PI) dy += Math.PI * 2;
     this.yaw = a.y + dy * t;
     this.rig.root.rotation.x = L(a.rx, b.rx);
@@ -1209,6 +1242,9 @@ export class Fighter {
     this.ko = !!(f & 1); this.guard = !!(f & 8); this.stagger = (f & 16) ? 1 : 0;
     this.finisher = (f & 32) ? { t: 0 } : null;
     this.boostT = (f & 64) ? 1 : 0; this.ropeCharge = (f & 128) ? 0.3 : 0; this.downT = (f & 256) ? 1 : 0;
+    const bench = !!(f & 512);
+    if (bench !== this.benched) { this.benched = bench; this.rig.root.visible = !bench; }
+    if (f & 1024) this.fallY += (b.fy !== undefined ? 0 : 0);   // 낙하 높이는 아래 fy 로 직접 동기화
     const d = this.dempsey;
     d.active = !!(f & 2); d.maxSpeed = !!(f & 4); d.intensity = L(a.dI, b.dI); d.sway = L(a.sw, b.sw); d.swayVel = L(a.sv, b.sv);
     d.blend = L(a.bl, b.bl); d.gauge = L(a.ga, b.ga); d.charge = b.ch;

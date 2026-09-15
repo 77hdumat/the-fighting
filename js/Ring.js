@@ -154,7 +154,15 @@ export function buildRing(scene) {
   let crowdT = 0, jump = 0, frame = 0;
   return {
     group,
+    kind: 'ring',
     fill,
+    dispose() {
+      scene.remove(group);
+      scene.remove(crowdLight);
+      if (typeof spot !== 'undefined') { scene.remove(spot); scene.remove(spot.target); }
+      scene.remove(fill);
+      group.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (Array.isArray(o.material)) o.material.forEach((m) => m.dispose()); else o.material.dispose(); } });
+    },
     cheer() { jump = 1; },
     update(dt, excitement = 0) {
       crowdT += dt;

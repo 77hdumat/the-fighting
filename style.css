@@ -301,3 +301,11 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
 #skip-hint.voted { color: #ffd34d; border-color: #ffd34d; }
 
 #lobby .code .code-hint { display: block; font-size: 11px; font-weight: 700; color: #6b6b7a; letter-spacing: 0; margin-top: 2px; font-family: "Noto Sans JP", sans-serif; }
+
+/* ---------- 맵 / 규칙 선택 ---------- */
+#start-overlay .modes { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; margin-top: 4px; }
+#start-overlay .mode-row { display: flex; align-items: center; gap: 6px; }
+#start-overlay .mode-row > span { font-size: 12px; font-weight: 900; color: #6b6b7a; margin-right: 2px; }
+#start-overlay .opt { font-family: "Noto Sans JP", sans-serif; font-weight: 900; font-size: 13px; padding: 6px 14px; border-radius: 999px; border: 2px solid #d4d4e0; background: #fff; color: #5a5a6a; cursor: pointer; }
+#start-overlay .opt.sel { background: #1c1c2e; border-color: #1c1c2e; color: #fff; }
+#start-overlay .opt:hover { border-color: #1c1c2e; }

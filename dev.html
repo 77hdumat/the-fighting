@@ -105,6 +105,18 @@
           <label class="field"><span>닉네임</span><input id="nick" maxlength="12" placeholder="예: 민규" autocomplete="off" spellcheck="false"></label>
           <label class="field wide"><span>자기소개</span><input id="intro" maxlength="40" placeholder="등장할 때 외칠 한마디" autocomplete="off" spellcheck="false"></label>
         </div>
+        <div class="modes">
+          <div class="mode-row">
+            <span>맵</span>
+            <button class="opt sel" data-map="ring">복싱 링</button>
+            <button class="opt" data-map="cliff">암벽 (낙사)</button>
+          </div>
+          <div class="mode-row">
+            <span>규칙</span>
+            <button class="opt sel" data-rule="ffa">난투</button>
+            <button class="opt" data-rule="team">2:2 팀전</button>
+          </div>
+        </div>
         <div class="buttons">
           <button id="btn-solo" class="btn red">연습하기 <small>1:1 CPU · 이길수록 강해짐</small></button>
           <button id="btn-host" class="btn blue">방 만들기</button>
@@ -154,6 +166,6 @@
       var iv = setInterval(function () { if (window.game) { boot.remove(); sessionStorage.removeItem('dr-reloaded'); clearInterval(iv); } }, 100);
     })();
   </script>
-  <script type="module" src="js/main.js?v=1789457536" onerror="__bootFail('모듈 로드 실패 (구버전 캐시)')"></script>
+  <script type="module" src="js/main.js?v=1789458838" onerror="__bootFail('모듈 로드 실패 (구버전 캐시)')"></script>
 </body>
 </html>

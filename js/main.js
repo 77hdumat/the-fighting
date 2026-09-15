@@ -1,7 +1,8 @@
 // main.js — Game: 4인 난투. 모드: solo(로컬+CPU3) / host(방장 권위 시뮬 + 브로드캐스트) / client(입력 전송 + 스냅샷 보간 렌더)
 import * as THREE from 'three';
 import { buildRing } from './Ring.js';
-import { Fighter } from './Fighter.js';
+import { buildCliff } from './Cliff.js';
+import { Fighter, setArena } from './Fighter.js';
 import { AIBrain } from './AIBrain.js';
 import { InputState } from './InputState.js';
 import { AfterImageEffect } from './AfterImageEffect.js';
@@ -60,7 +61,9 @@ class Game {
     this.fx = new FxOverlay(document.getElementById('fx'));
     this.post = new PostFX(this.renderer, this.scene, this.camera);
     this.camCtl = new CameraController(this.camera);
+    this.mapKind = 'ring';
     this.ring = buildRing(this.scene);
+    setArena({ kind: 'ring', radius: () => 4.15 });
     this.coaches = new Coaches(this.scene);
     this.intro = new Intro(this);
     this.phase = 'fight'; this.countT = 0; this.countStep = -1;
@@ -134,6 +137,7 @@ class Game {
     const $ = (id) => document.getElementById(id);
     $('btn-solo').addEventListener('click', () => {
       this.audio.init();
+      this.setMap(this.myMap);
       this.startMatch('solo', this.soloCfg());
     });
     $('btn-host').addEventListener('click', () => { this.audio.init(); this.hostRoom(); });
@@ -141,6 +145,23 @@ class Game {
     $('join-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btn-join').click(); e.stopPropagation(); });
     $('btn-start').addEventListener('click', () => this.hostStart());
     $('btn-leave').addEventListener('click', () => this.confirmLeave());
+    // ---- 맵 / 규칙 선택 ----
+    try { this.myMap = localStorage.getItem('dr-map') || 'ring'; this.myRule = localStorage.getItem('dr-rule') || 'ffa'; } catch (e) { this.myMap = 'ring'; this.myRule = 'ffa'; }
+    const syncOpts = () => {
+      document.querySelectorAll('[data-map]').forEach((b) => b.classList.toggle('sel', b.dataset.map === this.myMap));
+      document.querySelectorAll('[data-rule]').forEach((b) => b.classList.toggle('sel', b.dataset.rule === this.myRule));
+    };
+    document.querySelectorAll('[data-map]').forEach((b) => b.addEventListener('click', () => {
+      this.myMap = b.dataset.map; try { localStorage.setItem('dr-map', this.myMap); } catch (e) {}
+      syncOpts();
+      if (this.net.role === 'host' && this.roster) this.broadcastLobby();
+    }));
+    document.querySelectorAll('[data-rule]').forEach((b) => b.addEventListener('click', () => {
+      this.myRule = b.dataset.rule; try { localStorage.setItem('dr-rule', this.myRule); } catch (e) {}
+      syncOpts();
+      if (this.net.role === 'host' && this.roster) this.broadcastLobby();
+    }));
+    syncOpts();
     // 전체화면: 사용자 제스처 안에서만 가능. iOS Safari 는 미지원 → '홈 화면에 추가' 안내
     const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     this.goFullscreen = () => {
@@ -300,6 +321,7 @@ class Game {
     let cfg;
     if (this.mode === 'solo') {
       cfg = this.soloCfg();
+      this.setMap(this.myMap);
     } else {
       this.chars[0] = this.myChar;
       cfg = [];
@@ -321,7 +343,16 @@ class Game {
   soloCfg() {
     const others = CHARACTER_ORDER.filter((k) => k !== this.myChar);
     const opp = others[(this.soloLevel - 1) % others.length];
-    return [{ type: 'local', char: this.myChar, intro: this.myIntro }, { type: 'ai', char: opp, level: this.soloLevel }];
+    if (this.myRule === 'team') {
+      // 2:2 팀전 (나 + CPU 파트너 vs CPU 2명)
+      return [
+        { type: 'local', char: this.myChar, intro: this.myIntro, team: 0 },
+        { type: 'ai', char: opp, level: this.soloLevel, team: 1 },
+        { type: 'ai', char: others[(this.soloLevel) % others.length], level: this.soloLevel, team: 0 },
+        { type: 'ai', char: others[(this.soloLevel + 1) % others.length], level: this.soloLevel, team: 1 },
+      ];
+    }
+    return [{ type: 'local', char: this.myChar, intro: this.myIntro, team: 0 }, { type: 'ai', char: opp, level: this.soloLevel, team: 1 }];
   }
   soloLabel() { const lv = this.soloLevel; return `연습 LV ${lv} · 난이도 ×${this.soloDiff(lv).toFixed(1)}`; }
 
@@ -538,8 +569,13 @@ class Game {
     const cfg = [];
     this.roster.forEach((r, i) => { if (r.type !== 'empty') cfg.push({ type: r.type, netSlot: i, name: this.names[i], char: this.chars[i] || this.charOf(i), intro: (this.intros && this.intros[i]) || '' }); });
     if (cfg.length < 2) { this.lobbyMsg('2명 이상 참가해야 시작할 수 있습니다'); return; }
+    if (this.myRule === 'team') {
+      if (cfg.length < 4) { this.lobbyMsg('2:2 팀전은 4명이 필요합니다 (지금 ' + cfg.length + '명)'); return; }
+      cfg.forEach((c, i) => { c.team = i % 2; });
+    }
     this.net.started = true;
-    this.net.broadcast({ t: 'start', cfg });
+    this.net.broadcast({ t: 'start', cfg, map: this.myMap });
+    this.setMap(this.myMap);
     this.startMatch('host', cfg);
   }
 
@@ -561,13 +597,13 @@ class Game {
       if (m.t === 'welcome') { this.migrating = false; this.migrateTries = 0; this.lastSlot = m.slot; this.names = []; this.chars = []; net.send({ t: 'hello', name: this.myNick, char: this.myChar, intro: this.myIntro }); }
       else if (m.t === 'lobby') { this.rosterRaw = m.roster; this.names = m.names || []; this.chars = m.chars || []; this.renderRoster(m.roster.map((r, i) => (i === net.mySlot ? { type: 'local', name: r.name } : i === 0 ? { type: 'remote', name: r.name } : r))); }
       else if (m.t === 'full') this.lobbyMsg('방이 가득 찼거나 이미 시작됨');
-      else if (m.t === 'start') { this.names = []; m.cfg.forEach((c) => { this.names[c.netSlot] = c.name; }); this.localSlot = Math.max(0, m.cfg.findIndex((c) => c.netSlot === net.mySlot)); this.startMatch('client', m.cfg); }
+      else if (m.t === 'start') { this.setMap(m.map || 'ring'); this.names = []; m.cfg.forEach((c) => { this.names[c.netSlot] = c.name; }); this.localSlot = Math.max(0, m.cfg.findIndex((c) => c.netSlot === net.mySlot)); this.startMatch('client', m.cfg); }
       else if (m.t === 'snap') { if (this.phase === 'fight') this.onSnapshot(m); }
       else if (m.t === 'pong') { const r = performance.now() - m.t0; this.rtt = this.rtt ? this.rtt * 0.8 + r * 0.2 : r; }
       else if (m.t === 'skipv') { this.showSkipHint(m.n, m.total); }
       else if (m.t === 'phase') { if (m.p === 'countdown') this.endIntro(); else if (m.p === 'fight') { this.phase = 'fight'; document.getElementById('countdown').classList.add('hidden'); } }
       else if (m.t === 'chat') this.addChat(m.from, String(m.text).slice(0, 120), !!m.sys);
-      else if (m.t === 'over') this.showWinner(m.winner);
+      else if (m.t === 'over') this.showWinner(m.winner, m.team !== undefined ? m.team : null);
       else if (m.t === 'tolobby') { this.mode = 'client'; this.returnToLobby(); }
       else if (m.t === 'kicked') { this.kicked = true; this.leaveRoom('방장이 강퇴했습니다'); }
       else if (m.t === 'restart') { if (m.cfg) { this.cfg = m.cfg; this.localSlot = Math.max(0, m.cfg.findIndex((c) => c.netSlot === net.mySlot)); } document.getElementById('next-overlay').classList.add('hidden'); this.resetMatch(); }
@@ -577,6 +613,22 @@ class Game {
     document.getElementById('lobby').classList.remove('hidden');
     document.getElementById('room-code').textContent = code.toUpperCase();
     net.join(code);
+  }
+
+  /** 맵 교체 (ring | cliff). 경기 시작 전에 부른다 */
+  setMap(kind) {
+    if (kind === this.mapKind && this.ring) return;
+    if (this.ring && this.ring.dispose) this.ring.dispose();
+    else if (this.ring && this.ring.group) this.scene.remove(this.ring.group);
+    this.mapKind = kind;
+    if (kind === 'cliff') {
+      this.ring = buildCliff(this.scene);
+      setArena({ kind: 'cliff', radius: (x, z) => this.ring.radius(x, z) });
+    } else {
+      this.ring = buildRing(this.scene);
+      setArena({ kind: 'ring', radius: () => 4.15 });
+    }
+    this.coaches.setVisible ? this.coaches.setVisible(kind !== 'cliff') : null;
   }
 
   // ================= 매치 =================
@@ -628,6 +680,7 @@ class Game {
       const px = this.makeProxies(i);
       const f = new Fighter(this.scene, i, CHARACTERS[c.char] ? c.char : CHARACTER_ORDER[(c.netSlot ?? i) % 4], px.audio, px.subs);
       f.netSlot = c.netSlot ?? i;
+      f.team = c.team !== undefined ? c.team : null;   // 팀전에서만 지정 (난투는 null)
       f.nick = c.name || (c.type === 'ai' ? 'CPU' : this.nickOf(f.netSlot));
       f.intro = c.intro || '';
       f.pos.set(SPAWNS[i][0], 0, SPAWNS[i][1]);
@@ -647,6 +700,19 @@ class Game {
     for (const k in this.ghostFx) { for (const g of this.ghostFx[k].ghosts) this.scene.remove(g.root); }
     this.ghostFx = {};
     for (const f of this.fighters) this.ghostFx[f.slot] = new AfterImageEffect(this.scene, f.def, f.slot === this.localSlot ? 7 : 5);
+    // 팀전: 팀마다 첫 주자만 링 위에, 나머지는 대기(벤치)
+    this.teamMode = !!(this.cfg && this.cfg.some((c) => c.team !== undefined));
+    if (this.teamMode) {
+      const started = {};
+      for (const f of this.fighters) {
+        const first = !started[f.team];
+        started[f.team] = true;
+        this.setBenched(f, !first);
+      }
+      this.subT = 0;
+    } else {
+      for (const f of this.fighters) this.setBenched(f, false);
+    }
     this.hud.build(this.fighters, this.localSlot);
     this.hud.showKO(false);
     this.coachBrains = {};
@@ -658,6 +724,48 @@ class Game {
   }
 
   resetMatch() { this.buildFighters(this.cfg); this.over = false; this.music.setDuck(1); this.music.play('battle'); if (this.mode === 'solo') document.getElementById('netinfo').textContent = this.soloLabel(); document.getElementById('next-overlay').classList.add('hidden'); this.hud.showKO(false); this.beginIntro(); }
+
+  /** 교체 대기 처리: 화면 밖으로 내리고 판정에서 제외 */
+  setBenched(f, on) {
+    f.benched = on;
+    f.rig.root.visible = !on;
+    if (on) { f.punch = null; f.queue.length = 0; f.dempsey.stop(); f.guard = false; }
+  }
+
+  /** 팀전 교체: 쓰러진 팀의 다음 선수를 올린다 */
+  updateSubs(dt) {
+    if (!this.teamMode || this.over || this.mode === 'client') return;
+    const teams = {};
+    for (const f of this.fighters) {
+      const t = f.team;
+      if (!teams[t]) teams[t] = { alive: [], active: [], bench: [] };
+      if (!f.ko) teams[t].alive.push(f);
+      if (!f.benched && !f.ko) teams[t].active.push(f);
+      if (f.benched && !f.ko) teams[t].bench.push(f);
+    }
+    for (const t in teams) {
+      const T = teams[t];
+      if (T.active.length === 0 && T.bench.length > 0) {
+        // 2.2초 뒤 다음 주자 등장
+        this._subT = this._subT || {};
+        this._subT[t] = (this._subT[t] || 0) + dt;
+        if (this._subT[t] >= 2.2) {
+          this._subT[t] = 0;
+          const next = T.bench[0];
+          const sp = SPAWNS[next.slot % 4];
+          next.pos.set(sp[0], 0, sp[1]);
+          next.forward.set(-sp[0], 0, -sp[1]).normalize();
+          next.yaw = Math.atan2(next.forward.x, next.forward.z);
+          next.hp = next.maxHp; next.fallY = 0; next.fallT = 0;
+          this.setBenched(next, false);
+          next.subs.show('교대다—!', { duration: 1.4, strong: true });
+          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, `${next.nick || next.name} 등장!`, 'dodge');
+          this.audio.bell(1);
+          if (this.mode === 'host') this.pendingEvents.push({ t: 'sub', s: next.slot });
+        }
+      }
+    }
+  }
 
   // ================= 인트로 스킵 (전원 동의) =================
   /** 사람 참가자 전원이 스킵을 눌러야 인트로가 끝난다 */
@@ -963,7 +1071,7 @@ class Game {
     }
   }
 
-  showWinner(slot) {
+  showWinner(slot, team = null) {
     this.over = true;
     this.music.setDuck(0.45);
     const w = this.fighters[slot];
@@ -972,7 +1080,7 @@ class Game {
     // 승자 표기: 캐릭터명이 아니라 닉네임 (CPU 면 "CPU 캐릭터명")
     const who = w ? (w.isAI ? `CPU ${w.name}` : (w.nick || w.name)) : '';
     if (this.mode === 'solo') { if (me) { this.soloLevel = this.soloLevel + 1; } this.soloResult = me ? `클리어! 다음: ${this.soloLabel()}` : `패배… 다시: ${this.soloLabel()}`; }
-    const title = me ? 'WINNER' : (w ? `${who} WIN` : 'DRAW');
+    const title = team !== null ? (w && w.team === (this.localFighter && this.localFighter.team) ? 'TEAM WIN' : `TEAM ${team + 1} WIN`) : (me ? 'WINNER' : (w ? `${who} WIN` : 'DRAW'));
     const sub = (me ? '승리! ' : (w ? `${who} (${w.name}) 승리. ` : '')) + (canRestart ? '아래에서 캐릭터를 고르고 R / 버튼' : '캐릭터를 고르고 방장을 기다리세요');
     setTimeout(() => this.hud.showKO(true, title, sub), 900);
     setTimeout(() => { if (this.over) this.showNextPanel(); }, 1800);
@@ -1077,6 +1185,7 @@ class Game {
     const hits = [];
     for (const f of fs) {
       const sl = f.slot;
+      if (f.benched) continue;        // 교체 대기 중인 선수는 시뮬레이션하지 않는다 (벤치에서 낙사하던 버그)
       if (this.fStop[sl] > 0) this.fStop[sl] -= rawDt; else if (this.fSlow[sl][0] > 0) this.fSlow[sl][0] -= rawDt;
       const simDt = rawDt * this.timeScaleOf(sl);
       let inp;
@@ -1158,6 +1267,7 @@ class Game {
       this.hitFx(ev);
       if (this.mode === 'host') this.pendingEvents.push(ev);
     }
+    this.updateSubs(rawDt);
     // 코치 판단 (사람 파이터만). 로컬이면 바로 표시, 원격이면 이벤트로 전달
     for (const slot in this.coachBrains) {
       const f = fs[slot]; const key = this.coachBrains[slot].update(rawDt, f, fs);
@@ -1168,7 +1278,15 @@ class Game {
     }
     if (!this.over) {
       const alive = fs.filter((f) => !f.ko);
-      if (alive.length <= 1) {
+      if (this.teamMode) {
+        const teamsAlive = new Set(alive.map((f) => f.team));
+        if (teamsAlive.size <= 1) {
+          const wt = [...teamsAlive][0];
+          const w = alive.find((f) => f.team === wt);
+          this.showWinner(w ? w.slot : -1, wt);
+          if (this.mode === 'host') this.net.broadcast({ t: 'over', winner: w ? w.slot : -1, team: wt });
+        }
+      } else if (alive.length <= 1) {
         const w = alive[0] ? alive[0].slot : -1;
         this.showWinner(w);
         if (this.mode === 'host') this.net.broadcast({ t: 'over', winner: w });
@@ -1243,6 +1361,10 @@ class Game {
         if (a) this.camCtl.onHit(a.forward, 0.7);
         this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.34, '가드!!', 'dodge');
         if (b) this.sparks.burst(b.chestPos, a ? a.forward : new THREE.Vector3(0, 0, 1), 26, new THREE.Color(0.75, 0.9, 1), 1.4, 0.7);
+      }
+      else if (e.t === 'sub') {
+        const f = this.fighters[e.s];
+        if (f) { this.setBenched(f, false); this.audio.bell(1); this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, `${f.nick || f.name} 등장!`, 'dodge'); }
       }
       else if (e.t === 'rush') {
         const a = this.fighters[e.s], b = this.fighters[e.b];
