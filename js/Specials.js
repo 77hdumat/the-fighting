@@ -53,14 +53,32 @@ export const SPECIALS = {
   },
   rush: { name: 'ラッシュ', ko: '러시 3연 훅', burst: true, cd: 6 },
 
-  // ---- 히든: 채채더킴 ----
+  // ---- 히든: 채채더킴 (책) ----
+  bookSmash: {
+    name: 'ブックスマッシュ', ko: '책 후려치기', side: 'R', dur: 0.42, power: 1.25, cd: 6, heavy: true, staggerT: 1.6, step: 2.4,
+    wind: { x: 0.7, y: 0.75, z: 0.85, el: -2.3 }, strike: { x: -1.95, y: -0.55, z: 0.6, el: -0.35 },
+    body(p, w, s, sgn) {
+      p.waistX += 0.35 * w - 0.3 * s; p.waistY += sgn * (0.6 * w - 1.0 * s); p.chestY += sgn * (0.3 * w - 0.5 * s);
+      p.hipsY += -0.18 * w + 0.1 * s; p.headX += -0.25 * s; p.hipsZ += 0.22 * s;
+    },
+  },
   nyangRush: { name: 'にゃんにゃん連打', ko: '냥냥펀치 4연', burst: true, cd: 4 },
   catSlap: {
     name: 'キャットスラップ', ko: '고양이 할퀴기', side: 'R', dur: 0.3, power: 0.85, cd: 5, heavy: false, staggerT: 0.7, step: 3.0, quick: true,
     wind: { x: -0.4, y: 0.5, z: 0.7, el: -2.1 }, strike: { x: -1.5, y: -0.5, z: 0.35, el: -0.2 },
     body(p, w, s, sgn) { p.waistY += sgn * (0.3 * w - 0.6 * s); p.hipsY += 0.08 * w - 0.05 * s; p.headX += -0.12 * s; },
   },
-  // ---- 히든: 쩡효 ----
+  // ---- 히든: 쩡효 (덤벨) ----
+  dumbbellPress: {
+    name: 'ダンベルプレス', ko: '덤벨 프레스', side: 'R', dur: 0.54, power: 1.7, cd: 7, heavy: true, staggerT: 1.7, step: 1.6, zone: 'head',
+    wind: { x: 1.0, y: 0.15, z: 0.35, el: -2.5 }, strike: { x: -2.6, y: -0.15, z: 0.25, el: -0.2 },
+    body(p, w, s, sgn) {
+      p.hipsY += -0.42 * w + 0.3 * s; p.thighLX += -0.62 * w + 0.42 * s; p.thighRX += -0.62 * w + 0.42 * s;
+      p.shinL += 1.05 * w - 0.55 * s; p.shinR += 1.05 * w - 0.55 * s;
+      p.waistX += 0.35 * w - 0.45 * s; p.chestX += 0.2 * w - 0.2 * s; p.headX += -0.3 * s;
+      p.shLX += -1.2 * w - 0.6 * s; p.elL += -0.5 * w;   // 반대 손도 같이 밀어 올린다
+    },
+  },
   dumbbell: {
     name: 'ダンベルブロー', ko: '덤벨 훅', side: 'R', dur: 0.5, power: 1.55, cd: 7, heavy: true, staggerT: 1.3, step: 2.1,
     wind: { x: 0.8, y: -0.4, z: -0.5, el: -2.0 }, strike: { x: -1.6, y: 0.5, z: -0.8, el: -0.9 },
@@ -77,7 +95,20 @@ export const SPECIALS = {
       p.shinL += 1.2 * w - 0.5 * s; p.shinR += 1.2 * w - 0.5 * s; p.chestX += 0.3 * w - 0.25 * s; p.headX += -0.3 * s;
     },
   },
-  // ---- 히든: 뼈석원 ----
+  // ---- 히든: 뼈석원 (하이바 / 녹차) ----
+  helmetBash: {
+    name: 'ヘルメットバッシュ', ko: '하이바 박치기', side: 'L', dur: 0.4, power: 1.5, cd: 6.5, heavy: true, staggerT: 1.5, step: 5.2, launch: 0.35,
+    wind: { x: -0.2, y: 0.55, z: 0.5, el: -2.2 }, strike: { x: -2.2, y: 0.05, z: 0.15, el: -0.4 },
+    body(p, w, s, sgn) {
+      p.waistX += -0.3 * w + 0.7 * s; p.headX += -0.4 * w + 0.55 * s; p.chestX += 0.35 * s;
+      p.hipsY += 0.05 * w - 0.14 * s; p.hipsZ += 0.34 * s; p.waistY += sgn * (0.25 * w - 0.4 * s);
+    },
+  },
+  teaThrow: {
+    name: '緑茶スロー', ko: '녹차 투척', side: 'R', dur: 0.34, power: 0.95, cd: 4.5, heavy: false, quick: true, step: 1.0, staggerT: 0.9, reachBonus: 1.1,
+    wind: { x: 0.5, y: 0.6, z: 0.7, el: -2.35 }, strike: { x: -2.3, y: -0.35, z: 0.3, el: -0.1 },
+    body(p, w, s, sgn) { p.waistY += sgn * (0.5 * w - 0.9 * s); p.chestY += sgn * (0.2 * w - 0.4 * s); p.waistX += 0.18 * w - 0.15 * s; p.headX += -0.2 * s; },
+  },
   boneJab: {
     name: 'ボーンジャブ', ko: '뼈 찌르기', side: 'L', dur: 0.26, power: 0.7, cd: 3.5, heavy: false, quick: true, step: 3.6,
     wind: { x: -0.5, y: -0.1, z: 0.15, el: -2.5 }, strike: { x: -1.75, y: -0.1, z: 0.0, el: 0.05 },
@@ -98,9 +129,9 @@ export const KITS = {
   miyata:  { stance: 'counter', finisher: 'jolt',         U: 'jolt', I: 'backjab', cdU: 3.5 },
   sendo:   { stance: 'smash',   finisher: 'smash',        U: 'smash', I: 'rush', cdU: 10 },
   // 히든
-  chaechae:  { stance: 'flicker', finisher: 'reels',   U: 'nyangRush', I: 'catSlap', cdU: 4 },
-  jjeonghyo: { stance: 'smash',   finisher: 'barbell', U: 'dumbbell',  I: 'deadlift', cdU: 6.5 },
-  ppyeo:     { stance: 'counter', finisher: 'bike',    U: 'boneJab',   I: 'elbowSpin', cdU: 3.5 },
+  chaechae:  { stance: 'flicker', finisher: 'reels',   U: 'bookSmash',     I: 'nyangRush', cdU: 5.5 },
+  jjeonghyo: { stance: 'smash',   finisher: 'barbell', U: 'dumbbellPress', I: 'deadlift',  cdU: 6.5 },
+  ppyeo:     { stance: 'counter', finisher: 'bike',    U: 'helmetBash',    I: 'teaThrow',  cdU: 5 },
 };
 
 export const STANCE_LINES = {
@@ -112,7 +143,7 @@ export const STANCE_LINES = {
 
 // 히든 캐릭터 전용 대사 (한국어 — 게이지/필살/등장)
 export const HIDDEN_LINES = {
-  chaechae: { intro: '난 문화생활을 좋아해~', max: '이거 릴스각인데?', fin: '자, 같이 춤춰!', hit: ['냥!', '냥냥!', '이건 찍어야 해'] },
-  jjeonghyo: { intro: '3대 500 미만 대화 금지.', max: '무게 올린다.', fin: '데드리프트… 받아!', hit: ['하압!', '한 세트 더!', '가볍네'] },
-  ppyeo: { intro: '난 먹어도 살 안 쪄.', max: '시동 건다.', fin: '부아아앙—!!', hit: ['뼈!', '뼈뼈!', '부릉'] },
+  chaechae: { intro: '난 문화생활을 좋아해~', max: '이거 릴스각인데?', fin: '자, 같이 춤춰!', u: '이 책 읽어봤어?', hit: ['냥!', '냥냥!', '이건 찍어야 해'] },
+  jjeonghyo: { intro: '3대 500 미만 대화 금지.', max: '무게 올린다.', fin: '데드리프트… 받아!', u: '마지막 한 개 더!', hit: ['하압!', '한 세트 더!', '가볍네'] },
+  ppyeo: { intro: '난 먹어도 살 안 쪄.', max: '시동 건다.', fin: '부아아앙—!!', u: '헬멧은 필수지!', hit: ['뼈!', '뼈뼈!', '부릉'] },
 };

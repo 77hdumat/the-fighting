@@ -70,7 +70,10 @@ export class Fighter {
     this.knock = new THREE.Vector3();
     this.hitCount = 0; this.hitTimer = 0;
     this.stagger = 0; this.staggerImmune = 0; this.staggerKind = 'normal';
-    this.danceT = 0; this.danceVictim = false; this.dancePartner = null;   // 릴스 댄스 (채채더킴 필살)
+    this.danceT = 0; this.danceVictim = false; this.dancePartner = null;   // (구) 릴스 댄스
+    // 히든 필살 연출: 시전자(ultT) / 당하는 쪽(ultVictimT)
+    this.ultT = 0; this.ultKind = null; this.ultTarget = null;
+    this.ultVictimT = 0; this.ultVictimKind = null; this.ultDmg = 0;
     this.groggy = 0;   // 뎀프시 연타 누적 → 4 이면 그로기
     this.downT = 0; this.downDur = 2.7;   // 필살기 피격 다운 → 넘어졌다 고개 흔들며 일어남 (무적·행동불가)
     this.rattle = 0;
@@ -91,7 +94,7 @@ export class Fighter {
 
   get dempseyActive() { return this.dempsey.active; }
   get stanceStyle() { return this.dempsey.style; }
-  get busy() { return this.ko || this.stagger > 0 || !!this.finisher || this.airY > 0.01 || this.downT > 0 || this.danceT > 0; }
+  get busy() { return this.ko || this.stagger > 0 || !!this.finisher || this.airY > 0.01 || this.downT > 0 || this.danceT > 0 || this.ultT > 0 || this.ultVictimT > 0; }
   get rolling() { return this.rollT > 0; }
   get alive() { return !this.ko; }
   get isCounterWindow() { return !!this.punch && this.punch.t / this.punch.dur < 0.55; }
@@ -189,6 +192,13 @@ export class Fighter {
     return true;
   }
 
+  /** 고유기 자막: 히든 캐릭터는 한국어 전용 대사 */
+  specialLine(spec, slotKey) {
+    const hid = HIDDEN_LINES[this.defKey];
+    if (hid) return (slotKey === 'U' && hid.u) ? `${hid.u} — ${spec.ko}!` : `${spec.ko}!`;
+    return spec.name + '！';
+  }
+
   /** 고유기 (U / I) */
   startSpecial(slotKey) {
     const kind = this.kit[slotKey];
@@ -212,14 +222,16 @@ export class Fighter {
         this.queue.push({ side: 'R', type: 'hook', dur: 0.25, power: 0.85, heavy: true, staggerT: isU ? 0.9 : 0, fromU: isU }, { side: 'L', type: 'hook', dur: 0.24, power: 0.95, heavy: true, staggerT: isU ? 1.2 : 0, fromU: isU });
         if (isU) this.armor = 0.9 / this.def.speedMul;
       }
-      this.subs.show(spec.name + '！', { duration: 0.9, mid: true });
+      this.subs.show(this.specialLine(spec, slotKey), { duration: 0.9, mid: true });
       this.events.push({ type: 'special', kind });
       return true;
     }
+    if (kind === 'dumbbellPress' || kind === 'bookSmash') this.audio.clang(kind === 'bookSmash' ? 0.35 : 0.9);
+    else if (kind === 'helmetBash') this.audio.engine(0.5);
     const ok = this.startPunch(spec.side, 'special', spec.dur, spec.power, { kind, heavy: !!spec.heavy, launch: spec.launch || 0, staggerT: uStag, zoneForce: spec.zone || null, liver: !!spec.liver, counterMul: spec.counterMul || 1, step: spec.step || 0, noTell: !!spec.quick, fromU: isU });
     if (!ok) { this.cd[slotKey] = 0; this.armor = 0; return false; }
     if (spec.backstep) this.backstep = spec.backstep;
-    this.subs.show(spec.name + '！', { duration: 0.9, mid: !spec.quick });
+    this.subs.show(this.specialLine(spec, slotKey), { duration: 0.9, mid: !spec.quick });
     this.events.push({ type: 'special', kind });
     return true;
   }
@@ -230,6 +242,24 @@ export class Fighter {
     const fk = this.kit.finisher;
     const F = FINISHERS[fk] || FINISHERS.finisherHook;
     const charge = d.charge;
+    const ULT = { reels: 3.4, barbell: 3.6, bike: 3.0 };
+    if (ULT[fk]) {
+      // ---- 연출형 필살 (히든 3인): 상대를 붙잡아두고 스크립트대로 진행 ----
+      const tg = this.target;
+      if (!tg || tg.ko || tg.downT > 0) return false;
+      const dur = ULT[fk];
+      this.ultT = dur; this.ultKind = fk; this.ultTarget = tg;
+      this.punch = null; this.queue.length = 0; this.armor = dur;
+      tg.ultVictimT = dur; tg.ultVictimKind = fk; tg.punch = null; tg.queue.length = 0; tg.stagger = 0; tg.dempsey.stop();
+      tg.ultDmg = (34 + 7 * charge) * this.def.powerMul;   // 연출 동안 나눠서 들어간다
+      tg.ultDmgRate = tg.ultDmg / dur;
+      d.consume();
+      this.audio.finisherWind(0.5);
+      const line = fk === 'reels' ? '이건 문화 충격이야!' : fk === 'barbell' ? '자, 10회 3세트 간다!' : '어… 이거 무거운데—!!';
+      this.subs.show(line, { duration: 1.6, strong: true });
+      this.events.push({ type: 'ultStart', kind: fk, target: tg.slot, charge });
+      return true;
+    }
     if (fk === 'finisherHook') {
       // 뎀프시롤 필살: 3.2초 동안 ∞ 로 격하게 흔들며 상대를 추적, 좌우 훅 난타 → 마지막 강타. 게이지는 종료 시 소모
       this.rollT = 2.8; this.rollFinal = false; this.punch = null; this.queue.length = 0;
@@ -715,6 +745,66 @@ export class Fighter {
       }
     }
 
+    // ---- 연출형 필살: 시전자 ----
+    if (this.ultT > 0) {
+      this.ultT -= dt;
+      const tg = this.ultTarget;
+      if (tg) {
+        this.forward.copy(tg.pos).sub(this.pos).setY(0);
+        if (this.forward.lengthSq() > 1e-4) { this.forward.normalize(); this.yaw = Math.atan2(this.forward.x, this.forward.z); this.side.set(this.forward.z, 0, -this.forward.x); }
+        const want = 2.1;
+        const dd = this.pos.distanceTo(tg.pos);
+        if (dd < want) this.pos.addScaledVector(this.forward, -(want - dd) * dt * 3);
+      }
+      const k = this.ultKind;
+      if (k === 'reels') {
+        // 손을 하늘로 뻗어 유물을 불러내고, 폰으로 촬영하는 포즈
+        p.shRX += -2.75; p.shRZ += -0.45; p.elR += -0.25; p.shLX += -1.6; p.elL += -1.5; p.shLY += -0.4;
+        p.headX += -0.45; p.waistX += -0.2; p.hipsY += Math.abs(Math.sin(t * 6)) * 0.05;
+      } else if (k === 'barbell') {
+        // 팔짱 끼고 카운트 세기 → 마지막엔 손 내리기
+        p.shLX += -0.95; p.elL += -2.35; p.shLY += -1.0; p.shRX += -0.9; p.elR += -2.35; p.shRY += 1.0;
+        p.chestX += 0.12; p.headX += -0.1 + Math.sin(t * 3) * 0.06; p.hipsX += Math.sin(t * 1.6) * 0.04;
+      } else if (k === 'bike') {
+        // 오토바이를 들어올리다 휘청 → 던지고 나동그라짐
+        const u = (3.0 - this.ultT);
+        if (u < 0.9) { p.shLX += -2.6; p.shRX += -2.6; p.elL += -0.5; p.elR += -0.5; p.waistX += -0.35 + Math.sin(t * 14) * 0.08; p.thighLX += -0.3; p.thighRX += -0.3; p.shinL += 0.5; p.shinR += 0.5; }
+        else { p.shLX += -1.4; p.shRX += -1.4; p.waistX += 0.5; p.headX += 0.25; p.hipsY += -0.12; }
+      }
+      this.queue.length = 0;
+      if (this.ultT <= 0) { this.ultT = 0; this.ultKind = null; this.ultTarget = null; this.armor = 0; }
+    }
+    // ---- 연출형 필살: 당하는 쪽 ----
+    if (this.ultVictimT > 0) {
+      this.ultVictimT -= dt;
+      const k = this.ultVictimKind;
+      const tick = (this.ultDmgRate || 0) * dt;
+      if (tick > 0 && !this.ko) { this.hp = Math.max(0, this.hp - tick); if (this.hp <= 0) { this._die(); } }
+      if (k === 'reels') {
+        // 머리 감싸고 쏟아지는 유물을 맞는다
+        p.shLX += -2.2; p.shRX += -2.2; p.elL += -2.2; p.elR += -2.2; p.shLZ += 0.5; p.shRZ += -0.5;
+        p.headX += 0.35 + Math.sin(t * 22) * 0.12; p.waistX += 0.45; p.hipsY += -0.16 + Math.abs(Math.sin(t * 9)) * 0.05;
+        this.rattle = Math.max(this.rattle, 0.5);
+      } else if (k === 'barbell') {
+        // 강제 스쿼트 3회 → 마지막에 깔려 주저앉음
+        const u = 3.6 - this.ultVictimT;
+        const sq = u < 2.45 ? Math.abs(Math.sin((u - 1.0) / 1.45 * Math.PI * 3)) : 1;
+        const down = u < 2.45 ? sq : 1;
+        p.hipsY += -0.55 * down; p.thighLX += -1.15 * down; p.thighRX += -1.15 * down; p.shinL += 1.9 * down; p.shinR += 1.9 * down;
+        p.waistX += 0.3 * down; p.shLX += -2.6; p.shRX += -2.6; p.elL += -0.4; p.elR += -0.4; p.shLZ += 0.55; p.shRZ += -0.55;
+        p.headX += -0.2 + Math.sin(t * 12) * 0.08 * down;
+        if (u > 2.45) { p.headZ += Math.sin(t * 14) * 0.2; this.rattle = Math.max(this.rattle, 0.4); }
+      } else if (k === 'bike') {
+        const u = 3.0 - this.ultVictimT;
+        if (u < 1.4) { p.shLX += -1.6; p.shRX += -1.6; p.elL += -1.8; p.elR += -1.8; p.headX += -0.3; p.waistX += -0.15 + Math.sin(t * 18) * 0.05; }
+        else { p.waistX += -0.8; p.headX += -0.5; p.shLX += 0.9; p.shRX += 0.9; this.rattle = Math.max(this.rattle, 0.8); if (!this._bikeHit) { this._bikeHit = true; this.knock.addScaledVector(this.forward, -7); this.audio.stagger(); } }
+      }
+      this.queue.length = 0;
+      if (this.ultVictimT <= 0) {
+        this.ultVictimT = 0; this.ultVictimKind = null; this._bikeHit = false; this.ultDmg = 0; this.ultDmgRate = 0;
+        if (!this.ko) { this.downT = this.downDur; this.rattle = 1; }
+      }
+    }
     // ---- 릴스 댄스 (둘 다 강제로 춤) ----
     if (this.danceT > 0) {
       this.danceT -= dt;

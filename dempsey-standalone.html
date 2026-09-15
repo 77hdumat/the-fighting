@@ -717,14 +717,32 @@ const SPECIALS = {
   },
   rush: { name: 'ラッシュ', ko: '러시 3연 훅', burst: true, cd: 6 },
 
-  // ---- 히든: 채채더킴 ----
+  // ---- 히든: 채채더킴 (책) ----
+  bookSmash: {
+    name: 'ブックスマッシュ', ko: '책 후려치기', side: 'R', dur: 0.42, power: 1.25, cd: 6, heavy: true, staggerT: 1.6, step: 2.4,
+    wind: { x: 0.7, y: 0.75, z: 0.85, el: -2.3 }, strike: { x: -1.95, y: -0.55, z: 0.6, el: -0.35 },
+    body(p, w, s, sgn) {
+      p.waistX += 0.35 * w - 0.3 * s; p.waistY += sgn * (0.6 * w - 1.0 * s); p.chestY += sgn * (0.3 * w - 0.5 * s);
+      p.hipsY += -0.18 * w + 0.1 * s; p.headX += -0.25 * s; p.hipsZ += 0.22 * s;
+    },
+  },
   nyangRush: { name: 'にゃんにゃん連打', ko: '냥냥펀치 4연', burst: true, cd: 4 },
   catSlap: {
     name: 'キャットスラップ', ko: '고양이 할퀴기', side: 'R', dur: 0.3, power: 0.85, cd: 5, heavy: false, staggerT: 0.7, step: 3.0, quick: true,
     wind: { x: -0.4, y: 0.5, z: 0.7, el: -2.1 }, strike: { x: -1.5, y: -0.5, z: 0.35, el: -0.2 },
     body(p, w, s, sgn) { p.waistY += sgn * (0.3 * w - 0.6 * s); p.hipsY += 0.08 * w - 0.05 * s; p.headX += -0.12 * s; },
   },
-  // ---- 히든: 쩡효 ----
+  // ---- 히든: 쩡효 (덤벨) ----
+  dumbbellPress: {
+    name: 'ダンベルプレス', ko: '덤벨 프레스', side: 'R', dur: 0.54, power: 1.7, cd: 7, heavy: true, staggerT: 1.7, step: 1.6, zone: 'head',
+    wind: { x: 1.0, y: 0.15, z: 0.35, el: -2.5 }, strike: { x: -2.6, y: -0.15, z: 0.25, el: -0.2 },
+    body(p, w, s, sgn) {
+      p.hipsY += -0.42 * w + 0.3 * s; p.thighLX += -0.62 * w + 0.42 * s; p.thighRX += -0.62 * w + 0.42 * s;
+      p.shinL += 1.05 * w - 0.55 * s; p.shinR += 1.05 * w - 0.55 * s;
+      p.waistX += 0.35 * w - 0.45 * s; p.chestX += 0.2 * w - 0.2 * s; p.headX += -0.3 * s;
+      p.shLX += -1.2 * w - 0.6 * s; p.elL += -0.5 * w;   // 반대 손도 같이 밀어 올린다
+    },
+  },
   dumbbell: {
     name: 'ダンベルブロー', ko: '덤벨 훅', side: 'R', dur: 0.5, power: 1.55, cd: 7, heavy: true, staggerT: 1.3, step: 2.1,
     wind: { x: 0.8, y: -0.4, z: -0.5, el: -2.0 }, strike: { x: -1.6, y: 0.5, z: -0.8, el: -0.9 },
@@ -741,7 +759,20 @@ const SPECIALS = {
       p.shinL += 1.2 * w - 0.5 * s; p.shinR += 1.2 * w - 0.5 * s; p.chestX += 0.3 * w - 0.25 * s; p.headX += -0.3 * s;
     },
   },
-  // ---- 히든: 뼈석원 ----
+  // ---- 히든: 뼈석원 (하이바 / 녹차) ----
+  helmetBash: {
+    name: 'ヘルメットバッシュ', ko: '하이바 박치기', side: 'L', dur: 0.4, power: 1.5, cd: 6.5, heavy: true, staggerT: 1.5, step: 5.2, launch: 0.35,
+    wind: { x: -0.2, y: 0.55, z: 0.5, el: -2.2 }, strike: { x: -2.2, y: 0.05, z: 0.15, el: -0.4 },
+    body(p, w, s, sgn) {
+      p.waistX += -0.3 * w + 0.7 * s; p.headX += -0.4 * w + 0.55 * s; p.chestX += 0.35 * s;
+      p.hipsY += 0.05 * w - 0.14 * s; p.hipsZ += 0.34 * s; p.waistY += sgn * (0.25 * w - 0.4 * s);
+    },
+  },
+  teaThrow: {
+    name: '緑茶スロー', ko: '녹차 투척', side: 'R', dur: 0.34, power: 0.95, cd: 4.5, heavy: false, quick: true, step: 1.0, staggerT: 0.9, reachBonus: 1.1,
+    wind: { x: 0.5, y: 0.6, z: 0.7, el: -2.35 }, strike: { x: -2.3, y: -0.35, z: 0.3, el: -0.1 },
+    body(p, w, s, sgn) { p.waistY += sgn * (0.5 * w - 0.9 * s); p.chestY += sgn * (0.2 * w - 0.4 * s); p.waistX += 0.18 * w - 0.15 * s; p.headX += -0.2 * s; },
+  },
   boneJab: {
     name: 'ボーンジャブ', ko: '뼈 찌르기', side: 'L', dur: 0.26, power: 0.7, cd: 3.5, heavy: false, quick: true, step: 3.6,
     wind: { x: -0.5, y: -0.1, z: 0.15, el: -2.5 }, strike: { x: -1.75, y: -0.1, z: 0.0, el: 0.05 },
@@ -762,9 +793,9 @@ const KITS = {
   miyata:  { stance: 'counter', finisher: 'jolt',         U: 'jolt', I: 'backjab', cdU: 3.5 },
   sendo:   { stance: 'smash',   finisher: 'smash',        U: 'smash', I: 'rush', cdU: 10 },
   // 히든
-  chaechae:  { stance: 'flicker', finisher: 'reels',   U: 'nyangRush', I: 'catSlap', cdU: 4 },
-  jjeonghyo: { stance: 'smash',   finisher: 'barbell', U: 'dumbbell',  I: 'deadlift', cdU: 6.5 },
-  ppyeo:     { stance: 'counter', finisher: 'bike',    U: 'boneJab',   I: 'elbowSpin', cdU: 3.5 },
+  chaechae:  { stance: 'flicker', finisher: 'reels',   U: 'bookSmash',     I: 'nyangRush', cdU: 5.5 },
+  jjeonghyo: { stance: 'smash',   finisher: 'barbell', U: 'dumbbellPress', I: 'deadlift',  cdU: 6.5 },
+  ppyeo:     { stance: 'counter', finisher: 'bike',    U: 'helmetBash',    I: 'teaThrow',  cdU: 5 },
 };
 
 const STANCE_LINES = {
@@ -776,9 +807,9 @@ const STANCE_LINES = {
 
 // 히든 캐릭터 전용 대사 (한국어 — 게이지/필살/등장)
 const HIDDEN_LINES = {
-  chaechae: { intro: '난 문화생활을 좋아해~', max: '이거 릴스각인데?', fin: '자, 같이 춤춰!', hit: ['냥!', '냥냥!', '이건 찍어야 해'] },
-  jjeonghyo: { intro: '3대 500 미만 대화 금지.', max: '무게 올린다.', fin: '데드리프트… 받아!', hit: ['하압!', '한 세트 더!', '가볍네'] },
-  ppyeo: { intro: '난 먹어도 살 안 쪄.', max: '시동 건다.', fin: '부아아앙—!!', hit: ['뼈!', '뼈뼈!', '부릉'] },
+  chaechae: { intro: '난 문화생활을 좋아해~', max: '이거 릴스각인데?', fin: '자, 같이 춤춰!', u: '이 책 읽어봤어?', hit: ['냥!', '냥냥!', '이건 찍어야 해'] },
+  jjeonghyo: { intro: '3대 500 미만 대화 금지.', max: '무게 올린다.', fin: '데드리프트… 받아!', u: '마지막 한 개 더!', hit: ['하압!', '한 세트 더!', '가볍네'] },
+  ppyeo: { intro: '난 먹어도 살 안 쪄.', max: '시동 건다.', fin: '부아아앙—!!', u: '헬멧은 필수지!', hit: ['뼈!', '뼈뼈!', '부릉'] },
 };
 return { SPECIALS, KITS, STANCE_LINES, HIDDEN_LINES };
 })();
@@ -989,6 +1020,228 @@ class HitSparks {
 }
 return { HitSparks };
 })();
+// ===== Ultimate.js =====
+__M.Ultimate = (() => {
+// Ultimate.js — 히든 캐릭터 필살기 3D 연출 (겟앰프드처럼 화면에 확실히 보이게)
+// chaechae: 하늘에서 유물·미술품 무더기 낙하 / jjeonghyo: 데드리프트 랙에 가두고 운동시킨 뒤 바벨에 깔림 / ppyeo: 오토바이를 놓쳐 던짐
+
+// 링 조명은 바닥 근처만 비추므로, 낙하물은 자체 발광을 섞어 어디서든 또렷하게 보이게 한다
+const TOON = (c, opts = {}) => {
+  const col = new THREE.Color(c);
+  return new THREE.MeshToonMaterial({ color: c, emissive: col.clone().multiplyScalar(0.55), ...opts });
+};
+
+function outlined(geo, color, group, pos, scale = 1) {
+  const m = new THREE.Mesh(geo, TOON(color));
+  if (pos) m.position.copy(pos);
+  m.scale.setScalar(scale);
+  m.castShadow = true;
+  group.add(m);
+  return m;
+}
+
+// ---- 낙하물: 도자기 / 액자 / 석상 / 두루마리 ----
+function makeArtifact(i) {
+  const g = new THREE.Group();
+  const kind = i % 4;
+  if (kind === 0) {           // 청자 도자기
+    const body = outlined(new THREE.LatheGeometry([
+      new THREE.Vector2(0.001, -0.22), new THREE.Vector2(0.11, -0.16), new THREE.Vector2(0.16, 0.0),
+      new THREE.Vector2(0.1, 0.14), new THREE.Vector2(0.13, 0.2), new THREE.Vector2(0.08, 0.24),
+    ], 14), 0x4a9d8f, g);
+    outlined(new THREE.TorusGeometry(0.1, 0.014, 6, 16), 0xe8d7a6, g, new THREE.Vector3(0, 0.06, 0));
+  } else if (kind === 1) {    // 금빛 액자 그림
+    const frame = outlined(new THREE.BoxGeometry(0.46, 0.34, 0.035), 0xd9a441, g);
+    const canvas = new THREE.Mesh(new THREE.PlaneGeometry(0.38, 0.26), TOON(0xf3e9d2));
+    canvas.position.z = 0.02; frame.add(canvas);
+    const paint = new THREE.Mesh(new THREE.CircleGeometry(0.08, 16), TOON(0x3f6fb5));
+    paint.position.set(-0.06, 0.02, 0.003); canvas.add(paint);
+    const paint2 = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.08), TOON(0xc0572f));
+    paint2.position.set(0.08, -0.05, 0.003); canvas.add(paint2);
+  } else if (kind === 2) {    // 대리석 흉상
+    outlined(new THREE.CylinderGeometry(0.13, 0.17, 0.16, 10), 0xe9e6de, g, new THREE.Vector3(0, -0.16, 0));
+    outlined(new THREE.SphereGeometry(0.12, 14, 10), 0xf1efe8, g, new THREE.Vector3(0, 0.02, 0));
+    outlined(new THREE.BoxGeometry(0.1, 0.09, 0.14), 0xf1efe8, g, new THREE.Vector3(0, -0.06, 0.02));
+  } else {                    // 두루마리 / 고서
+    const b = outlined(new THREE.BoxGeometry(0.3, 0.38, 0.07), 0x8a2b2b, g);
+    outlined(new THREE.BoxGeometry(0.27, 0.35, 0.08), 0xf6f1e2, b, new THREE.Vector3(0.012, 0, 0.002));
+  }
+  return g;
+}
+
+class UltimateFx {
+  constructor(scene, audio, fx) {
+    this.scene = scene; this.audio = audio; this.fx = fx;
+    this.active = [];
+  }
+
+  /** kind: 'reels' | 'barbell' | 'bike' */
+  play(kind, attacker, target) {
+    if (!target) return;
+    const root = new THREE.Group();
+    this.scene.add(root);
+    const item = { kind, root, t: 0, dur: 3.2, parts: [], attacker, target, tp: target.pos.clone() };
+    if (kind === 'reels') this._buildArtifacts(item);
+    else if (kind === 'barbell') this._buildRack(item);
+    else if (kind === 'bike') this._buildBike(item, attacker);
+    this.active.push(item);
+  }
+
+  _buildArtifacts(item) {
+    // 표적 위 하늘에서 24개가 시간차로 쏟아진다
+    for (let i = 0; i < 34; i++) {
+      const a = makeArtifact(i);
+      const ang = Math.random() * Math.PI * 2, rr = Math.random() * 1.15;
+      a.position.set(item.tp.x + Math.cos(ang) * rr, 5.2 + Math.random() * 4.2, item.tp.z + Math.sin(ang) * rr);
+      a.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+      a.scale.setScalar(1.15 + Math.random() * 0.75);
+      item.root.add(a);
+      item.parts.push({ m: a, delay: 0.1 + i * 0.062, vy: 0, spin: new THREE.Vector3((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6), landed: 0 });
+    }
+  }
+
+  _buildRack(item) {
+    // 데드리프트 랙: 기둥 4개 + 상단 바 + 바벨 (상대를 가둔다)
+    const g = item.root;
+    g.position.copy(item.tp);
+    const post = new THREE.CylinderGeometry(0.06, 0.06, 2.3, 10);
+    for (const [x, z] of [[-0.75, -0.5], [0.75, -0.5], [-0.75, 0.5], [0.75, 0.5]]) {
+      const p = outlined(post, 0x1f2430, g, new THREE.Vector3(x, 1.15, z));
+      p.scale.y = 0.01;   // 솟아오르는 연출용
+      item.parts.push({ m: p, type: 'post' });
+    }
+    const top = outlined(new THREE.BoxGeometry(1.62, 0.1, 0.12), 0x1f2430, g, new THREE.Vector3(0, 2.28, -0.5));
+    top.visible = false; item.top = top;
+    const top2 = outlined(new THREE.BoxGeometry(1.62, 0.1, 0.12), 0x1f2430, g, new THREE.Vector3(0, 2.28, 0.5));
+    top2.visible = false; item.top2 = top2;
+    // 바벨 (봉 + 원판 4장)
+    const bar = new THREE.Group();
+    outlined(new THREE.CylinderGeometry(0.035, 0.035, 2.0, 10), 0xb9bcc6, bar).rotation.z = Math.PI / 2;
+    for (const sx of [-1, 1]) for (let k = 0; k < 2; k++) {
+      const pl = outlined(new THREE.CylinderGeometry(0.28 - k * 0.04, 0.28 - k * 0.04, 0.07, 16), k ? 0x24242c : 0xc0f000, bar, new THREE.Vector3(sx * (0.72 + k * 0.09), 0, 0));
+      pl.rotation.z = Math.PI / 2;
+    }
+    bar.position.set(0, 1.55, 0);
+    g.add(bar); item.bar = bar;
+  }
+
+  _buildBike(item, attacker) {
+    // 오토바이: 프레임 + 바퀴 2개 + 핸들 (들었다가 놓쳐서 상대에게 날아간다)
+    const g = item.root;
+    const b = new THREE.Group();
+    outlined(new THREE.BoxGeometry(1.15, 0.26, 0.34), 0xc42b2b, b, new THREE.Vector3(0, 0.62, 0));
+    outlined(new THREE.BoxGeometry(0.5, 0.2, 0.3), 0x2b2b33, b, new THREE.Vector3(-0.28, 0.82, 0));
+    outlined(new THREE.BoxGeometry(0.42, 0.16, 0.3), 0x15151c, b, new THREE.Vector3(0.3, 0.8, 0));
+    for (const sx of [-1, 1]) {
+      const w = outlined(new THREE.TorusGeometry(0.33, 0.1, 8, 20), 0x14141a, b, new THREE.Vector3(sx * 0.62, 0.33, 0));
+      const hub = outlined(new THREE.CylinderGeometry(0.1, 0.1, 0.12, 10), 0xb9bcc6, w);
+      hub.rotation.x = Math.PI / 2;
+    }
+    const bar = outlined(new THREE.CylinderGeometry(0.03, 0.03, 0.62, 8), 0x2b2b33, b, new THREE.Vector3(-0.5, 1.02, 0));
+    bar.rotation.z = Math.PI / 2 + 0.3; bar.rotation.x = Math.PI / 2;
+    const head = outlined(new THREE.SphereGeometry(0.12, 12, 10), 0xfff1b0, b, new THREE.Vector3(-0.66, 0.86, 0));
+    head.material.emissive = new THREE.Color(0xffcc55); head.material.emissiveIntensity = 1;
+    b.position.copy(attacker ? attacker.pos : item.tp).add(new THREE.Vector3(0, 0.2, 0));
+    g.add(b); item.bike = b;
+    item.from = b.position.clone();
+  }
+
+  update(dt, camShake) {
+    for (let i = this.active.length - 1; i >= 0; i--) {
+      const it = this.active[i];
+      it.t += dt;
+      const tp = it.target ? it.target.pos : it.tp;
+      if (it.kind === 'reels') this._updArtifacts(it, dt, tp);
+      else if (it.kind === 'barbell') this._updRack(it, dt, tp);
+      else if (it.kind === 'bike') this._updBike(it, dt, tp);
+      if (it.t > it.dur + 1.4) {
+        this.scene.remove(it.root);
+        it.root.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+        this.active.splice(i, 1);
+      }
+    }
+  }
+
+  _updArtifacts(it, dt, tp) {
+    for (const p of it.parts) {
+      if (it.t < p.delay) continue;
+      if (p.landed) { p.landed += dt; p.m.rotation.z += dt * 2; p.m.scale.multiplyScalar(Math.max(0.0001, 1 - dt * 2.2)); if (p.landed > 0.55) p.m.visible = false; continue; }
+      p.vy -= 26 * dt;
+      p.m.position.y += p.vy * dt;
+      // 낙하 중 목표 쪽으로 살짝 끌린다 (확실히 맞게)
+      p.m.position.x += (tp.x - p.m.position.x) * Math.min(1, dt * 1.6);
+      p.m.position.z += (tp.z - p.m.position.z) * Math.min(1, dt * 1.6);
+      p.m.rotation.x += p.spin.x * dt; p.m.rotation.y += p.spin.y * dt; p.m.rotation.z += p.spin.z * dt;
+      if (p.m.position.y <= 0.35) {
+        p.m.position.y = 0.35; p.landed = 0.0001;
+        this.audio.impact(0.55); if (Math.random() < 0.4) this.audio.clang(0.35);
+        if (this.fx) this.fx.flash = Math.max(this.fx.flash || 0, 0.12);
+      }
+    }
+  }
+
+  _updRack(it, dt, tp) {
+    it.root.position.lerp(new THREE.Vector3(tp.x, 0, tp.z), Math.min(1, dt * 6));
+    const u = it.t;
+    // 0~0.45 기둥 솟음 → 0.45 상단바 → 1.0~2.4 바벨 상하 (스쿼트 3회) → 2.4 낙하
+    for (const p of it.parts) if (p.type === 'post') p.m.scale.y = Math.min(1, u / 0.45);
+    if (u > 0.45) { it.top.visible = true; it.top2.visible = true; }
+    if (it.bar) {
+      if (u < 1.0) it.bar.position.y = 1.55 + 0.35 * (1 - Math.min(1, u / 1.0));
+      else if (u < 2.45) {
+        const k = (u - 1.0) / 1.45;
+        it.bar.position.y = 1.35 - 0.42 * Math.abs(Math.sin(k * Math.PI * 3));
+        if (!it.repCount) it.repCount = 0;
+        const rep = Math.floor(k * 3);
+        if (rep !== it.lastRep) { it.lastRep = rep; this.audio.clang(0.5); }
+      } else {
+        it.bar.position.y = Math.max(0.28, it.bar.position.y - (u - 2.45) * 9 * dt * 6);
+        if (!it.dropped && it.bar.position.y <= 0.3) { it.dropped = true; this.audio.clang(1.4); this.audio.bassHit(); }
+      }
+    }
+    if (u > 3.0) {   // 랙은 사라진다
+      const f = Math.max(0, 1 - (u - 3.0) / 0.8);
+      it.root.scale.setScalar(Math.max(0.001, f));
+    }
+  }
+
+  _updBike(it, dt, tp) {
+    const b = it.bike; if (!b) return;
+    const u = it.t;
+    if (u < 0.85) {
+      // 들어올리다 휘청 (무게를 못 버팀)
+      const k = u / 0.85;
+      b.position.copy(it.from).add(new THREE.Vector3(0, 0.45 * k, 0));
+      b.rotation.z = Math.sin(u * 16) * 0.18 * k;
+      b.rotation.y = Math.sin(u * 5) * 0.2;
+      if (!it.revved) { it.revved = true; this.audio.engine(1.6); }
+    } else if (u < 1.7) {
+      // 놓쳐서 상대에게 날아감
+      const k = Math.min(1, (u - 0.85) / 0.55);
+      const target = new THREE.Vector3(tp.x, 1.0, tp.z);
+      b.position.lerpVectors(it.from.clone().add(new THREE.Vector3(0, 0.45, 0)), target, k);
+      b.position.y += Math.sin(k * Math.PI) * 0.9;
+      b.rotation.z += dt * 7; b.rotation.y += dt * 2.5;
+      if (k >= 1 && !it.crashed) {
+        it.crashed = true;
+        this.audio.bassHit(); this.audio.impact(1); this.audio.clang(1.2);
+        if (this.fx) this.fx.flash = Math.max(this.fx.flash || 0, 0.5);
+      }
+    } else {
+      // 충돌 후 바닥에 뒹군다
+      b.position.y = Math.max(0.34, b.position.y - 6 * dt);
+      b.rotation.z += dt * 1.2 * Math.max(0, 1 - (u - 1.7));
+      if (u > 3.2) { const f = Math.max(0, 1 - (u - 3.2) / 0.9); b.scale.setScalar(Math.max(0.001, f)); }
+    }
+  }
+
+  clear() {
+    for (const it of this.active) this.scene.remove(it.root);
+    this.active.length = 0;
+  }
+}
+return { UltimateFx };
+})();
 // ===== Rig.js =====
 __M.Rig = (() => {
 // Rig.js — 오리지널 복서 캐릭터 (셀 셰이딩 + 검은 외곽선) 와 포즈 파라미터 시스템
@@ -1069,27 +1322,35 @@ const CHARACTERS = {
   // ---- 히든 캐릭터 ----
   // 채채더킴: 작은 키, 단발머리 + 큰 눈. 냥냥펀치(빠르고 가벼움), 필살 = 릴스 (상대를 붙잡아 같이 춤)
   chaechae: {
-    name: 'CHAECHAE', skin: 0xffdcc4, trunks: 0xff5ea8, trunksTrim: 0xfff0f6, trunksText: 'NYANG',
-    gloves: 0xff85c0, hair: 0x2a1a16, shoes: 0xff5ea8, shoesTrim: 0xffffff,
-    hairStyle: 'bob', brows: 'thin', eyes: 'big', mouth: 'grin',
+    name: 'CHAECHAE', skin: 0xffdcc4, trunks: 0x14141a, trunksTrim: 0x2a2a33, trunksText: '',
+    bodyColor: 0x17171e, sleeves: 0xffdcc4, pants: 0xffdcc4,          // 검은 원피스 (팔·다리는 맨살)
+    gloves: 0xffdcc4, noGloves: true, shoes: 0x1b1b22, shoesTrim: 0x3a3a46,   // 단화
+    hair: 0x2a1a16, hairStyle: 'bob', brows: 'thin', eyes: 'big', mouth: 'grin',
+    accessory: 'sunglasses', skirt: 0x17171e, hold: { L: 'book', R: 'book' },
     prop: { height: 0.82, torsoW: 0.88, torsoD: 0.86, armR: 0.86, armLen: 0.88, legR: 0.9, legLen: 0.86, headS: 1.08, headY: 1.0, neck: 0.8, muscle: 0.3 },
     hp: 120, powerMul: 0.8, speedMul: 1.8, style: 'idol', gaugeMul: 1.15, hidden: true, sfx: 'nyang',
   },
   // 쩡효: 중간 키, 긴 생머리 + 흰 피부. 덤벨 펀치(무겁다), 필살 = 바벨 내려찍기
   jjeonghyo: {
-    name: 'JJEONGHYO', skin: 0xfdeade, trunks: 0x1a1a22, trunksTrim: 0xc0f000, trunksText: '500',
-    gloves: 0x2b2b33, hair: 0x241b18, shoes: 0x1a1a22, shoesTrim: 0xc0f000,
-    hairStyle: 'long', brows: 'thin', eyes: 'narrow', mouth: 'grit',
+    name: 'JJEONGHYO', skin: 0xfdeade, trunks: 0x14141a, trunksTrim: 0x2a2a33, trunksText: '',
+    bodyColor: 0xf4f4f0, sleeves: 0xfdeade, pants: 0x1a1a20,          // 흰 티 + 검정 레깅스
+    chestText: 'HDEX', chestTextColor: '#111118',
+    gloves: 0xfdeade, noGloves: true, shoes: 0xf0f0f0, shoesTrim: 0xc0f000,
+    hair: 0x241b18, hairStyle: 'long', brows: 'thin', eyes: 'narrow', mouth: 'grit',
+    hold: { L: 'dumbbell', R: 'dumbbell' },
     prop: { height: 1.0, torsoW: 1.06, torsoD: 1.0, armR: 1.12, armLen: 1.0, legR: 1.12, legLen: 0.98, headS: 0.98, headY: 1.0, neck: 1.0, muscle: 1 },
-    hp: 185, powerMul: 1.45, speedMul: 0.8, style: 'gym', gaugeMul: 0.8, hidden: true, propItem: 'dumbbell', sfx: 'clang',
+    hp: 185, powerMul: 1.45, speedMul: 0.8, style: 'gym', gaugeMul: 0.8, hidden: true, sfx: 'clang',
   },
   // 뼈석원: 큰 키, 구릿빛 피부에 마른 몸. 뼈펀치(리치 최장), 필살 = 오토바이 돌진
   ppyeo: {
-    name: 'PPYEO', skin: 0xb07848, trunks: 0x14141c, trunksTrim: 0xff2d2d, trunksText: 'BONE',
-    gloves: 0xe8e8ec, hair: 0x14100e, shoes: 0x14141c, shoesTrim: 0xff2d2d,
-    hairStyle: 'slick', brows: 'thin', eyes: 'narrow', mouth: 'grin',
+    name: 'PPYEO', skin: 0xb07848, trunks: 0x2f4f86, trunksTrim: 0x24406e, trunksText: '',
+    bodyColor: 0xf2f2f4, sleeves: 0xb07848, pants: 0x2f4f86,          // 스티치 티 + 청바지
+    chestText: 'STITCH', chestTextColor: '#2ba8e0', chestArt: 'stitch',
+    gloves: 0xb07848, noGloves: true, shoes: 0xe8e8ec, shoesTrim: 0x2f4f86,
+    hair: 0x14100e, hairStyle: 'slick', brows: 'thin', eyes: 'narrow', mouth: 'grin',
+    hold: { L: 'helmet', R: 'bottle' },
     prop: { height: 1.2, torsoW: 0.74, torsoD: 0.72, armR: 0.7, armLen: 1.32, legR: 0.72, legLen: 1.2, headS: 0.94, headY: 1.16, neck: 1.4, muscle: 0.1 },
-    hp: 125, powerMul: 1.15, speedMul: 1.4, style: 'bone', gaugeMul: 1.0, hidden: true, propItem: 'bone', sfx: 'bone',
+    hp: 125, powerMul: 1.15, speedMul: 1.4, style: 'bone', gaugeMul: 1.0, hidden: true, sfx: 'bone',
   },
 };
 const CHARACTER_ORDER = ['ippo', 'mashiba', 'miyata', 'sendo'];
@@ -1196,6 +1457,34 @@ function geometriesFor(def) {
   };
   geoCache.set(def.name, G);
   return G;
+}
+
+// 손에 드는 소품: 책 / 덤벨 / 하이바(헬멧) / 녹차병
+function buildHeldItem(kind, glove, part, sx) {
+  if (kind === 'book') {
+    const cover = part(new THREE.BoxGeometry(0.19, 0.25, 0.045), 0x8a2b2b, glove, 0, -0.02, 0.06);
+    cover.rotation.set(0.25, sx * 0.25, 0);
+    const pages = part(new THREE.BoxGeometry(0.175, 0.235, 0.05), 0xf6f1e2, cover, 0, 0, 0.004, false);
+    const band = part(new THREE.BoxGeometry(0.02, 0.25, 0.048), 0xe8c24a, cover, -0.082, 0, 0.001, false);
+  } else if (kind === 'dumbbell') {
+    const bar = part(new THREE.CylinderGeometry(0.022, 0.022, 0.19, 8), 0x9a9aa4, glove, 0, -0.02, 0.03);
+    bar.rotation.z = Math.PI / 2;
+    for (const s2 of [-1, 1]) {
+      const pl = part(new THREE.CylinderGeometry(0.068, 0.068, 0.055, 12), 0x24242c, bar, 0, s2 * 0.095, 0);
+      const rim = part(new THREE.TorusGeometry(0.068, 0.008, 6, 16), 0xc0f000, pl, 0, 0, 0, false);
+      rim.rotation.x = Math.PI / 2;
+    }
+  } else if (kind === 'helmet') {
+    const shell = part(new THREE.SphereGeometry(0.115, 16, 12), 0x15151c, glove, 0, -0.03, 0.06);
+    shell.scale.set(1, 0.95, 1.05);
+    const visor = part(new THREE.SphereGeometry(0.108, 16, 10, -0.9, 1.8, 0.7, 0.75), 0x3fd0ff, shell, 0, 0.005, 0.012, false);
+    const stripe = part(new THREE.BoxGeometry(0.03, 0.2, 0.2), 0xff2d2d, shell, 0, 0.02, -0.01, false);
+  } else if (kind === 'bottle') {
+    const body = part(new THREE.CylinderGeometry(0.045, 0.05, 0.22, 12), 0x2f7d32, glove, 0, -0.05, 0.05);
+    const label = part(new THREE.CylinderGeometry(0.052, 0.052, 0.085, 12), 0xf3f6e8, body, 0, -0.01, 0, false);
+    const neck = part(new THREE.CylinderGeometry(0.022, 0.032, 0.05, 10), 0x2f7d32, body, 0, 0.13, 0);
+    const cap = part(new THREE.CylinderGeometry(0.026, 0.026, 0.03, 10), 0xe8e8ec, body, 0, 0.165, 0);
+  }
 }
 
 function trunksTextTexture(text, color) {
@@ -1314,6 +1603,31 @@ function buildBoxer(def, opts = {}) {
     for (let r = 0; r < 3; r++) for (let c = -1; c <= 1; c += 2) part(G.abs, def.skin, waist, c * 0.045 * P.torsoW, 0.26 - r * 0.08, 0.125 * P.torsoD, false);
   }
 
+  // 가슴 프린트 (티셔츠 로고)
+  if (def.chestText && !ghost) {
+    const cp = new THREE.Mesh(new THREE.PlaneGeometry(0.26, 0.1), new THREE.MeshBasicMaterial({ map: trunksTextTexture(def.chestText, def.chestTextColor || '#111118'), transparent: true, depthWrite: false }));
+    cp.position.set(0, 0.36, 0.142 * P.torsoD);
+    waist.add(cp);
+    if (def.chestArt === 'stitch') {   // 티셔츠 캐릭터 그림 (파란 얼굴 + 큰 귀)
+      const art = new THREE.Group(); art.position.set(0, 0.2, 0.142 * P.torsoD); waist.add(art);
+      const face = new THREE.Mesh(new THREE.CircleGeometry(0.052, 20), new THREE.MeshBasicMaterial({ color: 0x2ba8e0 }));
+      art.add(face);
+      for (const s2 of [-1, 1]) {
+        const ear = new THREE.Mesh(new THREE.CircleGeometry(0.024, 14), new THREE.MeshBasicMaterial({ color: 0x2ba8e0 }));
+        ear.position.set(s2 * 0.052, 0.042, 0.001); ear.scale.set(0.8, 1.5, 1); art.add(ear);
+        const eye = new THREE.Mesh(new THREE.CircleGeometry(0.013, 12), new THREE.MeshBasicMaterial({ color: 0x14141c }));
+        eye.position.set(s2 * 0.02, 0.012, 0.002); art.add(eye);
+      }
+      const nose = new THREE.Mesh(new THREE.CircleGeometry(0.009, 10), new THREE.MeshBasicMaterial({ color: 0x14141c }));
+      nose.position.set(0, -0.012, 0.002); art.add(nose);
+    }
+  }
+  // 원피스 치마 (채채더킴)
+  if (def.skirt) {
+    const sk = part(new THREE.CylinderGeometry(0.16 * P.torsoW, 0.245 * P.torsoW, 0.26, 16, 1, true), def.skirt, waist, 0, 0.02, 0);
+    sk.material.side = THREE.DoubleSide;
+  }
+
   const chest = new THREE.Group();
   chest.position.y = 0.52;
   waist.add(chest);
@@ -1340,20 +1654,9 @@ function buildBoxer(def, opts = {}) {
       seam.rotation.x = Math.PI / 2; seam.rotation.z = 0.5;
       const strap = part(new THREE.CylinderGeometry(0.1, 0.1, 0.035, 14), 0xf5f5f5, elbow, 0, -armLen * 0.86, 0, false);
     }
-    // 소품: 쩡효는 글러브에 덤벨, 뼈석원은 손등에 뼈 보호대
-    if (def.propItem === 'dumbbell') {
-      const bar = part(new THREE.CylinderGeometry(0.022, 0.022, 0.2, 8), 0x8a8a94, glove, 0, 0, 0.02);
-      bar.rotation.z = Math.PI / 2;
-      for (const sx of [-1, 1]) {
-        const pl = part(new THREE.CylinderGeometry(0.062, 0.062, 0.05, 10), 0x2e2e36, glove, sx * 0.1, 0, 0.02);
-        pl.rotation.z = Math.PI / 2;
-      }
-    } else if (def.propItem === 'bone') {
-      for (const sx of [-1, 1]) {
-        const kn = part(new THREE.SphereGeometry(0.035, 8, 6), 0xf2efe6, glove, sx * 0.055, 0.02, 0.095, false);
-        kn.scale.set(1, 0.85, 0.7);
-      }
-    }
+    // ---- 손에 든 소품 (히든 캐릭터) ----
+    const item = def.hold && def.hold[sx > 0 ? 'L' : 'R'];
+    if (item && !ghost) buildHeldItem(item, glove, part, sx);
     return { shoulder, elbow, glove };
   };
   const armL = mkArm(1);
@@ -1440,6 +1743,18 @@ function buildBoxer(def, opts = {}) {
     }
     const br = part(G.brow, 0x101018, head, sx * 0.068, eyeY + (narrow ? 0.03 : big ? 0.085 : 0.06), eyeZ + 0.015, false);
     br.rotation.z = -sx * (narrow ? 0.55 : big ? 0.12 : 0.32);
+  }
+  // 선글라스 (채채더킴)
+  if (def.accessory === 'sunglasses') {
+    const gl = new THREE.Group(); gl.position.set(0, eyeY + 0.012, eyeZ + 0.028); head.add(gl);
+    for (const sx of [-1, 1]) {
+      const lens = part(new THREE.BoxGeometry(0.085, 0.055, 0.016), 0x15151c, gl, sx * 0.058, 0, 0);
+      lens.rotation.z = -sx * 0.06;
+      const shine = new THREE.Mesh(new THREE.PlaneGeometry(0.03, 0.012), new THREE.MeshBasicMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.75 }));
+      shine.position.set(sx * 0.02, 0.012, 0.01); shine.rotation.z = 0.4; lens.add(shine);
+      const arm = part(new THREE.BoxGeometry(0.02, 0.012, 0.09), 0x15151c, gl, sx * 0.108, 0.006, -0.05, false);
+    }
+    part(new THREE.BoxGeometry(0.038, 0.012, 0.014), 0x15151c, gl, 0, 0.008, 0, false);
   }
   // 코
   const nose = part(new THREE.ConeGeometry(0.028, 0.06, 6), def.skin, head, 0, hy - 0.02 * P.headY, 0.165 * P.headS, false);
@@ -2728,7 +3043,10 @@ class Fighter {
     this.knock = new THREE.Vector3();
     this.hitCount = 0; this.hitTimer = 0;
     this.stagger = 0; this.staggerImmune = 0; this.staggerKind = 'normal';
-    this.danceT = 0; this.danceVictim = false; this.dancePartner = null;   // 릴스 댄스 (채채더킴 필살)
+    this.danceT = 0; this.danceVictim = false; this.dancePartner = null;   // (구) 릴스 댄스
+    // 히든 필살 연출: 시전자(ultT) / 당하는 쪽(ultVictimT)
+    this.ultT = 0; this.ultKind = null; this.ultTarget = null;
+    this.ultVictimT = 0; this.ultVictimKind = null; this.ultDmg = 0;
     this.groggy = 0;   // 뎀프시 연타 누적 → 4 이면 그로기
     this.downT = 0; this.downDur = 2.7;   // 필살기 피격 다운 → 넘어졌다 고개 흔들며 일어남 (무적·행동불가)
     this.rattle = 0;
@@ -2749,7 +3067,7 @@ class Fighter {
 
   get dempseyActive() { return this.dempsey.active; }
   get stanceStyle() { return this.dempsey.style; }
-  get busy() { return this.ko || this.stagger > 0 || !!this.finisher || this.airY > 0.01 || this.downT > 0 || this.danceT > 0; }
+  get busy() { return this.ko || this.stagger > 0 || !!this.finisher || this.airY > 0.01 || this.downT > 0 || this.danceT > 0 || this.ultT > 0 || this.ultVictimT > 0; }
   get rolling() { return this.rollT > 0; }
   get alive() { return !this.ko; }
   get isCounterWindow() { return !!this.punch && this.punch.t / this.punch.dur < 0.55; }
@@ -2847,6 +3165,13 @@ class Fighter {
     return true;
   }
 
+  /** 고유기 자막: 히든 캐릭터는 한국어 전용 대사 */
+  specialLine(spec, slotKey) {
+    const hid = HIDDEN_LINES[this.defKey];
+    if (hid) return (slotKey === 'U' && hid.u) ? `${hid.u} — ${spec.ko}!` : `${spec.ko}!`;
+    return spec.name + '！';
+  }
+
   /** 고유기 (U / I) */
   startSpecial(slotKey) {
     const kind = this.kit[slotKey];
@@ -2870,14 +3195,16 @@ class Fighter {
         this.queue.push({ side: 'R', type: 'hook', dur: 0.25, power: 0.85, heavy: true, staggerT: isU ? 0.9 : 0, fromU: isU }, { side: 'L', type: 'hook', dur: 0.24, power: 0.95, heavy: true, staggerT: isU ? 1.2 : 0, fromU: isU });
         if (isU) this.armor = 0.9 / this.def.speedMul;
       }
-      this.subs.show(spec.name + '！', { duration: 0.9, mid: true });
+      this.subs.show(this.specialLine(spec, slotKey), { duration: 0.9, mid: true });
       this.events.push({ type: 'special', kind });
       return true;
     }
+    if (kind === 'dumbbellPress' || kind === 'bookSmash') this.audio.clang(kind === 'bookSmash' ? 0.35 : 0.9);
+    else if (kind === 'helmetBash') this.audio.engine(0.5);
     const ok = this.startPunch(spec.side, 'special', spec.dur, spec.power, { kind, heavy: !!spec.heavy, launch: spec.launch || 0, staggerT: uStag, zoneForce: spec.zone || null, liver: !!spec.liver, counterMul: spec.counterMul || 1, step: spec.step || 0, noTell: !!spec.quick, fromU: isU });
     if (!ok) { this.cd[slotKey] = 0; this.armor = 0; return false; }
     if (spec.backstep) this.backstep = spec.backstep;
-    this.subs.show(spec.name + '！', { duration: 0.9, mid: !spec.quick });
+    this.subs.show(this.specialLine(spec, slotKey), { duration: 0.9, mid: !spec.quick });
     this.events.push({ type: 'special', kind });
     return true;
   }
@@ -2888,6 +3215,24 @@ class Fighter {
     const fk = this.kit.finisher;
     const F = FINISHERS[fk] || FINISHERS.finisherHook;
     const charge = d.charge;
+    const ULT = { reels: 3.4, barbell: 3.6, bike: 3.0 };
+    if (ULT[fk]) {
+      // ---- 연출형 필살 (히든 3인): 상대를 붙잡아두고 스크립트대로 진행 ----
+      const tg = this.target;
+      if (!tg || tg.ko || tg.downT > 0) return false;
+      const dur = ULT[fk];
+      this.ultT = dur; this.ultKind = fk; this.ultTarget = tg;
+      this.punch = null; this.queue.length = 0; this.armor = dur;
+      tg.ultVictimT = dur; tg.ultVictimKind = fk; tg.punch = null; tg.queue.length = 0; tg.stagger = 0; tg.dempsey.stop();
+      tg.ultDmg = (34 + 7 * charge) * this.def.powerMul;   // 연출 동안 나눠서 들어간다
+      tg.ultDmgRate = tg.ultDmg / dur;
+      d.consume();
+      this.audio.finisherWind(0.5);
+      const line = fk === 'reels' ? '이건 문화 충격이야!' : fk === 'barbell' ? '자, 10회 3세트 간다!' : '어… 이거 무거운데—!!';
+      this.subs.show(line, { duration: 1.6, strong: true });
+      this.events.push({ type: 'ultStart', kind: fk, target: tg.slot, charge });
+      return true;
+    }
     if (fk === 'finisherHook') {
       // 뎀프시롤 필살: 3.2초 동안 ∞ 로 격하게 흔들며 상대를 추적, 좌우 훅 난타 → 마지막 강타. 게이지는 종료 시 소모
       this.rollT = 2.8; this.rollFinal = false; this.punch = null; this.queue.length = 0;
@@ -3373,6 +3718,66 @@ class Fighter {
       }
     }
 
+    // ---- 연출형 필살: 시전자 ----
+    if (this.ultT > 0) {
+      this.ultT -= dt;
+      const tg = this.ultTarget;
+      if (tg) {
+        this.forward.copy(tg.pos).sub(this.pos).setY(0);
+        if (this.forward.lengthSq() > 1e-4) { this.forward.normalize(); this.yaw = Math.atan2(this.forward.x, this.forward.z); this.side.set(this.forward.z, 0, -this.forward.x); }
+        const want = 2.1;
+        const dd = this.pos.distanceTo(tg.pos);
+        if (dd < want) this.pos.addScaledVector(this.forward, -(want - dd) * dt * 3);
+      }
+      const k = this.ultKind;
+      if (k === 'reels') {
+        // 손을 하늘로 뻗어 유물을 불러내고, 폰으로 촬영하는 포즈
+        p.shRX += -2.75; p.shRZ += -0.45; p.elR += -0.25; p.shLX += -1.6; p.elL += -1.5; p.shLY += -0.4;
+        p.headX += -0.45; p.waistX += -0.2; p.hipsY += Math.abs(Math.sin(t * 6)) * 0.05;
+      } else if (k === 'barbell') {
+        // 팔짱 끼고 카운트 세기 → 마지막엔 손 내리기
+        p.shLX += -0.95; p.elL += -2.35; p.shLY += -1.0; p.shRX += -0.9; p.elR += -2.35; p.shRY += 1.0;
+        p.chestX += 0.12; p.headX += -0.1 + Math.sin(t * 3) * 0.06; p.hipsX += Math.sin(t * 1.6) * 0.04;
+      } else if (k === 'bike') {
+        // 오토바이를 들어올리다 휘청 → 던지고 나동그라짐
+        const u = (3.0 - this.ultT);
+        if (u < 0.9) { p.shLX += -2.6; p.shRX += -2.6; p.elL += -0.5; p.elR += -0.5; p.waistX += -0.35 + Math.sin(t * 14) * 0.08; p.thighLX += -0.3; p.thighRX += -0.3; p.shinL += 0.5; p.shinR += 0.5; }
+        else { p.shLX += -1.4; p.shRX += -1.4; p.waistX += 0.5; p.headX += 0.25; p.hipsY += -0.12; }
+      }
+      this.queue.length = 0;
+      if (this.ultT <= 0) { this.ultT = 0; this.ultKind = null; this.ultTarget = null; this.armor = 0; }
+    }
+    // ---- 연출형 필살: 당하는 쪽 ----
+    if (this.ultVictimT > 0) {
+      this.ultVictimT -= dt;
+      const k = this.ultVictimKind;
+      const tick = (this.ultDmgRate || 0) * dt;
+      if (tick > 0 && !this.ko) { this.hp = Math.max(0, this.hp - tick); if (this.hp <= 0) { this._die(); } }
+      if (k === 'reels') {
+        // 머리 감싸고 쏟아지는 유물을 맞는다
+        p.shLX += -2.2; p.shRX += -2.2; p.elL += -2.2; p.elR += -2.2; p.shLZ += 0.5; p.shRZ += -0.5;
+        p.headX += 0.35 + Math.sin(t * 22) * 0.12; p.waistX += 0.45; p.hipsY += -0.16 + Math.abs(Math.sin(t * 9)) * 0.05;
+        this.rattle = Math.max(this.rattle, 0.5);
+      } else if (k === 'barbell') {
+        // 강제 스쿼트 3회 → 마지막에 깔려 주저앉음
+        const u = 3.6 - this.ultVictimT;
+        const sq = u < 2.45 ? Math.abs(Math.sin((u - 1.0) / 1.45 * Math.PI * 3)) : 1;
+        const down = u < 2.45 ? sq : 1;
+        p.hipsY += -0.55 * down; p.thighLX += -1.15 * down; p.thighRX += -1.15 * down; p.shinL += 1.9 * down; p.shinR += 1.9 * down;
+        p.waistX += 0.3 * down; p.shLX += -2.6; p.shRX += -2.6; p.elL += -0.4; p.elR += -0.4; p.shLZ += 0.55; p.shRZ += -0.55;
+        p.headX += -0.2 + Math.sin(t * 12) * 0.08 * down;
+        if (u > 2.45) { p.headZ += Math.sin(t * 14) * 0.2; this.rattle = Math.max(this.rattle, 0.4); }
+      } else if (k === 'bike') {
+        const u = 3.0 - this.ultVictimT;
+        if (u < 1.4) { p.shLX += -1.6; p.shRX += -1.6; p.elL += -1.8; p.elR += -1.8; p.headX += -0.3; p.waistX += -0.15 + Math.sin(t * 18) * 0.05; }
+        else { p.waistX += -0.8; p.headX += -0.5; p.shLX += 0.9; p.shRX += 0.9; this.rattle = Math.max(this.rattle, 0.8); if (!this._bikeHit) { this._bikeHit = true; this.knock.addScaledVector(this.forward, -7); this.audio.stagger(); } }
+      }
+      this.queue.length = 0;
+      if (this.ultVictimT <= 0) {
+        this.ultVictimT = 0; this.ultVictimKind = null; this._bikeHit = false; this.ultDmg = 0; this.ultDmgRate = 0;
+        if (!this.ko) { this.downT = this.downDur; this.rattle = 1; }
+      }
+    }
     // ---- 릴스 댄스 (둘 다 강제로 춤) ----
     if (this.danceT > 0) {
       this.danceT -= dt;
@@ -4427,7 +4832,7 @@ const { defaultPose, applyPose, copyPose } = __M.Rig;
 const { easeOutCubic, easeInOut } = __M.Punch;
 const { HIDDEN_LINES } = __M.Specials;
 
-const PER = 3.6;          // 선수 1명당 연출 시간
+const PER = 4.4;          // 선수 1명당 연출 시간 (걸어나오기 → 클로즈업 멘트 → 포즈 홀드)
 const WALK = 1.3;         // 걸어 나오는 시간
 // 링 안쪽 자기 코너(로프 안)에서 걸어 나온다
 const CORNERS = [[2.45, 2.45], [-2.45, -2.45], [2.45, -2.45], [-2.45, 2.45]];
@@ -4560,13 +4965,27 @@ class Intro {
       g.introName(f);
       g.coaches.shout(f.slot, 1.2);
     }
-    // 카메라: 등장 선수 정면 3/4 를 천천히 도는 샷
+    // ---- 카메라: 한 명씩 줌 인 (와이드 → 상반신 클로즈업 → 포즈에서 살짝 빠짐) ----
     const f = fs[idx];
-    const ang = 0.6 - local * 0.12;
-    const camPos = f.pos.clone().addScaledVector(f.forward, 2.6 * Math.cos(ang)).addScaledVector(f.side, 2.6 * Math.sin(ang)).add(new THREE.Vector3(0, 1.45, 0));
-    const look = f.pos.clone().add(new THREE.Vector3(0, 1.1, 0));
-    g.camera.position.lerp(camPos, Math.min(1, dt * 4));
+    const u = Math.max(0, local - WALK * 0.55);              // 걸어나오는 중반부터 붙는다
+    const zin = easeOutCubic(Math.min(1, u / 1.15));          // 줌 인
+    const zout = Math.max(0, (local - (PER - 0.75)) / 0.75);  // 다음 선수로 넘어가기 직전 살짝 빠짐
+    const dist = 3.4 - 2.05 * zin + 0.7 * zout;               // 3.4m → 1.35m
+    const ang = 0.72 - local * 0.1;                           // 천천히 도는 3/4 앵글
+    const hy = 1.34 + 0.16 * zin;                             // 얼굴 높이
+    const camPos = f.pos.clone()
+      .addScaledVector(f.forward, dist * Math.cos(ang))
+      .addScaledVector(f.side, dist * Math.sin(ang))
+      .add(new THREE.Vector3(0, hy, 0));
+    const look = f.pos.clone().add(new THREE.Vector3(0, 1.02 + 0.22 * zin, 0));
+    g.camera.position.lerp(camPos, Math.min(1, dt * (3 + 3 * zin)));
     g.camera.lookAt(look);
+    // 렌즈: 멀리선 넓게, 붙으면 망원 느낌 (인물이 도드라진다)
+    const wantFov = 52 - 14 * zin + 6 * zout;
+    g.camera.fov += (wantFov - g.camera.fov) * Math.min(1, dt * 5);
+    g.camera.updateProjectionMatrix();
+    // 주인공만 또렷하게 — 나머지는 흐리게 (등장 순서가 분명해진다)
+    for (let i = 0; i < fs.length; i++) fs[i].setFade(i === idx ? 1 : 0.22 + 0.18 * (1 - zin));
     if (this.t >= this.total) { this.finish(); return true; }
     return false;
   }
@@ -4575,6 +4994,8 @@ class Intro {
     if (!this.active) return;
     this.active = false; this.done = true;
     const fs = this.g.fighters;
+    fs.forEach((f) => f.setFade(1));
+    this.g.camera.fov = 50; this.g.camera.updateProjectionMatrix();
     fs.forEach((f, i) => { f.pos.copy(this.spawns[i]); f.forward.subVectors(this.center, f.pos).setY(0).normalize(); f.yaw = Math.atan2(f.forward.x, f.forward.z); copyPose(defaultPose(), f.pose); f._applyNow(f.pose); });
   }
 }
@@ -4975,6 +5396,7 @@ const { CHARACTERS, CHARACTER_ORDER, HIDDEN_ORDER } = __M.Rig;
 const { KITS, SPECIALS } = __M.Specials;
 const { TouchControls, isTouchDevice } = __M.Touch;
 const { Music } = __M.Music;
+const { UltimateFx } = __M.Ultimate;
 
 const _v = new THREE.Vector3();
 const _prevHead = new THREE.Vector3();
@@ -5024,6 +5446,7 @@ class Game {
     this.headTrail = new Ribbon(this.scene, { maxPoints: 40, width: 0.025, color: 0x2090ff, coreColor: 0xbfe8ff, opacity: 0.55 });
     this.ghostFx = {};   // defKey → AfterImageEffect (지연 생성)
     this.sparks = new HitSparks(this.scene);
+    this.ultFx = new UltimateFx(this.scene, this.audio, this.fx);
     // 거리감 보조: 내 발밑에 리치 반경 링 (상대가 사거리 안이면 붉게)
     this.reachRing = new THREE.Mesh(new THREE.RingGeometry(0.92, 1.0, 48), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide }));
     this.reachRing.rotation.x = -Math.PI / 2; this.reachRing.position.y = 0.015; this.reachRing.visible = false;
@@ -5274,6 +5697,7 @@ class Game {
     this.ghostFx = {};
     this.started = false; this.over = false; this.phase = 'lobby';
     this.hitStop = 0; this.slowMo = 0; this.snaps = []; this.coachBrains = {};
+    if (this.ultFx) this.ultFx.clear();
     try { this.audio.stopDrone(); } catch (e) {}
     for (const id of ['next-overlay', 'pause-menu', 'skip-hint', 'countdown', 'intro-name', 'coach', 'guard-badge']) document.getElementById(id).classList.add('hidden');
     this.hud.showKO(false);
@@ -5488,6 +5912,7 @@ class Game {
       else if (m.t === 'full') this.lobbyMsg('방이 가득 찼거나 이미 시작됨');
       else if (m.t === 'start') { this.names = []; m.cfg.forEach((c) => { this.names[c.netSlot] = c.name; }); this.localSlot = Math.max(0, m.cfg.findIndex((c) => c.netSlot === net.mySlot)); this.startMatch('client', m.cfg); }
       else if (m.t === 'snap') { if (this.phase === 'fight') this.onSnapshot(m); }
+      else if (m.t === 'ult') { const a = this.fighters[m.s], b = this.fighters[m.b]; if (a) { this.ultFx.play(m.k, a, b); this.music.setDuck(0.3); setTimeout(() => this.music.setDuck(1), 3600); } }
       else if (m.t === 'skipv') { this.showSkipHint(m.n, m.total); }
       else if (m.t === 'phase') { if (m.p === 'countdown') this.endIntro(); else if (m.p === 'fight') { this.phase = 'fight'; document.getElementById('countdown').classList.add('hidden'); } }
       else if (m.t === 'chat') this.addChat(m.from, String(m.text).slice(0, 120), !!m.sys);
@@ -5576,6 +6001,7 @@ class Game {
     for (const f of this.fighters) if (!f.isAI) this.coachBrains[f.slot] = new CoachBrain();
     document.getElementById('coach').classList.add('hidden');
     this.hitStop = 0; this.slowMo = 0; this.snaps = [];
+    if (this.ultFx) this.ultFx.clear();
     this.camCtl.initialized = false;
   }
 
@@ -6007,6 +6433,16 @@ class Game {
       for (const e of f.events) {
         if (e.type === 'punchEnd') { const cb = this.coachBrains[f.slot]; if (cb) cb.onPunchEnd(e.hit); continue; }
         if (e.type === 'ropeLaunch') { this.ropeFx(f, e.k); if (this.mode === 'host') this.pendingEvents.push({ t: 'rope', s: f.slot, k: e.k }); continue; }
+        if (e.type === 'ultStart') {
+          const tg = this.fighters[e.target];
+          this.ultFx.play(e.kind, f, tg);
+          this.music.setDuck(0.3); setTimeout(() => this.music.setDuck(1), 3600);
+          this.applySlow(f.slot, 0.35, 0.25);
+          if (f.slot === this.localSlot || (tg && tg.slot === this.localSlot)) this.finisherWindFx();
+          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, e.kind === 'reels' ? '문화 충격!!' : e.kind === 'barbell' ? '3대 500!!' : '교통사고!!', 'groggy');
+          if (this.mode === 'host') this.pendingEvents.push({ t: 'ult', s: f.slot, b: e.target, k: e.kind });
+          continue;
+        }
         if (e.type === 'special') continue;
         const type = e.type === 'finisherStart' ? 'finisher' : (e.punchType === 'special' ? 'hook' : e.punchType);
         for (const o of fs) if (o.brain && o !== f && (o.target === f || f.target === o)) o.brain.onEnemyPunch(type, f);
@@ -6164,6 +6600,7 @@ class Game {
       if (f.boostT > 0 && Math.random() < 0.7) this.sparks.burst(f.pos.clone().setY(0.08), f.forward.clone().negate(), 2, new THREE.Color(1, 0.75, 0.3), 0.6, 0.3);
     }
     this.sparks.update(rawDt);
+    this.ultFx.update(rawDt);
 
     // 잔상: 전원 기록, 시점 인물 + 상대만 표시
     for (const f of this.fighters) {
@@ -6203,6 +6640,25 @@ class Game {
     const f = new THREE.Vector3().subVectors(opp.pos, view.pos); f.y = 0; if (f.lengthSq() < 1e-6) f.set(0, 0, -1); f.normalize();
     const s = new THREE.Vector3(f.z, 0, -f.x);
     if (this.phase !== 'intro') this.camCtl.update(rawDt, { playerPos: view.pos, oppPos: opp.pos, f, s, intensity: I, dempseyActive: d.active || !!view.finisher, sway: d.sway, maxSpeed: d.maxSpeed || !!view.finisher, hitStop: this.hitStop });
+    // ---- 필살 연출 카메라: 하늘에서 떨어지는 유물·랙·오토바이가 확실히 보이는 와이드 샷 ----
+    const ultF = this.fighters.find((x) => x.ultT > 0);
+    if (ultF && ultF.ultTarget) {
+      const tg = ultF.ultTarget;
+      const mid = ultF.pos.clone().add(tg.pos).multiplyScalar(0.5);
+      const axis = new THREE.Vector3().subVectors(tg.pos, ultF.pos).setY(0).normalize();
+      const sideV = new THREE.Vector3(axis.z, 0, -axis.x);
+      const k = ultF.ultKind;
+      const up = k === 'reels' ? 2.9 : k === 'barbell' ? 2.6 : 2.2;
+      const back = k === 'reels' ? 6.6 : 5.6;
+      const want = mid.clone().addScaledVector(sideV, back * 0.75).addScaledVector(axis, -back * 0.5).add(new THREE.Vector3(0, up, 0));
+      this.camera.position.lerp(want, Math.min(1, rawDt * 3.4));
+      const look = tg.pos.clone().add(new THREE.Vector3(0, k === 'reels' ? 1.9 : 1.3, 0));
+      this.camera.lookAt(look);
+      const wantFov = k === 'reels' ? 68 : 58;
+      this.camera.fov += (wantFov - this.camera.fov) * Math.min(1, rawDt * 3);
+      this.camera.updateProjectionMatrix();
+      this.camCtl.initialized = false;   // 연출 끝나면 자연스럽게 다시 붙는다
+    }
     if (opp.dempsey.active) this.camCtl.shakeAmp = Math.max(this.camCtl.shakeAmp, 0.01 * opp.dempsey.intensity);
 
     // 머리 스크린 속도

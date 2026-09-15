@@ -23,6 +23,7 @@ import { CHARACTERS, CHARACTER_ORDER, HIDDEN_ORDER } from './Rig.js';
 import { KITS, SPECIALS } from './Specials.js';
 import { TouchControls, isTouchDevice } from './Touch.js';
 import { Music } from './Music.js';
+import { UltimateFx } from './Ultimate.js';
 
 const _v = new THREE.Vector3();
 const _prevHead = new THREE.Vector3();
@@ -72,6 +73,7 @@ class Game {
     this.headTrail = new Ribbon(this.scene, { maxPoints: 40, width: 0.025, color: 0x2090ff, coreColor: 0xbfe8ff, opacity: 0.55 });
     this.ghostFx = {};   // defKey → AfterImageEffect (지연 생성)
     this.sparks = new HitSparks(this.scene);
+    this.ultFx = new UltimateFx(this.scene, this.audio, this.fx);
     // 거리감 보조: 내 발밑에 리치 반경 링 (상대가 사거리 안이면 붉게)
     this.reachRing = new THREE.Mesh(new THREE.RingGeometry(0.92, 1.0, 48), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide }));
     this.reachRing.rotation.x = -Math.PI / 2; this.reachRing.position.y = 0.015; this.reachRing.visible = false;
@@ -322,6 +324,7 @@ class Game {
     this.ghostFx = {};
     this.started = false; this.over = false; this.phase = 'lobby';
     this.hitStop = 0; this.slowMo = 0; this.snaps = []; this.coachBrains = {};
+    if (this.ultFx) this.ultFx.clear();
     try { this.audio.stopDrone(); } catch (e) {}
     for (const id of ['next-overlay', 'pause-menu', 'skip-hint', 'countdown', 'intro-name', 'coach', 'guard-badge']) document.getElementById(id).classList.add('hidden');
     this.hud.showKO(false);
@@ -536,6 +539,7 @@ class Game {
       else if (m.t === 'full') this.lobbyMsg('방이 가득 찼거나 이미 시작됨');
       else if (m.t === 'start') { this.names = []; m.cfg.forEach((c) => { this.names[c.netSlot] = c.name; }); this.localSlot = Math.max(0, m.cfg.findIndex((c) => c.netSlot === net.mySlot)); this.startMatch('client', m.cfg); }
       else if (m.t === 'snap') { if (this.phase === 'fight') this.onSnapshot(m); }
+      else if (m.t === 'ult') { const a = this.fighters[m.s], b = this.fighters[m.b]; if (a) { this.ultFx.play(m.k, a, b); this.music.setDuck(0.3); setTimeout(() => this.music.setDuck(1), 3600); } }
       else if (m.t === 'skipv') { this.showSkipHint(m.n, m.total); }
       else if (m.t === 'phase') { if (m.p === 'countdown') this.endIntro(); else if (m.p === 'fight') { this.phase = 'fight'; document.getElementById('countdown').classList.add('hidden'); } }
       else if (m.t === 'chat') this.addChat(m.from, String(m.text).slice(0, 120), !!m.sys);
@@ -624,6 +628,7 @@ class Game {
     for (const f of this.fighters) if (!f.isAI) this.coachBrains[f.slot] = new CoachBrain();
     document.getElementById('coach').classList.add('hidden');
     this.hitStop = 0; this.slowMo = 0; this.snaps = [];
+    if (this.ultFx) this.ultFx.clear();
     this.camCtl.initialized = false;
   }
 
@@ -1055,6 +1060,16 @@ class Game {
       for (const e of f.events) {
         if (e.type === 'punchEnd') { const cb = this.coachBrains[f.slot]; if (cb) cb.onPunchEnd(e.hit); continue; }
         if (e.type === 'ropeLaunch') { this.ropeFx(f, e.k); if (this.mode === 'host') this.pendingEvents.push({ t: 'rope', s: f.slot, k: e.k }); continue; }
+        if (e.type === 'ultStart') {
+          const tg = this.fighters[e.target];
+          this.ultFx.play(e.kind, f, tg);
+          this.music.setDuck(0.3); setTimeout(() => this.music.setDuck(1), 3600);
+          this.applySlow(f.slot, 0.35, 0.25);
+          if (f.slot === this.localSlot || (tg && tg.slot === this.localSlot)) this.finisherWindFx();
+          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, e.kind === 'reels' ? '문화 충격!!' : e.kind === 'barbell' ? '3대 500!!' : '교통사고!!', 'groggy');
+          if (this.mode === 'host') this.pendingEvents.push({ t: 'ult', s: f.slot, b: e.target, k: e.kind });
+          continue;
+        }
         if (e.type === 'special') continue;
         const type = e.type === 'finisherStart' ? 'finisher' : (e.punchType === 'special' ? 'hook' : e.punchType);
         for (const o of fs) if (o.brain && o !== f && (o.target === f || f.target === o)) o.brain.onEnemyPunch(type, f);
@@ -1212,6 +1227,7 @@ class Game {
       if (f.boostT > 0 && Math.random() < 0.7) this.sparks.burst(f.pos.clone().setY(0.08), f.forward.clone().negate(), 2, new THREE.Color(1, 0.75, 0.3), 0.6, 0.3);
     }
     this.sparks.update(rawDt);
+    this.ultFx.update(rawDt);
 
     // 잔상: 전원 기록, 시점 인물 + 상대만 표시
     for (const f of this.fighters) {
@@ -1251,6 +1267,25 @@ class Game {
     const f = new THREE.Vector3().subVectors(opp.pos, view.pos); f.y = 0; if (f.lengthSq() < 1e-6) f.set(0, 0, -1); f.normalize();
     const s = new THREE.Vector3(f.z, 0, -f.x);
     if (this.phase !== 'intro') this.camCtl.update(rawDt, { playerPos: view.pos, oppPos: opp.pos, f, s, intensity: I, dempseyActive: d.active || !!view.finisher, sway: d.sway, maxSpeed: d.maxSpeed || !!view.finisher, hitStop: this.hitStop });
+    // ---- 필살 연출 카메라: 하늘에서 떨어지는 유물·랙·오토바이가 확실히 보이는 와이드 샷 ----
+    const ultF = this.fighters.find((x) => x.ultT > 0);
+    if (ultF && ultF.ultTarget) {
+      const tg = ultF.ultTarget;
+      const mid = ultF.pos.clone().add(tg.pos).multiplyScalar(0.5);
+      const axis = new THREE.Vector3().subVectors(tg.pos, ultF.pos).setY(0).normalize();
+      const sideV = new THREE.Vector3(axis.z, 0, -axis.x);
+      const k = ultF.ultKind;
+      const up = k === 'reels' ? 2.9 : k === 'barbell' ? 2.6 : 2.2;
+      const back = k === 'reels' ? 6.6 : 5.6;
+      const want = mid.clone().addScaledVector(sideV, back * 0.75).addScaledVector(axis, -back * 0.5).add(new THREE.Vector3(0, up, 0));
+      this.camera.position.lerp(want, Math.min(1, rawDt * 3.4));
+      const look = tg.pos.clone().add(new THREE.Vector3(0, k === 'reels' ? 1.9 : 1.3, 0));
+      this.camera.lookAt(look);
+      const wantFov = k === 'reels' ? 68 : 58;
+      this.camera.fov += (wantFov - this.camera.fov) * Math.min(1, rawDt * 3);
+      this.camera.updateProjectionMatrix();
+      this.camCtl.initialized = false;   // 연출 끝나면 자연스럽게 다시 붙는다
+    }
     if (opp.dempsey.active) this.camCtl.shakeAmp = Math.max(this.camCtl.shakeAmp, 0.01 * opp.dempsey.intensity);
 
     // 머리 스크린 속도

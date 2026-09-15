@@ -5,7 +5,7 @@ import { defaultPose, applyPose, copyPose } from './Rig.js';
 import { easeOutCubic, easeInOut } from './Punch.js';
 import { HIDDEN_LINES } from './Specials.js';
 
-const PER = 3.6;          // 선수 1명당 연출 시간
+const PER = 4.4;          // 선수 1명당 연출 시간 (걸어나오기 → 클로즈업 멘트 → 포즈 홀드)
 const WALK = 1.3;         // 걸어 나오는 시간
 // 링 안쪽 자기 코너(로프 안)에서 걸어 나온다
 const CORNERS = [[2.45, 2.45], [-2.45, -2.45], [2.45, -2.45], [-2.45, 2.45]];
@@ -138,13 +138,27 @@ export class Intro {
       g.introName(f);
       g.coaches.shout(f.slot, 1.2);
     }
-    // 카메라: 등장 선수 정면 3/4 를 천천히 도는 샷
+    // ---- 카메라: 한 명씩 줌 인 (와이드 → 상반신 클로즈업 → 포즈에서 살짝 빠짐) ----
     const f = fs[idx];
-    const ang = 0.6 - local * 0.12;
-    const camPos = f.pos.clone().addScaledVector(f.forward, 2.6 * Math.cos(ang)).addScaledVector(f.side, 2.6 * Math.sin(ang)).add(new THREE.Vector3(0, 1.45, 0));
-    const look = f.pos.clone().add(new THREE.Vector3(0, 1.1, 0));
-    g.camera.position.lerp(camPos, Math.min(1, dt * 4));
+    const u = Math.max(0, local - WALK * 0.55);              // 걸어나오는 중반부터 붙는다
+    const zin = easeOutCubic(Math.min(1, u / 1.15));          // 줌 인
+    const zout = Math.max(0, (local - (PER - 0.75)) / 0.75);  // 다음 선수로 넘어가기 직전 살짝 빠짐
+    const dist = 3.4 - 2.05 * zin + 0.7 * zout;               // 3.4m → 1.35m
+    const ang = 0.72 - local * 0.1;                           // 천천히 도는 3/4 앵글
+    const hy = 1.34 + 0.16 * zin;                             // 얼굴 높이
+    const camPos = f.pos.clone()
+      .addScaledVector(f.forward, dist * Math.cos(ang))
+      .addScaledVector(f.side, dist * Math.sin(ang))
+      .add(new THREE.Vector3(0, hy, 0));
+    const look = f.pos.clone().add(new THREE.Vector3(0, 1.02 + 0.22 * zin, 0));
+    g.camera.position.lerp(camPos, Math.min(1, dt * (3 + 3 * zin)));
     g.camera.lookAt(look);
+    // 렌즈: 멀리선 넓게, 붙으면 망원 느낌 (인물이 도드라진다)
+    const wantFov = 52 - 14 * zin + 6 * zout;
+    g.camera.fov += (wantFov - g.camera.fov) * Math.min(1, dt * 5);
+    g.camera.updateProjectionMatrix();
+    // 주인공만 또렷하게 — 나머지는 흐리게 (등장 순서가 분명해진다)
+    for (let i = 0; i < fs.length; i++) fs[i].setFade(i === idx ? 1 : 0.22 + 0.18 * (1 - zin));
     if (this.t >= this.total) { this.finish(); return true; }
     return false;
   }
@@ -153,6 +167,8 @@ export class Intro {
     if (!this.active) return;
     this.active = false; this.done = true;
     const fs = this.g.fighters;
+    fs.forEach((f) => f.setFade(1));
+    this.g.camera.fov = 50; this.g.camera.updateProjectionMatrix();
     fs.forEach((f, i) => { f.pos.copy(this.spawns[i]); f.forward.subVectors(this.center, f.pos).setY(0).normalize(); f.yaw = Math.atan2(f.forward.x, f.forward.z); copyPose(defaultPose(), f.pose); f._applyNow(f.pose); });
   }
 }

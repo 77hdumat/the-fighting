@@ -78,27 +78,35 @@ export const CHARACTERS = {
   // ---- 히든 캐릭터 ----
   // 채채더킴: 작은 키, 단발머리 + 큰 눈. 냥냥펀치(빠르고 가벼움), 필살 = 릴스 (상대를 붙잡아 같이 춤)
   chaechae: {
-    name: 'CHAECHAE', skin: 0xffdcc4, trunks: 0xff5ea8, trunksTrim: 0xfff0f6, trunksText: 'NYANG',
-    gloves: 0xff85c0, hair: 0x2a1a16, shoes: 0xff5ea8, shoesTrim: 0xffffff,
-    hairStyle: 'bob', brows: 'thin', eyes: 'big', mouth: 'grin',
+    name: 'CHAECHAE', skin: 0xffdcc4, trunks: 0x14141a, trunksTrim: 0x2a2a33, trunksText: '',
+    bodyColor: 0x17171e, sleeves: 0xffdcc4, pants: 0xffdcc4,          // 검은 원피스 (팔·다리는 맨살)
+    gloves: 0xffdcc4, noGloves: true, shoes: 0x1b1b22, shoesTrim: 0x3a3a46,   // 단화
+    hair: 0x2a1a16, hairStyle: 'bob', brows: 'thin', eyes: 'big', mouth: 'grin',
+    accessory: 'sunglasses', skirt: 0x17171e, hold: { L: 'book', R: 'book' },
     prop: { height: 0.82, torsoW: 0.88, torsoD: 0.86, armR: 0.86, armLen: 0.88, legR: 0.9, legLen: 0.86, headS: 1.08, headY: 1.0, neck: 0.8, muscle: 0.3 },
     hp: 120, powerMul: 0.8, speedMul: 1.8, style: 'idol', gaugeMul: 1.15, hidden: true, sfx: 'nyang',
   },
   // 쩡효: 중간 키, 긴 생머리 + 흰 피부. 덤벨 펀치(무겁다), 필살 = 바벨 내려찍기
   jjeonghyo: {
-    name: 'JJEONGHYO', skin: 0xfdeade, trunks: 0x1a1a22, trunksTrim: 0xc0f000, trunksText: '500',
-    gloves: 0x2b2b33, hair: 0x241b18, shoes: 0x1a1a22, shoesTrim: 0xc0f000,
-    hairStyle: 'long', brows: 'thin', eyes: 'narrow', mouth: 'grit',
+    name: 'JJEONGHYO', skin: 0xfdeade, trunks: 0x14141a, trunksTrim: 0x2a2a33, trunksText: '',
+    bodyColor: 0xf4f4f0, sleeves: 0xfdeade, pants: 0x1a1a20,          // 흰 티 + 검정 레깅스
+    chestText: 'HDEX', chestTextColor: '#111118',
+    gloves: 0xfdeade, noGloves: true, shoes: 0xf0f0f0, shoesTrim: 0xc0f000,
+    hair: 0x241b18, hairStyle: 'long', brows: 'thin', eyes: 'narrow', mouth: 'grit',
+    hold: { L: 'dumbbell', R: 'dumbbell' },
     prop: { height: 1.0, torsoW: 1.06, torsoD: 1.0, armR: 1.12, armLen: 1.0, legR: 1.12, legLen: 0.98, headS: 0.98, headY: 1.0, neck: 1.0, muscle: 1 },
-    hp: 185, powerMul: 1.45, speedMul: 0.8, style: 'gym', gaugeMul: 0.8, hidden: true, propItem: 'dumbbell', sfx: 'clang',
+    hp: 185, powerMul: 1.45, speedMul: 0.8, style: 'gym', gaugeMul: 0.8, hidden: true, sfx: 'clang',
   },
   // 뼈석원: 큰 키, 구릿빛 피부에 마른 몸. 뼈펀치(리치 최장), 필살 = 오토바이 돌진
   ppyeo: {
-    name: 'PPYEO', skin: 0xb07848, trunks: 0x14141c, trunksTrim: 0xff2d2d, trunksText: 'BONE',
-    gloves: 0xe8e8ec, hair: 0x14100e, shoes: 0x14141c, shoesTrim: 0xff2d2d,
-    hairStyle: 'slick', brows: 'thin', eyes: 'narrow', mouth: 'grin',
+    name: 'PPYEO', skin: 0xb07848, trunks: 0x2f4f86, trunksTrim: 0x24406e, trunksText: '',
+    bodyColor: 0xf2f2f4, sleeves: 0xb07848, pants: 0x2f4f86,          // 스티치 티 + 청바지
+    chestText: 'STITCH', chestTextColor: '#2ba8e0', chestArt: 'stitch',
+    gloves: 0xb07848, noGloves: true, shoes: 0xe8e8ec, shoesTrim: 0x2f4f86,
+    hair: 0x14100e, hairStyle: 'slick', brows: 'thin', eyes: 'narrow', mouth: 'grin',
+    hold: { L: 'helmet', R: 'bottle' },
     prop: { height: 1.2, torsoW: 0.74, torsoD: 0.72, armR: 0.7, armLen: 1.32, legR: 0.72, legLen: 1.2, headS: 0.94, headY: 1.16, neck: 1.4, muscle: 0.1 },
-    hp: 125, powerMul: 1.15, speedMul: 1.4, style: 'bone', gaugeMul: 1.0, hidden: true, propItem: 'bone', sfx: 'bone',
+    hp: 125, powerMul: 1.15, speedMul: 1.4, style: 'bone', gaugeMul: 1.0, hidden: true, sfx: 'bone',
   },
 };
 export const CHARACTER_ORDER = ['ippo', 'mashiba', 'miyata', 'sendo'];
@@ -205,6 +213,34 @@ function geometriesFor(def) {
   };
   geoCache.set(def.name, G);
   return G;
+}
+
+// 손에 드는 소품: 책 / 덤벨 / 하이바(헬멧) / 녹차병
+function buildHeldItem(kind, glove, part, sx) {
+  if (kind === 'book') {
+    const cover = part(new THREE.BoxGeometry(0.19, 0.25, 0.045), 0x8a2b2b, glove, 0, -0.02, 0.06);
+    cover.rotation.set(0.25, sx * 0.25, 0);
+    const pages = part(new THREE.BoxGeometry(0.175, 0.235, 0.05), 0xf6f1e2, cover, 0, 0, 0.004, false);
+    const band = part(new THREE.BoxGeometry(0.02, 0.25, 0.048), 0xe8c24a, cover, -0.082, 0, 0.001, false);
+  } else if (kind === 'dumbbell') {
+    const bar = part(new THREE.CylinderGeometry(0.022, 0.022, 0.19, 8), 0x9a9aa4, glove, 0, -0.02, 0.03);
+    bar.rotation.z = Math.PI / 2;
+    for (const s2 of [-1, 1]) {
+      const pl = part(new THREE.CylinderGeometry(0.068, 0.068, 0.055, 12), 0x24242c, bar, 0, s2 * 0.095, 0);
+      const rim = part(new THREE.TorusGeometry(0.068, 0.008, 6, 16), 0xc0f000, pl, 0, 0, 0, false);
+      rim.rotation.x = Math.PI / 2;
+    }
+  } else if (kind === 'helmet') {
+    const shell = part(new THREE.SphereGeometry(0.115, 16, 12), 0x15151c, glove, 0, -0.03, 0.06);
+    shell.scale.set(1, 0.95, 1.05);
+    const visor = part(new THREE.SphereGeometry(0.108, 16, 10, -0.9, 1.8, 0.7, 0.75), 0x3fd0ff, shell, 0, 0.005, 0.012, false);
+    const stripe = part(new THREE.BoxGeometry(0.03, 0.2, 0.2), 0xff2d2d, shell, 0, 0.02, -0.01, false);
+  } else if (kind === 'bottle') {
+    const body = part(new THREE.CylinderGeometry(0.045, 0.05, 0.22, 12), 0x2f7d32, glove, 0, -0.05, 0.05);
+    const label = part(new THREE.CylinderGeometry(0.052, 0.052, 0.085, 12), 0xf3f6e8, body, 0, -0.01, 0, false);
+    const neck = part(new THREE.CylinderGeometry(0.022, 0.032, 0.05, 10), 0x2f7d32, body, 0, 0.13, 0);
+    const cap = part(new THREE.CylinderGeometry(0.026, 0.026, 0.03, 10), 0xe8e8ec, body, 0, 0.165, 0);
+  }
 }
 
 function trunksTextTexture(text, color) {
@@ -323,6 +359,31 @@ export function buildBoxer(def, opts = {}) {
     for (let r = 0; r < 3; r++) for (let c = -1; c <= 1; c += 2) part(G.abs, def.skin, waist, c * 0.045 * P.torsoW, 0.26 - r * 0.08, 0.125 * P.torsoD, false);
   }
 
+  // 가슴 프린트 (티셔츠 로고)
+  if (def.chestText && !ghost) {
+    const cp = new THREE.Mesh(new THREE.PlaneGeometry(0.26, 0.1), new THREE.MeshBasicMaterial({ map: trunksTextTexture(def.chestText, def.chestTextColor || '#111118'), transparent: true, depthWrite: false }));
+    cp.position.set(0, 0.36, 0.142 * P.torsoD);
+    waist.add(cp);
+    if (def.chestArt === 'stitch') {   // 티셔츠 캐릭터 그림 (파란 얼굴 + 큰 귀)
+      const art = new THREE.Group(); art.position.set(0, 0.2, 0.142 * P.torsoD); waist.add(art);
+      const face = new THREE.Mesh(new THREE.CircleGeometry(0.052, 20), new THREE.MeshBasicMaterial({ color: 0x2ba8e0 }));
+      art.add(face);
+      for (const s2 of [-1, 1]) {
+        const ear = new THREE.Mesh(new THREE.CircleGeometry(0.024, 14), new THREE.MeshBasicMaterial({ color: 0x2ba8e0 }));
+        ear.position.set(s2 * 0.052, 0.042, 0.001); ear.scale.set(0.8, 1.5, 1); art.add(ear);
+        const eye = new THREE.Mesh(new THREE.CircleGeometry(0.013, 12), new THREE.MeshBasicMaterial({ color: 0x14141c }));
+        eye.position.set(s2 * 0.02, 0.012, 0.002); art.add(eye);
+      }
+      const nose = new THREE.Mesh(new THREE.CircleGeometry(0.009, 10), new THREE.MeshBasicMaterial({ color: 0x14141c }));
+      nose.position.set(0, -0.012, 0.002); art.add(nose);
+    }
+  }
+  // 원피스 치마 (채채더킴)
+  if (def.skirt) {
+    const sk = part(new THREE.CylinderGeometry(0.16 * P.torsoW, 0.245 * P.torsoW, 0.26, 16, 1, true), def.skirt, waist, 0, 0.02, 0);
+    sk.material.side = THREE.DoubleSide;
+  }
+
   const chest = new THREE.Group();
   chest.position.y = 0.52;
   waist.add(chest);
@@ -349,20 +410,9 @@ export function buildBoxer(def, opts = {}) {
       seam.rotation.x = Math.PI / 2; seam.rotation.z = 0.5;
       const strap = part(new THREE.CylinderGeometry(0.1, 0.1, 0.035, 14), 0xf5f5f5, elbow, 0, -armLen * 0.86, 0, false);
     }
-    // 소품: 쩡효는 글러브에 덤벨, 뼈석원은 손등에 뼈 보호대
-    if (def.propItem === 'dumbbell') {
-      const bar = part(new THREE.CylinderGeometry(0.022, 0.022, 0.2, 8), 0x8a8a94, glove, 0, 0, 0.02);
-      bar.rotation.z = Math.PI / 2;
-      for (const sx of [-1, 1]) {
-        const pl = part(new THREE.CylinderGeometry(0.062, 0.062, 0.05, 10), 0x2e2e36, glove, sx * 0.1, 0, 0.02);
-        pl.rotation.z = Math.PI / 2;
-      }
-    } else if (def.propItem === 'bone') {
-      for (const sx of [-1, 1]) {
-        const kn = part(new THREE.SphereGeometry(0.035, 8, 6), 0xf2efe6, glove, sx * 0.055, 0.02, 0.095, false);
-        kn.scale.set(1, 0.85, 0.7);
-      }
-    }
+    // ---- 손에 든 소품 (히든 캐릭터) ----
+    const item = def.hold && def.hold[sx > 0 ? 'L' : 'R'];
+    if (item && !ghost) buildHeldItem(item, glove, part, sx);
     return { shoulder, elbow, glove };
   };
   const armL = mkArm(1);
@@ -449,6 +499,18 @@ export function buildBoxer(def, opts = {}) {
     }
     const br = part(G.brow, 0x101018, head, sx * 0.068, eyeY + (narrow ? 0.03 : big ? 0.085 : 0.06), eyeZ + 0.015, false);
     br.rotation.z = -sx * (narrow ? 0.55 : big ? 0.12 : 0.32);
+  }
+  // 선글라스 (채채더킴)
+  if (def.accessory === 'sunglasses') {
+    const gl = new THREE.Group(); gl.position.set(0, eyeY + 0.012, eyeZ + 0.028); head.add(gl);
+    for (const sx of [-1, 1]) {
+      const lens = part(new THREE.BoxGeometry(0.085, 0.055, 0.016), 0x15151c, gl, sx * 0.058, 0, 0);
+      lens.rotation.z = -sx * 0.06;
+      const shine = new THREE.Mesh(new THREE.PlaneGeometry(0.03, 0.012), new THREE.MeshBasicMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.75 }));
+      shine.position.set(sx * 0.02, 0.012, 0.01); shine.rotation.z = 0.4; lens.add(shine);
+      const arm = part(new THREE.BoxGeometry(0.02, 0.012, 0.09), 0x15151c, gl, sx * 0.108, 0.006, -0.05, false);
+    }
+    part(new THREE.BoxGeometry(0.038, 0.012, 0.014), 0x15151c, gl, 0, 0.008, 0, false);
   }
   // 코
   const nose = part(new THREE.ConeGeometry(0.028, 0.06, 6), def.skin, head, 0, hy - 0.02 * P.headY, 0.165 * P.headS, false);
