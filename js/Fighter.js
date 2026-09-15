@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { buildBoxer, defaultPose, applyPose, copyPose, CHARACTERS } from './Rig.js';
 import { DempseyController } from './DempseyController.js';
 import { createPunch, applyPunchToPose, pointSegmentDist, segSegDist, easeOutCubic } from './Punch.js';
-import { SPECIALS, KITS } from './Specials.js';
+import { SPECIALS, KITS, HIDDEN_LINES } from './Specials.js';
 
 const RING_LIMIT = 2.75;
 const _d = new THREE.Vector3();
