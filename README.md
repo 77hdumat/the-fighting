@@ -163,3 +163,8 @@ MAX 에서 `L` → 2.8초간 ∞ 궤적으로 격하게 흔들며 상대를 추�
 
 ## 연습 모드 (솔로 = 1:1 래더)
 CPU 1명과 1:1. 이기면 LV+1 (localStorage `dr-level`), 지면 같은 LV 재도전. 난이도 = **1.4^(LV-1)** (기하급수): AI 반응 간격 ÷, 블록/카운터/슬립 읽기 확률 ×(상한 95%), 고유기·필살 빈도 ×, 펀치 위력 ×1.1^(LV-1) (최대 2.4), HP ×1.12^(LV-1). 상대 캐릭터는 LV 마다 순환.
+
+## 배포 (GitHub Pages)
+고정 URL: **https://77hdumat.github.io/the-fighting/** (repo `77hdumat/the-fighting`, main 브랜치 루트).
+`./deploy.sh "메시지"` = 빌드 + 커밋 + push. 반영까지 1~2분, CDN 캐시 10분이라 안 바뀌면 강력 새로고침(⌘⇧R).
+로컬 테스트는 여전히 `python3 serve.py 8787`. Cloudflare 퀵 터널은 더 이상 필요 없음.
