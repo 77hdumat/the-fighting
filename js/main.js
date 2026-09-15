@@ -787,8 +787,10 @@ class Game {
     this.ghostFx = {};
     for (const f of this.fighters) this.ghostFx[f.slot] = new AfterImageEffect(this.scene, f.def, f.slot === this.localSlot ? 7 : 5);
     // 팀전: 팀마다 첫 주자만 링 위에, 나머지는 대기(벤치)
-    this.teamMode = !!(this.cfg && this.cfg.some((c) => c.team !== undefined));
+    this.teamMode = !!(this.cfg && this.cfg.some((c) => c.team !== undefined && c.team !== null));
     if (this.teamMode) {
+      // 안전장치: 팀 값이 빠진 선수는 자리 순서로 팀을 메운다 (팀 판정이 null 이면 같은 편도 때려진다)
+      this.fighters.forEach((f, i) => { if (f.team === null || f.team === undefined) f.team = i % 2; });
       const started = {};
       for (const f of this.fighters) {
         const first = !started[f.team];
@@ -937,7 +939,12 @@ class Game {
   viewPair() {
     const fs = this.fighters;
     let v = this.localFighter;
-    if (!v || v.ko) v = fs.find((f) => !f.ko) || fs[0];
+    // 교체 대기 중이면 무대에 있는 같은 팀 선수를 관전한다
+    if (v && v.benched) {
+      v = fs.find((f) => !f.benched && !f.ko && (v.team === null || f.team === v.team))
+        || fs.find((f) => !f.benched && !f.ko) || v;
+    }
+    if (!v || v.ko) v = fs.find((f) => !f.ko && !f.benched) || fs.find((f) => !f.ko) || fs[0];
     let o = v.target || fs.find((f) => f !== v && !f.ko) || fs.find((f) => f !== v);
     if (this.mode === 'client' && v.targetSlot >= 0) o = fs[v.targetSlot] || o;
     return [v, o];
@@ -1519,7 +1526,7 @@ class Game {
 
   /** 버튼 입력을 받은 그 프레임에 내 캐릭터 동작을 먼저 그려 준다 (호스트 확인 전) */
   predictInput(input) {
-    const f = this.localFighter; if (!f) return;
+    const f = this.localFighter; if (!f || f.benched) return;
     if (input.justPressed('KeyJ')) f.predictPunch('L', 'straight');
     else if (input.justPressed('KeyK')) f.predictPunch('R', 'straight');
     else if (input.justPressed('KeyU') || input.justPressed('KeyI')) f.predictPunch(input.justPressed('KeyU') ? 'R' : 'L', 'special');
@@ -1531,7 +1538,7 @@ class Game {
    * 왕복 지연(입력→호스트→스냅샷) 때문에 게스트의 내 캐릭터가 늦게 따라오던 버벅임을 없앤다.
    */
   predictLocal(rawDt) {
-    const f = this.localFighter; if (!f) return;
+    const f = this.localFighter; if (!f || f.benched) return;
     if (!this._pred) this._pred = new THREE.Vector3();
     const p = this._pred;
     const blocked = f.ko || f.downT > 0 || f.stagger > 0 || !!f.finisher || f.airY > 0.01;
@@ -1720,6 +1727,8 @@ class Game {
     this.hudAccum += rawDt;
     if (this.hudAccum >= 1 / 30) {
       this.hudAccum = 0; this.hud.update(rawDt, this.fighters, local); this.touch.update(local);
+      const benchEl = document.getElementById('bench-banner');
+      if (benchEl) benchEl.classList.toggle('hidden', !(local && local.benched && !local.ko && this.phase === 'fight'));
       if (this.mode === 'client' && this.netLabel) {
         const el = document.getElementById('netinfo');
         if (el) el.textContent = `${this.netLabel} · PING ${Math.round(this.rtt || 0)}ms · BUF ${Math.round(this.netBufMs || 0)}ms`;

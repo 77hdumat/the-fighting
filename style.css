@@ -341,3 +341,5 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
 .bar.hp .ghost { position: absolute; top: 0; left: 0; bottom: 0; width: 100%; background: linear-gradient(90deg, #ff6b4a, #b01818); opacity: .95; transition: none; }
 .bar.hp .ghost.draining { box-shadow: 0 0 10px rgba(255,80,60,.55) inset; }
 .bar.hp .fill { z-index: 1; }
+
+#bench-banner { position: fixed; left: 50%; top: 14%; transform: translateX(-50%); z-index: 7; background: rgba(0,0,0,.6); border: 2px solid #ffd34d; color: #ffd34d; font-weight: 900; font-size: 15px; padding: 8px 18px; border-radius: 999px; letter-spacing: .5px; }
