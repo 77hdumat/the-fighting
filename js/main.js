@@ -151,16 +151,22 @@ class Game {
       document.querySelectorAll('[data-map]').forEach((b) => b.classList.toggle('sel', b.dataset.map === this.myMap));
       document.querySelectorAll('[data-rule]').forEach((b) => b.classList.toggle('sel', b.dataset.rule === this.myRule));
     };
-    document.querySelectorAll('[data-map]').forEach((b) => b.addEventListener('click', () => {
-      this.myMap = b.dataset.map; try { localStorage.setItem('dr-map', this.myMap); } catch (e) {}
-      syncOpts();
+    const optChanged = () => {
+      syncOpts(); this.showRoomRules();
+      if (this.roster) this.renderRoster(this.roster);
       if (this.net.role === 'host' && this.roster) this.broadcastLobby();
+    };
+    document.querySelectorAll('[data-map]').forEach((b) => b.addEventListener('click', () => {
+      if (this.net.role === 'client') return;             // 맵/규칙은 방장이 정한다
+      this.myMap = b.dataset.map; try { localStorage.setItem('dr-map', this.myMap); } catch (e) {}
+      optChanged();
     }));
     document.querySelectorAll('[data-rule]').forEach((b) => b.addEventListener('click', () => {
+      if (this.net.role === 'client') return;
       this.myRule = b.dataset.rule; try { localStorage.setItem('dr-rule', this.myRule); } catch (e) {}
-      syncOpts();
-      if (this.net.role === 'host' && this.roster) this.broadcastLobby();
+      optChanged();
     }));
+    this.syncOpts = syncOpts;
     syncOpts();
     // 전체화면: 사용자 제스처 안에서만 가능. iOS Safari 는 미지원 → '홈 화면에 추가' 안내
     const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -208,10 +214,10 @@ class Game {
     try { this.myChar = localStorage.getItem('dr-char') || 'ippo'; } catch (e) { this.myChar = 'ippo'; }
     if (!CHARACTERS[this.myChar]) this.myChar = 'ippo';
     const DESC = {
-      ippo: { style: '인파이터', st: '<b>SPACE</b> 뎀프시롤 · <b>U</b> 가젤 펀치(띄움) · <b>I</b> 리버 블로(주저앉힘) · <b>L</b> 필살 훅' , pw: 3, sp: 3, hp: 3 },
-      mashiba: { style: '히트맨 · 최장 리치', st: '<b>SPACE</b> 플리커 러시 · <b>U</b> 플리커 3연(무예비) · <b>I</b> 초핑 라이트 · <b>L</b> 초핑 라이트 강', pw: 3, sp: 4, hp: 3 },
-      miyata: { style: '아웃복서 · 카운터', st: '<b>SPACE</b> 카운터 스탠스(피격 시 자동 회피→졸트) · <b>U</b> 졸트 · <b>I</b> 백스텝 잽 · <b>L</b> 졸트 블로', pw: 2, sp: 5, hp: 2 },
-      sendo: { style: '파워 슬러거 · 느리지만 한 방', st: '<b>U</b> 스매시(띄움) · <b>I</b> 러시 3연 · <b>L</b> 스매시 강', pw: 5, sp: 1, hp: 4 },
+      ippo: { style: '인파이터', st: '<b>U</b> 가젤 펀치(띄움) · <b>I</b> 리버 블로(주저앉힘) · <b>L</b> <b>뎀프시롤 난타</b>(∞ 스웨이 12연타 → 마무리 다운)' , pw: 3, sp: 3, hp: 3 },
+      mashiba: { style: '히트맨 · 최장 리치', st: '<b>U</b> 플리커 3연(무예비) · <b>I</b> 초핑 라이트 · <b>L</b> 초핑 라이트 강', pw: 3, sp: 4, hp: 3 },
+      miyata: { style: '아웃복서 · 카운터', st: '<b>U</b> 졸트 카운터 · <b>I</b> 백스텝 잽 · <b>L</b> 졸트 블로(다운 없음·초고속)', pw: 2, sp: 5, hp: 2 },
+      sendo: { style: '파워 슬러거 · 느리지만 한 방', st: '<b>U</b> 스매시(띄움) · <b>I</b> 러시 3연 · <b>L</b> 스매시 강 · 약타 아머', pw: 5, sp: 1, hp: 4 },
       chaechae: { style: '히든 · 문화생활 인플루언서', st: '<b>기본</b> 냥냥펀치(초고속·경량) · <b>U</b> 냥냥 4연타 · <b>I</b> 고양이 할퀴기 · <b>L</b> <b>릴스 촬영</b>(상대가 강제로 유행 댄스 → 오글거려 쓰러짐)<br><i>기 게이지 15% 빨리 참</i>', pw: 1, sp: 5, hp: 2 },
       jjeonghyo: { style: '히든 · 3대 500', st: '<b>기본</b> 덤벨 펀치(무겁고 느림) · <b>U</b> 덤벨 훅 · <b>I</b> 데드리프트 업(띄움) · <b>L</b> <b>바벨 내려찍기</b><br><i>기 게이지 20% 느림 · 체력 최고</i>', pw: 5, sp: 2, hp: 5 },
       ohsh: { style: '히든 · 빵 러버', st: '<b>기본</b> 빵 들고 타격(가볍고 빠름) · <b>U</b> 갑자기 때리기(기습·스턴) · <b>I</b> 빵 던지기 · <b>L</b> <b>간식 폭격</b>(소금빵·호두과자 46개 낙하)<br><i>가장 작고 약하지만 가장 빨리 기가 참</i>', pw: 1, sp: 5, hp: 1 },
@@ -504,10 +510,26 @@ class Game {
     document.getElementById('room-code').textContent = code;
   }
 
+  /** 로비 하단에 맵/규칙 표시 (게스트는 호스트 설정을 따른다) */
+  showRoomRules() {
+    const lm = document.getElementById('lobby-modes');
+    if (lm) lm.classList.toggle('readonly', this.net.role === 'client');
+    if (this.syncOpts) this.syncOpts();
+    const el = document.getElementById('room-rules');
+    if (!el) return;
+    const map = this.myMap === 'cliff' ? '암벽 (낙사)' : '복싱 링';
+    const rule = this.myRule === 'team' ? '2:2 팀전' : '난투';
+    el.textContent = `맵: ${map} · 규칙: ${rule}` + (this.net.role === 'client' ? ' (방장 설정)' : '');
+  }
+
   renderRoster(list) {
-    const ul = document.getElementById('roster');
-    ul.innerHTML = '';
-    list.forEach((r, i) => {
+    this.roster = this.roster || list;
+    const team = this.myRule === 'team';
+    const wrap = document.getElementById('roster-wrap');
+    const teams = document.getElementById('roster-teams');
+    if (wrap) wrap.classList.toggle('hidden', team);
+    if (teams) teams.classList.toggle('hidden', !team);
+    const row = (r, i) => {
       const li = document.createElement('li');
       li.className = r.type === 'empty' ? 'empty' : '';
       const who = r.type === 'empty' ? '빈 자리' : (r.name || this.nickOf(i)) + (r.type === 'local' ? ' (YOU)' : '');
@@ -518,15 +540,24 @@ class Game {
         kb.addEventListener('click', (e) => { e.stopPropagation(); this.kickPlayer(i); });
         li.appendChild(kb);
       }
-      ul.appendChild(li);
-    });
+      return li;
+    };
+    if (team) {
+      const a = document.getElementById('roster-a'), b = document.getElementById('roster-b');
+      a.innerHTML = ''; b.innerHTML = '';
+      list.forEach((r, i) => (i % 2 === 0 ? a : b).appendChild(row(r, i)));
+    } else {
+      const ul = document.getElementById('roster');
+      ul.innerHTML = '';
+      list.forEach((r, i) => ul.appendChild(row(r, i)));
+    }
   }
 
   hostRoom(code = null) {
     const net = this.net;
     this.names = [this.myNick]; this.chars = [this.myChar]; this.intros = [this.myIntro];
     this.roster = [{ type: 'local', name: this.myNick, char: this.myChar }, { type: 'empty' }, { type: 'empty' }, { type: 'empty' }];
-    net.onOpen = (code) => { try { history.replaceState(null, '', `?r=${code}`); } catch (e) {} this.showLobby(code); this.renderRoster(this.roster); document.getElementById('btn-start').classList.remove('hidden'); this.lobbyMsg('친구에게 코드를 알려주세요. 참가한 사람끼리만 싸웁니다 (2~4명). 시작 버튼으로 시작'); this.broadcastLobby(); };
+    net.onOpen = (code) => { try { history.replaceState(null, '', `?r=${code}`); } catch (e) {} this.showLobby(code); this.showRoomRules(); this.renderRoster(this.roster); document.getElementById('btn-start').classList.remove('hidden'); this.lobbyMsg('친구에게 코드를 알려주세요. 참가한 사람끼리만 싸웁니다 (2~4명). 시작 버튼으로 시작'); this.broadcastLobby(); };
     net.onError = (e) => this.lobbyMsg('연결 오류: ' + (e.type || e));
     net.onJoin = (slot) => { this.names[slot] = 'P' + (slot + 1); this.roster[slot] = { type: 'remote', name: this.names[slot] }; this.renderRoster(this.roster); this.broadcastLobby(); if (this.started) this.net.conns[slot - 1].send({ t: 'full' }); };
     net.onLeave = (slot) => {
@@ -561,7 +592,7 @@ class Game {
     net.host(3, code);
   }
 
-  broadcastLobby() { this.net.broadcast({ t: 'lobby', roster: this.roster, names: this.names, chars: this.chars }); }
+  broadcastLobby() { this.net.broadcast({ t: 'lobby', roster: this.roster, names: this.names, chars: this.chars, map: this.myMap, rule: this.myRule }); }
 
   hostStart() {
     if (this.started) return;
@@ -581,7 +612,7 @@ class Game {
 
   joinRoom(code) {
     const net = this.net;
-    net.onOpen = () => { this.showLobby(code); this.showChat(true); this.lobbyMsg('접속 완료. 방장이 시작할 때까지 대기…'); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); };
+    net.onOpen = () => { this.showLobby(code); this.showRoomRules(); this.showChat(true); this.lobbyMsg('접속 완료. 방장이 시작할 때까지 대기…'); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); };
     net.onError = (e) => {
       if (e.type === 'closed' && !this.migrating) { if (!this.kicked) this.migrateHost(); return; }
       if ((e.type === 'peer-unavailable' || e.type === 'closed') && this.migrating) {
@@ -595,7 +626,7 @@ class Game {
     };
     net.onMessage = (m) => {
       if (m.t === 'welcome') { this.migrating = false; this.migrateTries = 0; this.lastSlot = m.slot; this.names = []; this.chars = []; net.send({ t: 'hello', name: this.myNick, char: this.myChar, intro: this.myIntro }); }
-      else if (m.t === 'lobby') { this.rosterRaw = m.roster; this.names = m.names || []; this.chars = m.chars || []; this.renderRoster(m.roster.map((r, i) => (i === net.mySlot ? { type: 'local', name: r.name } : i === 0 ? { type: 'remote', name: r.name } : r))); }
+      else if (m.t === 'lobby') { if (m.map) this.myMap = m.map; if (m.rule) this.myRule = m.rule; this.showRoomRules(); this.rosterRaw = m.roster; this.names = m.names || []; this.chars = m.chars || []; this.renderRoster(m.roster.map((r, i) => (i === net.mySlot ? { type: 'local', name: r.name } : i === 0 ? { type: 'remote', name: r.name } : r))); }
       else if (m.t === 'full') this.lobbyMsg('방이 가득 찼거나 이미 시작됨');
       else if (m.t === 'start') { this.setMap(m.map || 'ring'); this.names = []; m.cfg.forEach((c) => { this.names[c.netSlot] = c.name; }); this.localSlot = Math.max(0, m.cfg.findIndex((c) => c.netSlot === net.mySlot)); this.startMatch('client', m.cfg); }
       else if (m.t === 'snap') { if (this.phase === 'fight') this.onSnapshot(m); }
@@ -1445,8 +1476,14 @@ class Game {
     const len = Math.hypot(p.x, p.z);
     if (len > max) { p.x *= max / len; p.z *= max / len; }
     f.pos.x += p.x; f.pos.z += p.z;
-    f.pos.x = Math.max(-4.15, Math.min(4.15, f.pos.x));
-    f.pos.z = Math.max(-4.15, Math.min(4.15, f.pos.z));
+    if (this.mapKind === 'cliff') {
+      // 암벽은 경계가 원형이고 밖으로 나갈 수 있어야 한다 (낙사 판정은 호스트가 한다)
+      const r = Math.hypot(f.pos.x, f.pos.z), lim = (this.ring && this.ring.radius ? this.ring.radius(f.pos.x, f.pos.z) : 6.2) + 1.2;
+      if (r > lim) { f.pos.x *= lim / r; f.pos.z *= lim / r; }
+    } else {
+      f.pos.x = Math.max(-4.15, Math.min(4.15, f.pos.x));
+      f.pos.z = Math.max(-4.15, Math.min(4.15, f.pos.z));
+    }
     f._applyNow(f.pose);
     // 펀치/가드 예측 포즈를 서버 포즈 위에 덮는다
     f.applyPrediction(rawDt, f.punchProgress > 0.001, this.input.isDown('ShiftLeft') || this.input.isDown('ShiftRight'));

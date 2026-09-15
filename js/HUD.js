@@ -17,7 +17,7 @@ export class HUD {
     this.top.innerHTML = '';
     this.cards = fighters.map((f) => {
       const el = document.createElement('div');
-      el.className = 'fcard' + (f.slot === localSlot ? ' me' : '');
+      el.className = 'fcard' + (f.slot === localSlot ? ' me' : '') + (f.team !== null && f.team !== undefined ? ` team${f.team}` : '');
       el.innerHTML = `<div class="name"><span class="tag">${f.nick || (f.isAI ? 'CPU' : 'P' + (f.netSlot + 1))}${f.slot === localSlot ? ' (YOU)' : ''}</span>${f.name}<span class="charge"></span><span class="hpnum"></span></div><div class="bar hp"><div class="fill"></div></div><div class="bar mini"><div class="fill"></div></div>`;
       this.top.appendChild(el);
       return { el, fill: el.querySelector('.hp .fill'), mini: el.querySelector('.mini'), miniFill: el.querySelector('.mini .fill'), charge: el.querySelector('.charge'), hpnum: el.querySelector('.hpnum') };

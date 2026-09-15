@@ -309,3 +309,24 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
 #start-overlay .opt { font-family: "Noto Sans JP", sans-serif; font-weight: 900; font-size: 13px; padding: 6px 14px; border-radius: 999px; border: 2px solid #d4d4e0; background: #fff; color: #5a5a6a; cursor: pointer; }
 #start-overlay .opt.sel { background: #1c1c2e; border-color: #1c1c2e; color: #fff; }
 #start-overlay .opt:hover { border-color: #1c1c2e; }
+
+#lobby .room-rules { font-size: 13px; font-weight: 900; color: #1c1c2e; background: #f1f1f6; border-radius: 999px; padding: 4px 14px; display: inline-block; margin: 2px auto 0; }
+
+/* ---------- 로비: 코너 분할 로스터 ---------- */
+#lobby-modes { margin: 2px 0 4px; }
+#lobby-modes.readonly { opacity: .55; pointer-events: none; }
+#roster-teams { display: flex; align-items: stretch; gap: 10px; justify-content: center; width: 100%; }
+#roster-teams .corner { flex: 1 1 0; border-radius: 14px; padding: 8px 10px 10px; border: 3px solid; background: #fff; }
+#roster-teams .corner.blue { border-color: #2f6fe0; box-shadow: 0 6px 0 rgba(47,111,224,.18); }
+#roster-teams .corner.red { border-color: #e03a2f; box-shadow: 0 6px 0 rgba(224,58,47,.18); }
+#roster-teams .corner h4 { margin: 0 0 6px; font-size: 13px; letter-spacing: 2px; text-align: center; }
+#roster-teams .corner.blue h4 { color: #2f6fe0; }
+#roster-teams .corner.red h4 { color: #e03a2f; }
+#roster-teams .corner ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+#roster-teams .corner li { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 900; color: #1c1c2e; background: #f4f5f9; border-radius: 8px; padding: 5px 8px; }
+#roster-teams .corner li.empty { color: #a9a9b8; background: #fafafd; font-weight: 700; }
+#roster-teams .corner li .kick { margin-left: auto; font-size: 11px; font-weight: 900; padding: 2px 8px; border: 2px solid #ff5a3c; background: #fff; color: #c8321a; border-radius: 6px; cursor: pointer; }
+#roster-teams .vs { align-self: center; font-family: Bangers, Impact, sans-serif; font-size: 26px; color: #1c1c2e; letter-spacing: 2px; }
+/* 팀전 중 HUD 카드도 코너 색으로 */
+.fcard.team0 { border-left-color: #2f6fe0 !important; }
+.fcard.team1 { border-left-color: #e03a2f !important; }
