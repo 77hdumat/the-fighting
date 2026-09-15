@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
+<meta name="build-id" content="1789463360">
+<meta http-equiv="Cache-Control" content="no-cache">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -359,6 +361,8 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
 
 #bench-banner { position: fixed; left: 50%; top: 14%; transform: translateX(-50%); z-index: 7; background: rgba(0,0,0,.6); border: 2px solid #ffd34d; color: #ffd34d; font-weight: 900; font-size: 15px; padding: 8px 18px; border-radius: 999px; letter-spacing: .5px; }
 
+#update-banner { position: fixed; right: 12px; bottom: 12px; z-index: 30; background: #ffd34d; color: #1a0a0a; font-weight: 900; font-size: 13px; padding: 8px 14px; border-radius: 999px; border: 2px solid #1a0a0a; cursor: pointer; box-shadow: 3px 3px 0 #000; }
+
 </style>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script type="importmap">
@@ -369,6 +373,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   }
 }
 </script>
+<script>window.__BUILD_ID = "1789463360";</script>
 </head>
 <body>
   <canvas id="gl" tabindex="0"></canvas>
@@ -410,6 +415,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   <div id="intro-name" class="hidden"><div class="nm"></div><div class="ch"></div></div>
   <div id="countdown" class="hidden"></div>
   <div id="skip-hint" class="hidden">SPACE / 클릭 = 스킵</div>
+  <div id="update-banner" class="hidden">새 버전이 있습니다 — 눌러서 새로고침</div>
   <div id="bench-banner" class="hidden">대기 중 — 아군이 쓰러지면 교대로 출전합니다</div>
   <div id="focus-warn" class="hidden">게임 창을 클릭하세요 — 키 입력이 들어오지 않고 있습니다</div>
 
@@ -527,6 +533,27 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
       setTimeout(function () { if (!window.game) fail('로딩이 너무 오래 걸립니다 (CDN 차단?)'); }, 12000);
       // 정상 로드되면 표시 제거
       var iv = setInterval(function () { if (window.game) { boot.remove(); sessionStorage.removeItem('dr-reloaded'); clearInterval(iv); } }, 100);
+
+      // ---- 새 버전 자동 반영: version.json 과 내 빌드 ID 를 비교해 다르면 한 번 새로고침 ----
+      function checkVersion(auto) {
+        if (!window.__BUILD_ID) return;
+        fetch('version.json?ts=' + Date.now(), { cache: 'no-store' })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (v) {
+            if (!v || !v.build || v.build === window.__BUILD_ID) return;
+            var key = 'dr-verreload-' + v.build;
+            if (auto && !sessionStorage.getItem(key)) {
+              sessionStorage.setItem(key, '1');
+              location.replace(location.pathname + '?v=' + v.build + (location.search.indexOf('r=') >= 0 ? '&' + location.search.slice(1) : ''));
+              return;
+            }
+            var b = document.getElementById('update-banner');
+            if (b) { b.classList.remove('hidden'); b.onclick = function () { location.reload(); }; }
+          })
+          .catch(function () {});
+      }
+      checkVersion(true);
+      setInterval(function () { checkVersion(false); }, 60000);
     })();
   </script>
   <script type="module">

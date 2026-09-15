@@ -63,6 +63,7 @@
   <div id="intro-name" class="hidden"><div class="nm"></div><div class="ch"></div></div>
   <div id="countdown" class="hidden"></div>
   <div id="skip-hint" class="hidden">SPACE / 클릭 = 스킵</div>
+  <div id="update-banner" class="hidden">새 버전이 있습니다 — 눌러서 새로고침</div>
   <div id="bench-banner" class="hidden">대기 중 — 아군이 쓰러지면 교대로 출전합니다</div>
   <div id="focus-warn" class="hidden">게임 창을 클릭하세요 — 키 입력이 들어오지 않고 있습니다</div>
 
@@ -180,8 +181,29 @@
       setTimeout(function () { if (!window.game) fail('로딩이 너무 오래 걸립니다 (CDN 차단?)'); }, 12000);
       // 정상 로드되면 표시 제거
       var iv = setInterval(function () { if (window.game) { boot.remove(); sessionStorage.removeItem('dr-reloaded'); clearInterval(iv); } }, 100);
+
+      // ---- 새 버전 자동 반영: version.json 과 내 빌드 ID 를 비교해 다르면 한 번 새로고침 ----
+      function checkVersion(auto) {
+        if (!window.__BUILD_ID) return;
+        fetch('version.json?ts=' + Date.now(), { cache: 'no-store' })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (v) {
+            if (!v || !v.build || v.build === window.__BUILD_ID) return;
+            var key = 'dr-verreload-' + v.build;
+            if (auto && !sessionStorage.getItem(key)) {
+              sessionStorage.setItem(key, '1');
+              location.replace(location.pathname + '?v=' + v.build + (location.search.indexOf('r=') >= 0 ? '&' + location.search.slice(1) : ''));
+              return;
+            }
+            var b = document.getElementById('update-banner');
+            if (b) { b.classList.remove('hidden'); b.onclick = function () { location.reload(); }; }
+          })
+          .catch(function () {});
+      }
+      checkVersion(true);
+      setInterval(function () { checkVersion(false); }, 60000);
     })();
   </script>
-  <script type="module" src="js/main.js?v=1789463189" onerror="__bootFail('모듈 로드 실패 (구버전 캐시)')"></script>
+  <script type="module" src="js/main.js?v=1789463360" onerror="__bootFail('모듈 로드 실패 (구버전 캐시)')"></script>
 </body>
 </html>

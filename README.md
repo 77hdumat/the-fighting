@@ -286,3 +286,8 @@ EffectComposer(Render→Afterimage→SpeedBlur→Output, 최대 4패스) 를 걷
 - **스태거 지속시간 동기화**: 스냅샷에 `st`(남은 초) + `sk`(normal/liver/groggy) 추가. 예전엔 on/off 비트만 보내 클라가 1초로 가정했다.
 - **예측 게이트**: 클라 예측이 호스트의 수락 조건(`busy`, 펀치 캔슬 구간, U/I 쿨다임, L 게이지 MAX, 벤치/낙하)을 그대로 검사한 뒤에만 그린다. 거부될 입력은 아예 예측하지 않는다.
 - **잔상 크기**: 잔상 리그가 본체 축척(0.7)을 덮어써 원래 크기로 보이던 버그 수정 (`FIGHTER_SCALE` 곱).
+
+## 캐시 문제 (중요)
+GitHub Pages 는 HTML 을 최대 10분 캐시하고 브라우저도 index.html 을 캐시한다. 번들이 index.html 안에 있으므로 **새 배포를 해도 구버전이 계속 돌 수 있다** (버그 수정이 반영 안 된 것처럼 보임).
+대응: 빌드마다 `version.json` 과 페이지의 `window.__BUILD_ID` 를 갱신하고, 로드 시 + 1분마다 `version.json?ts=`(no-store)로 비교한다.
+- 첫 불일치면 **자동으로 한 번 새로고침**(`?v=<build>` 로 캐시 우회), 이후에는 우측 하단 `새 버전이 있습니다` 배너를 눌러 갱신.
