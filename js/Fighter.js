@@ -253,8 +253,9 @@ export class Fighter {
       // ---- 카페 돌격: 경로상의 모두에게 스턴 + 데미지 (넘어뜨리진 않는다) ----
       this.ultT = 3.2; this.ultKind = fk; this.ultTarget = this.target;
       this.punch = null; this.queue.length = 0; this.armor = 3.2;
-      this.rushHits = new Set();
+      this.rushHits = new Map();          // slot → 다음 타격 시각 (0.3초 간격 연속 히트)
       this.rushPower = (16 + 4 * charge) * this.def.powerMul;
+      this.rushT = 0;
       d.consume();
       this.audio.engine(1.2); this.audio.finisherWind(0.4);
       this.subs.show('커피 마셔야 돼—!!', { duration: 1.6, strong: true });
@@ -823,20 +824,36 @@ export class Fighter {
         p.shLX += -1.1 + run * 0.9; p.shRX += -1.1 - run * 0.9; p.elL += -1.5; p.elR += -1.5;
         p.thighLX += run * 0.85; p.thighRX += -run * 0.85; p.shinL += Math.max(0, run) * 1.2; p.shinR += Math.max(0, -run) * 1.2;
         p.hipsY += Math.abs(Math.sin(t * 32)) * 0.05;
+        this.rushT = (this.rushT || 0) + dt;
         if (u > 0.35 && u < 2.7) {
           this.pos.addScaledVector(this.forward, 7.2 * dt);
+          const tickDmg = (this.rushPower || 16) * 0.22;   // 0.3초 간격 × 8히트 ≈ 다른 필살기 총량
           for (const o of fighters) {
             if (o === this || o.ko || o.downT > 0) continue;
-            if (o.pos.distanceTo(this.pos) < 0.95 && !this.rushHits.has(o.slot)) {
-              this.rushHits.add(o.slot);
-              o.hp = Math.max(0, o.hp - (this.rushPower || 16));
-              o.stagger = Math.max(o.stagger, 1.6); o.staggerKind = 'normal'; o.staggerImmune = 0.6;
-              o.punch = null; o.queue.length = 0; o.rattle = 1;
-              o.knock.addScaledVector(this.forward, 4.2);
-              o.audio.stagger(); o.audio.impact(0.9);
+            const caught = this.rushHits.has(o.slot);
+            if (!caught && o.pos.distanceTo(this.pos) > 0.95) continue;
+            // 한 번 닿으면 앞에 매달고 밀면서 간다 → 0.3초마다 다다다닥
+            if (!caught) { this.rushHits.set(o.slot, 0); o.audio.stagger(); }
+            const want = this.pos.clone().addScaledVector(this.forward, 0.82);
+            o.pos.lerp(want, Math.min(1, dt * 14));
+            o.stagger = Math.max(o.stagger, 0.5); o.staggerKind = 'normal'; o.staggerImmune = 0.4;
+            o.punch = null; o.queue.length = 0;
+            const next = this.rushHits.get(o.slot);
+            if (this.rushT >= next) {
+              this.rushHits.set(o.slot, this.rushT + 0.3);
+              o.hp = Math.max(0, o.hp - tickDmg);
+              o.rattle = Math.max(o.rattle, 0.9);
+              o.react.headX = -0.35; o.react.waistX = -0.2;
+              o.audio.impact(0.75);
               if (o.hp <= 0) o._die();
               this.events.push({ type: 'rushHit', target: o.slot });
             }
+          }
+        } else if (u >= 2.7) {
+          // 돌격 종료: 밀고 온 상대들을 앞으로 튕겨내고 스태거만 남긴다 (넘어지진 않음)
+          for (const o of fighters) {
+            if (!this.rushHits.has(o.slot) || o.ko) continue;
+            if (!o._rushReleased) { o._rushReleased = true; o.knock.addScaledVector(this.forward, 3.4); o.stagger = Math.max(o.stagger, 1.4); o.staggerImmune = 1.2; o.audio.stagger(); }
           }
         }
       } else if (k === 'bike') {
@@ -864,7 +881,10 @@ export class Fighter {
         }
       }
       this.queue.length = 0;
-      if (this.ultT <= 0) { this.ultT = 0; this.ultKind = null; this.ultTarget = null; this.armor = 0; }
+      if (this.ultT <= 0) {
+        this.ultT = 0; this.ultKind = null; this.ultTarget = null; this.armor = 0;
+        if (this.rushHits) { for (const f2 of fighters) f2._rushReleased = false; this.rushHits.clear(); }
+      }
     }
     // ---- 연출형 필살: 당하는 쪽 ----
     if (this.ultVictimT > 0) {
@@ -949,20 +969,36 @@ export class Fighter {
         p.shLX += -1.1 + run * 0.9; p.shRX += -1.1 - run * 0.9; p.elL += -1.5; p.elR += -1.5;
         p.thighLX += run * 0.85; p.thighRX += -run * 0.85; p.shinL += Math.max(0, run) * 1.2; p.shinR += Math.max(0, -run) * 1.2;
         p.hipsY += Math.abs(Math.sin(t * 32)) * 0.05;
+        this.rushT = (this.rushT || 0) + dt;
         if (u > 0.35 && u < 2.7) {
           this.pos.addScaledVector(this.forward, 7.2 * dt);
+          const tickDmg = (this.rushPower || 16) * 0.22;   // 0.3초 간격 × 8히트 ≈ 다른 필살기 총량
           for (const o of fighters) {
             if (o === this || o.ko || o.downT > 0) continue;
-            if (o.pos.distanceTo(this.pos) < 0.95 && !this.rushHits.has(o.slot)) {
-              this.rushHits.add(o.slot);
-              o.hp = Math.max(0, o.hp - (this.rushPower || 16));
-              o.stagger = Math.max(o.stagger, 1.6); o.staggerKind = 'normal'; o.staggerImmune = 0.6;
-              o.punch = null; o.queue.length = 0; o.rattle = 1;
-              o.knock.addScaledVector(this.forward, 4.2);
-              o.audio.stagger(); o.audio.impact(0.9);
+            const caught = this.rushHits.has(o.slot);
+            if (!caught && o.pos.distanceTo(this.pos) > 0.95) continue;
+            // 한 번 닿으면 앞에 매달고 밀면서 간다 → 0.3초마다 다다다닥
+            if (!caught) { this.rushHits.set(o.slot, 0); o.audio.stagger(); }
+            const want = this.pos.clone().addScaledVector(this.forward, 0.82);
+            o.pos.lerp(want, Math.min(1, dt * 14));
+            o.stagger = Math.max(o.stagger, 0.5); o.staggerKind = 'normal'; o.staggerImmune = 0.4;
+            o.punch = null; o.queue.length = 0;
+            const next = this.rushHits.get(o.slot);
+            if (this.rushT >= next) {
+              this.rushHits.set(o.slot, this.rushT + 0.3);
+              o.hp = Math.max(0, o.hp - tickDmg);
+              o.rattle = Math.max(o.rattle, 0.9);
+              o.react.headX = -0.35; o.react.waistX = -0.2;
+              o.audio.impact(0.75);
               if (o.hp <= 0) o._die();
               this.events.push({ type: 'rushHit', target: o.slot });
             }
+          }
+        } else if (u >= 2.7) {
+          // 돌격 종료: 밀고 온 상대들을 앞으로 튕겨내고 스태거만 남긴다 (넘어지진 않음)
+          for (const o of fighters) {
+            if (!this.rushHits.has(o.slot) || o.ko) continue;
+            if (!o._rushReleased) { o._rushReleased = true; o.knock.addScaledVector(this.forward, 3.4); o.stagger = Math.max(o.stagger, 1.4); o.staggerImmune = 1.2; o.audio.stagger(); }
           }
         }
       } else if (k === 'snackRain') {
