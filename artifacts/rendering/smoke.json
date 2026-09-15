@@ -1,0 +1,14 @@
+{
+  "browser": "152.0.7977.83",
+  "result": {
+    "state": "ready",
+    "failure": null,
+    "draws": 313,
+    "backend": "WebGL",
+    "gl": "WebGL 2.0 (OpenGL ES 3.0 Chromium)"
+  },
+  "errors": [
+    "Failed to load resource: the server responded with a status of 404 (File not found)",
+    "Failed to load resource: the server responded with a status of 404 (File not found)"
+  ]
+}

@@ -2,3 +2,12 @@
 .omc/
 .playwright-mcp/
 *.log
+
+# 작업용 스크린샷 (6.6MB) — 리포트에서만 참조, 배포물 아님
+test-shots/
+
+# 캐릭터 레퍼런스 원화 — 저작권물. 공개 저장소에 올리지 않는다
+ippo.jpeg
+mashiba.webp
+miyata.webp
+sendo.jpeg

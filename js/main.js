@@ -11,6 +11,8 @@ import { AudioManager } from './AudioManager.js';
 import { SubtitleManager } from './SubtitleManager.js';
 import { FxOverlay } from './FxOverlay.js';
 import { PostFX } from './PostFX.js';
+import { PHOTOREAL, PRESETS } from './RenderSettings.js';
+import { RenderFoundation } from './RenderFoundation.js';
 import { Input } from './Input.js';
 import { Ribbon } from './Trails.js';
 import { HUD } from './HUD.js';
@@ -108,6 +110,13 @@ class Game {
     this.droneOn = false;
     // 적응형 품질: 평균 프레임시간이 나쁘면 자동으로 단계 하향 (2 풀 → 1 → 0). Q 키로 수동 순환
     this.quality = 2; this.frameAvg = 16; this.qualityCool = 0; this.hudAccum = 0;
+    if (PHOTOREAL || new URLSearchParams(location.search).has('profile')) {
+      this.renderFoundation = new RenderFoundation(this);
+      this.renderFoundation.init().catch((error) => {
+        this.showError('검증용 렌더링 초기화 실패: ' + error.message);
+        this.renderFoundation.status.textContent = '초기화 실패 · 상세 오류 확인';
+      });
+    }
 
     window.addEventListener('resize', () => this.onResize());
     window.addEventListener('error', (e) => this.showError(e.message || String(e.error)));
@@ -951,6 +960,10 @@ class Game {
   }
 
   setQuality(q) {
+    if (PHOTOREAL && this.renderFoundation) {
+      this.renderFoundation.setPreset(Object.keys(PRESETS)[q]);
+      return;
+    }
     this.quality = q;
     this.post.quality = q; this.fx.quality = q;
     this.renderer.setPixelRatio(q === 2 ? Math.min(window.devicePixelRatio, 1.25) : q === 1 ? 1 : Math.min(1, window.devicePixelRatio * 0.75));
@@ -1199,7 +1212,11 @@ class Game {
   loop(now) {
     requestAnimationFrame((t) => this.loop(t));
     if (this.paused) return;   // 외부 시뮬/디버그용
-    try { this.frame(now); } catch (e) {
+    try {
+      this.renderFoundation?.beforeFrame(now - this.last, now);
+      this.frame(now);
+      this.renderFoundation?.afterFrame();
+    } catch (e) {
       if (!this._errShown) { this._errShown = true; console.error(e); this.showError('[loop] ' + (e.stack || e)); }
     }
   }
@@ -1214,7 +1231,7 @@ class Game {
       this.coaches.update(rawDt, 0);
       this.camCtl.update(rawDt, { playerPos: new THREE.Vector3(0, 0, 1.3), oppPos: new THREE.Vector3(0, 0, -1.3), f: new THREE.Vector3(0, 0, -1), s: new THREE.Vector3(-1, 0, 0), intensity: 0, dempseyActive: false, sway: 0, maxSpeed: false, hitStop: 0 });
       this.post.update(rawDt, { intensity: 0, dempseyActive: false, maxSpeed: false, dirX: 0, dirY: 0, focusX: 0.5, focusY: 0.5, time: this.realTime });
-      this.post.render();
+      if (this.renderFoundation) this.renderFoundation.render(); else this.post.render();
       return;
     }
 
@@ -1228,12 +1245,17 @@ class Game {
     // ---- 적응형 품질 ----
     this.frameAvg += (rawDt * 1000 - this.frameAvg) * 0.05;
     this.qualityCool -= rawDt;
-    if (this.qualityCool <= 0) {
+    if (!PHOTOREAL && this.qualityCool <= 0) {
       if (this.frameAvg > 24 && this.quality > 0) { this.setQuality(this.quality - 1); this.qualityCool = 6; }
       else if (this.frameAvg < 13 && this.quality < 2 && this.autoQuality !== false) { this.setQuality(this.quality + 1); this.qualityCool = 10; }
     }
     const input = this.input;
-    if (input.justPressed('KeyQ')) { this.autoQuality = false; this.setQuality((this.quality + 2) % 3); this.qualityCool = 999; }
+    if (input.justPressed('KeyQ')) {
+      if (PHOTOREAL) {
+        const names = Object.keys(PRESETS), current = names.indexOf(this.renderFoundation.name);
+        this.renderFoundation.setPreset(names[(current + 1) % names.length]);
+      } else { this.autoQuality = false; this.setQuality((this.quality + 2) % 3); this.qualityCool = 999; }
+    }
     if (input.justPressed('KeyB')) { const on = this.music.toggle(); this.subs.show(`BGM: ${on ? 'ON' : 'OFF'}`, { duration: 0.8, voice: false }); }
     if (input.justPressed('KeyV')) { const m = this.voice.toggle(); this.subs.show(`VOICE: ${m.toUpperCase()}`, { duration: 0.8, voice: false }); }
     if (this.localFighter) { this.subs.myChar = this.localFighter.defKey; const tg = this.localFighter.target; if (tg) this.subs.oppChar = tg.defKey; }
@@ -1746,7 +1768,7 @@ class Game {
     else fw.classList.add('hidden');
     const kd = document.getElementById('keydbg');
     if (kd) { const age = this.realTime - this.lastKeyT; kd.textContent = (age < 1.5 ? `KEY ${this.lastKey}` : 'KEY —') + (document.hasFocus() ? '' : '  (창 포커스 없음)') + (this.input.isDown('Space') ? '  SPACE▼' : ''); }
-    this.post.render();
+    if (this.renderFoundation) this.renderFoundation.render(); else this.post.render();
   }
 }
 

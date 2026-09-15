@@ -107,13 +107,16 @@ canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block;
 #focus-warn { position: fixed; left: 50%; top: 18%; transform: translateX(-50%); z-index: 12; font-family: "Noto Sans JP", sans-serif; font-weight: 900; font-size: 22px; color: #111; background: #ffd34d; border: 4px solid #000; box-shadow: 6px 6px 0 #000; padding: 12px 22px; animation: blink 1s infinite; pointer-events: none; }
 #hud .keydbg { position: absolute; right: 20px; bottom: 168px; font-family: Bangers, Impact, sans-serif; letter-spacing: 2px; font-size: 16px; color: #ffe66d; text-shadow: 1px 1px 0 #000; background: rgba(0,0,0,.5); padding: 3px 8px; }
 
-#next-overlay { position: fixed; left: 50%; bottom: 6vh; transform: translateX(-50%); z-index: 9; display: flex; flex-direction: column; align-items: center; gap: 10px; background: rgba(0,0,0,.72); border: 3px solid #ffd34d; box-shadow: 6px 6px 0 #000; padding: 14px 18px; max-width: 94vw; }
+#next-overlay { position: fixed; left: 50%; bottom: 6vh; transform: translateX(-50%); z-index: 9; display: flex; flex-direction: column; align-items: center; gap: 10px; background: rgba(0,0,0,.72); border: 3px solid #ffd34d; box-shadow: 6px 6px 0 #000; padding: 14px 18px; max-width: 94vw; max-height: 82vh; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 #next-overlay .next-title { font-family: Bangers, Impact, sans-serif; font-size: 24px; letter-spacing: 3px; color: #ffd34d; text-shadow: 2px 2px 0 #000; }
 #next-overlay .next-msg { font-size: 13px; color: #ddd; min-height: 18px; }
 #next-overlay button { font-family: Bangers, Impact, sans-serif; letter-spacing: 2px; font-size: 22px; padding: 8px 24px; background: #ffd34d; color: #1a0a0a; border: 3px solid #000; box-shadow: 4px 4px 0 #000; cursor: pointer; }
 #next-overlay button:disabled { opacity: .45; cursor: default; }
 #next-overlay .charsel .card { width: 160px; padding: 8px 10px; }
 #next-overlay .charsel .card .st { display: none; }
+/* 스크롤 컨테이너 안에서 position:absolute 는 내용과 함께 밀려 사라진다.
+   sticky + order:-1 로 오버레이 안쪽 우상단에 계속 붙여 둔다 (해상도 무관 동일 동작) */
+#next-overlay > .corner-leave { position: sticky; order: -1; align-self: flex-end; top: 0; right: auto; bottom: auto; margin-bottom: -6px; z-index: 1; }
 #ko-overlay { pointer-events: none; }
 
 #guard-badge { position: absolute; left: 50%; bottom: 300px; transform: translateX(-50%) skewX(-8deg); font-family: Bangers, Impact, sans-serif; font-size: 30px; letter-spacing: 4px; color: #bfe8ff; background: rgba(10,30,60,.7); border: 3px solid #4cc9ff; padding: 4px 18px; box-shadow: 0 0 18px #4cc9ff; animation: guardPulse .5s infinite alternate; }
@@ -249,6 +252,13 @@ body.touch #skip-hint::after { content: ' (탭)'; }
   #subtitle { bottom: 4vh; }
   #hud .netinfo { left: 8px; bottom: 4px; font-size: 12px; }
   #start-overlay .panel { zoom: .72; }
+  /* 모바일 가로(높이 ~390px)에서 경기 후 캐릭터 선택·나가기가 화면 밖으로 밀려 눌리지 않던 문제 */
+  #next-overlay { bottom: 2vh; max-height: 94vh; gap: 6px; padding: 8px 12px; }
+  #next-overlay .next-title { font-size: 17px; letter-spacing: 2px; }
+  #next-overlay .next-msg { font-size: 11px; min-height: 0; }
+  #next-overlay button { font-size: 16px; padding: 5px 16px; }
+  #next-overlay .charsel { gap: 5px; }
+  #next-overlay .charsel .card { width: 108px; padding: 4px 6px; }
 }
 #start-overlay, #next-overlay { touch-action: pan-y; }
 
@@ -345,3 +355,8 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
 #bench-banner { position: fixed; left: 50%; top: 14%; transform: translateX(-50%); z-index: 7; background: rgba(0,0,0,.6); border: 2px solid #ffd34d; color: #ffd34d; font-weight: 900; font-size: 15px; padding: 8px 18px; border-radius: 999px; letter-spacing: .5px; }
 
 #update-banner { position: fixed; right: 12px; bottom: 12px; z-index: 30; background: #ffd34d; color: #1a0a0a; font-weight: 900; font-size: 13px; padding: 8px 14px; border-radius: 999px; border: 2px solid #1a0a0a; cursor: pointer; box-shadow: 3px 3px 0 #000; }
+/* Experimental rendering controls are visible only with ?photoreal=1 / ?profile=1. */
+#render-settings { position: fixed; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); z-index: 90; padding: 9px 12px; max-width: calc(100vw - 24px); color: #e9edf4; background: #111722ed; border: 1px solid #657087; border-radius: 8px; font: 12px/1.6 system-ui, sans-serif; pointer-events: auto; }
+#render-settings summary { cursor: pointer; }
+#render-settings label, #render-settings output { display: block; margin: 6px 0; }
+#render-settings select, #render-settings button { color: #fff; background: #263348; border: 1px solid #657087; border-radius: 4px; padding: 6px; margin: 3px; font: inherit; }

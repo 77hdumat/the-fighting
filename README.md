@@ -3,6 +3,12 @@
 브라우저에서 바로 실행되는 2.5D 애니메이션 스타일 3D 복싱 액션 프로토타입.
 핵심은 **뎀프시롤**(∞ 궤적 스웨이 + 연속 훅), **다중 잔상**, **타격 순간의 카메라·사운드·자막 동시 폭발**, **카운터 시 두개골 진동 연출**.
 
+## 실사 렌더링 기반 — 검증용 PHASE 1
+
+HTTP 서버에서 `index.html?photoreal=1`로 새 렌더링 모드를 실행한다. 직접 제작한 HDR 환경맵·접지 그림자, PBR 재질, N8AO와 선택적 블룸, 4단계 화질 및 동적 해상도를 포함한다. `?profile=1`은 기존 렌더링의 비교 측정을 위한 주소다. 우측 하단 **그래픽 · 측정**에서 화질을 바꾸고 프레임 측정 JSON을 저장할 수 있다.
+
+**아직 실사급 리마스터 완료본이 아니다.** WebGPU, CSM, 실사 캐릭터 에셋과 실제 기기 성능 검증이 남아 있어 기본 렌더링은 기존 모드다. 자세한 상태와 검증 절차는 [PERF_REPORT.md](PERF_REPORT.md), 직접 제작한 에셋 출처는 [ASSETS_LICENSE.md](ASSETS_LICENSE.md)를 참고한다. `python3 scripts/generate_render_assets.py`로 에셋을 재생성할 수 있으며, 새 모드는 HTML 옆의 `assets/`와 HTTP(S) 실행이 필요하다.
+
 ## 실행
 
 **배포/실행 파일 = `index.html`** — `dev.html` + `js/*.js` 를 `python3 build_standalone.py` 로 합친 **단일 번들**. 모듈을 개별로 받지 않으므로 캐시에 구버전 모듈이 섞이는 문제가 원천적으로 없다. `dempsey-standalone.html` 은 같은 파일의 복사본 (더블클릭 실행용).

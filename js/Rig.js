@@ -2,10 +2,13 @@
 // 캐릭터 정의(비율/헤어/얼굴/트렁크)로 서로 다른 체형의 복서를 생성한다.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { PHOTOREAL } from './RenderSettings.js';
+import { batchRig } from './BatchRig.js';
 
 // 셀 셰이딩 램프: 강한 명암 경계 (그림자 / 좁은 중간톤 / 밝은면)
+// 원작 화면에서 추출한 명암 분포에 맞춰 그림자 단을 더 깊게, 경계를 더 좁게 잡는다.
 const gradientMap = (() => {
-  const data = new Uint8Array([95, 95, 95, 175, 255, 255]);
+  const data = new Uint8Array([70, 70, 70, 168, 255, 255]);
   const tex = new THREE.DataTexture(data, data.length, 1, THREE.RedFormat);
   tex.minFilter = THREE.NearestFilter;
   tex.magFilter = THREE.NearestFilter;
@@ -13,6 +16,65 @@ const gradientMap = (() => {
   tex.needsUpdate = true;
   return tex;
 })();
+
+// ---- 3톤 컬러 램프 (원작 채색 재현) ----
+// 원작은 그림자를 "어둡게" 칠하지 않는다. 채도를 올리고 색상을 붉게 밀어낸다.
+// (추출값 예: 밝은면 #f0cdb0 → 그림자 #a15230 — 명도만 내려간 게 아니라 hue/sat 가 이동)
+// 밝기 배율만 하는 gradientMap 으로는 이 느낌이 안 나오므로, 셰이딩 결과 휘도를 3단 컬러 램프로 다시 매핑한다.
+const DEFAULT_SKIN_RAMP = { lit: 0xf0cdb0, mid: 0xd8906c, shadow: 0xa15230 };
+
+// 역할별 질감 파라미터: 하이브리드 (몸·장비는 실제 반사, 얼굴·머리는 셀)
+const ROLE_LOOK = {
+  // specEdge 는 하이라이트가 생기기 시작하는 문턱이다. 낮으면 넓은 흰 원이 되어 즉시 플라스틱처럼 보인다.
+  skin:  { grade: 0.88, rim: 0.34, specPower: 46, specGain: 0.16, specEdge: 0.74, outline: 1.0 },
+  face:  { grade: 0.92, rim: 0.28, specPower: 52, specGain: 0.10, specEdge: 0.80, outline: 1.35 },
+  hair:  { grade: 0.55, rim: 0.14, specPower: 40, specGain: 0.05, specEdge: 0.88, outline: 0.75, hairBand: 1 },
+  glove: { grade: 0.62, rim: 0.38, specPower: 64, specGain: 0.30, specEdge: 0.80, outline: 0.62 },
+  cloth: { grade: 0.45, rim: 0.20, specPower: 34, specGain: 0.08, specEdge: 0.78, outline: 1.0 },
+};
+
+// 셰이딩 결과를 3톤 램프로 재매핑 + 림라이트 + 셀 스페큘러 + 헤어 하이라이트 밴드
+const TONE_GRADE_GLSL = /* glsl */`
+{
+  vec3 nrm = normalize(vNormal);
+  vec3 vdir = normalize(vViewPosition);
+
+  // 현재 프래그먼트가 베이스 색 대비 얼마나 밝게 셰이딩됐는지 (0 = 완전 그림자, 1 = 정면광)
+  const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
+  float baseLum = max(dot(uBaseColor, LUMA), 1e-4);
+  float shade = clamp(dot(gl_FragColor.rgb, LUMA) / baseLum, 0.0, 1.6);
+
+  // 3톤 램프 — 경계를 좁게 유지해 셀 느낌을 살리되 완전한 계단은 피한다
+  vec3 toned = mix(uShadowColor, uMidColor, smoothstep(0.36, 0.58, shade));
+  toned = mix(toned, uLitColor, smoothstep(0.72, 0.96, shade));
+  toned *= 0.74 + 0.22 * clamp(shade, 0.0, 1.15);   // 광량 차이는 남기되 상단을 눌러 클리핑 방지
+  gl_FragColor.rgb = mix(gl_FragColor.rgb, toned, uGrade);
+
+  // 인트로처럼 조명이 강한 장면에서 얼굴이 흰색으로 날아가지 않도록 밝은 쪽 가산을 줄인다
+  float hot = smoothstep(0.85, 1.30, shade);
+
+  // 림라이트: 실루엣을 배경에서 떼어낸다
+  float rim = pow(1.0 - max(0.0, dot(nrm, vdir)), 3.0);
+  gl_FragColor.rgb += uLitColor * rim * uRim * 0.42 * (1.0 - 0.75 * hot);
+
+  // 셀 스페큘러: 경계가 뚜렷한 하이라이트 (땀 · 가죽 광택)
+  vec3 ldir = normalize(vec3(0.4, 0.9, 0.5));
+  vec3 hvec = normalize(ldir + vdir);
+  float spec = pow(max(0.0, dot(nrm, hvec)), uSpecPower);
+  spec = smoothstep(uSpecEdge, uSpecEdge + 0.15, spec) * uSpecGain;
+  gl_FragColor.rgb += vec3(1.0) * spec * (1.0 - 0.7 * hot);
+
+  // 밝은 쪽 소프트 클립 — 흰색으로 뭉개지는 대신 램프의 밝은면 색을 유지한다
+  gl_FragColor.rgb = min(gl_FragColor.rgb, mix(vec3(1.0), uLitColor * 1.02 + 0.03, uGrade));
+
+  // 머리카락: 결을 따라 흐르는 가로 하이라이트 띠.
+  // 원작의 머리 광택은 "좁고 경계가 단단한 띠"다. 넓게 퍼지면 즉시 플라스틱처럼 보인다.
+  if (uHairBand > 0.5) {
+    float band = 1.0 - abs(nrm.y - 0.46) * 15.0;
+    band = smoothstep(0.55, 0.78, band);
+    gl_FragColor.rgb += vec3(0.34, 0.37, 0.48) * band * 0.34;
+  }
+}`;
 
 // 노멀 방향으로 밀어낸 뒷면 렌더링 = 두께 일정한 검은 외곽선
 const OUTLINE_VERT = /* glsl */`
@@ -26,11 +88,11 @@ uniform vec3 color;
 uniform float opacity;
 void main() { gl_FragColor = vec4(color, opacity); }`;
 
-function makeOutlineMaterial(ghost) {
+function makeOutlineMaterial(ghost, thickness = 0.014) {
   return new THREE.ShaderMaterial({
     uniforms: {
-      thickness: { value: 0.014 },
-      color: { value: new THREE.Color(0x000000) },
+      thickness: { value: thickness },
+      color: { value: new THREE.Color(0x120a08) },   // 순흑보다 살짝 따뜻한 잉크 (원작 선 색)
       opacity: { value: 1 },
     },
     vertexShader: OUTLINE_VERT,
@@ -46,32 +108,37 @@ function makeOutlineMaterial(ghost) {
 // 상대: 장신·마른 히트맨 (흑발 슬릭백, 가늘게 찢어진 눈, 다크 트렁크, 검은 글러브, 플리커 잽)
 export const CHARACTERS = {
   ippo: {
-    name: 'IPPO', gender: 'm', skin: 0xf1c39a, trunks: 0x1c8d4a, trunksTrim: 0xf7f7f7, trunksText: 'IPPO',
-    gloves: 0xd42a2a, hair: 0x15151a, shoes: 0xc92626, shoesTrim: 0xffffff,
+    name: 'IPPO', gender: 'm', skin: 0xf0caad, trunks: 0x1c8d4a, trunksTrim: 0xf7f7f7, trunksText: 'IPPO',
+    ramp: { lit: 0xf0caad, mid: 0xd88f6b, shadow: 0xa25334 },
+    gloves: 0xc8241f, hair: 0x0f0c0d, shoes: 0xc92626, shoesTrim: 0xffffff,
     hairStyle: 'spiky', brows: 'thick', eyes: 'round', mouth: 'grit',
     prop: { height: 0.95, torsoW: 1.14, torsoD: 1.12, armR: 1.18, armLen: 0.96, legR: 1.12, legLen: 0.95, headS: 1.02, headY: 1.0, neck: 0.9, muscle: 1 },
     hp: 140, powerMul: 1.05, speedMul: 1.05, style: 'infighter',
   },
   mashiba: {
-    name: 'MASHIBA', gender: 'm', skin: 0xe4b892, trunks: 0x1d1226, trunksTrim: 0x9b4de0, trunksText: 'MASHIBA',
-    gloves: 0x141218, hair: 0x0c0c10, shoes: 0x141218, shoesTrim: 0x9b4de0,
-    hairStyle: 'slick', brows: 'thin', eyes: 'narrow', mouth: 'grin',
-    prop: { height: 1.13, torsoW: 0.86, torsoD: 0.82, armR: 0.82, armLen: 1.24, legR: 0.84, legLen: 1.12, headS: 0.96, headY: 1.18, neck: 1.35, muscle: 0.35 },
+    name: 'MASHIBA', gender: 'm', skin: 0xf1c8a6, trunks: 0x1d1226, trunksTrim: 0x9b4de0, trunksText: 'MASHIBA',
+    ramp: { lit: 0xf1c8a6, mid: 0xd8916b, shadow: 0xa1502f },
+    gloves: 0x8e1d18, hair: 0x0d0809, shoes: 0x141218, shoesTrim: 0x9b4de0,
+    hairStyle: 'longblack', brows: 'thin', eyes: 'narrow', mouth: 'grin',
+    // 원작은 마르되 근육 윤곽이 뚜렷하다 — 복근/대흉근 디테일이 나오도록 상향
+    prop: { height: 1.13, torsoW: 0.86, torsoD: 0.82, armR: 0.82, armLen: 1.24, legR: 0.84, legLen: 1.12, headS: 0.96, headY: 1.18, neck: 1.35, muscle: 0.75 },
     hp: 150, powerMul: 0.9, speedMul: 1.35, style: 'hitman',
   },
   // 아웃복서: 늘씬하고 빠름, 갈색 머리, 남색/흰 트렁크
   miyata: {
-    name: 'MIYATA', gender: 'm', skin: 0xf0cbb0, trunks: 0x1b2a6b, trunksTrim: 0xffffff, trunksText: 'MIYATA',
-    gloves: 0xd42a2a, hair: 0x4a3220, shoes: 0x1b2a6b, shoesTrim: 0xffffff,
-    hairStyle: 'spiky', brows: 'thin', eyes: 'round', mouth: 'grit',
+    name: 'MIYATA', gender: 'm', skin: 0xedd5c1, trunks: 0x1b2a6b, trunksTrim: 0xffffff, trunksText: 'MIYATA',
+    ramp: { lit: 0xedd5c1, mid: 0xdc926e, shadow: 0xa15030 },
+    gloves: 0xcf2a22, hair: 0x0c0909, shoes: 0x1b2a6b, shoesTrim: 0xffffff,
+    hairStyle: 'bowl', brows: 'thin', eyes: 'round', mouth: 'grit',
     prop: { height: 1.02, torsoW: 0.92, torsoD: 0.9, armR: 0.9, armLen: 1.08, legR: 0.9, legLen: 1.04, headS: 0.98, headY: 1.05, neck: 1.1, muscle: 0.6 },
     hp: 115, powerMul: 0.8, speedMul: 2.0, style: 'outboxer',
   },
   // 나니와의 호랑이: 야성적인 갈색 스파이크 헤어, 검정/주황 트렁크, 강력한 스매시
   sendo: {
-    name: 'SENDO', gender: 'm', skin: 0xe4b088, trunks: 0x141414, trunksTrim: 0xff7a00, trunksText: 'SENDO',
-    gloves: 0xff6a00, hair: 0x6b3a12, shoes: 0x141414, shoesTrim: 0xff7a00,
-    hairStyle: 'spiky', brows: 'thick', eyes: 'narrow', mouth: 'grin',
+    name: 'SENDO', gender: 'm', skin: 0xf1d0b3, trunks: 0x141414, trunksTrim: 0xff7a00, trunksText: 'SENDO',
+    ramp: { lit: 0xf1d0b3, mid: 0xd6906c, shadow: 0xa15430 },
+    gloves: 0xd3391c, hair: 0x0f0c0e, shoes: 0x141414, shoesTrim: 0xff7a00,
+    hairStyle: 'mane', brows: 'thick', eyes: 'narrow', mouth: 'grin',
     prop: { height: 1.06, torsoW: 1.22, torsoD: 1.15, armR: 1.22, armLen: 1.08, legR: 1.15, legLen: 1.04, headS: 1.03, headY: 1.0, neck: 1.0, muscle: 1 },
     hp: 220, powerMul: 1.75, speedMul: 0.55, style: 'power',
   },
@@ -211,6 +278,28 @@ export function applyPose(rig, p) {
 
 // 캐릭터별 지오메트리 캐시 (잔상 8개가 같은 지오메트리 공유)
 const geoCache = new Map();
+// y 높이에 따라 x/z 를 눌러 실루엣을 만든다.
+// 원작 복서의 상체는 어깨가 넓고 허리로 갈수록 좁아지는 역삼각형이다. 박스 지오메트리는 이게 안 나온다.
+function taperY(geo, { top = 1, bottom = 1, curve = 1 } = {}) {
+  const pos = geo.attributes.position;
+  let minY = Infinity, maxY = -Infinity;
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i);
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  const span = Math.max(1e-6, maxY - minY);
+  for (let i = 0; i < pos.count; i++) {
+    const t = Math.pow((pos.getY(i) - minY) / span, curve);
+    const s = bottom + (top - bottom) * t;
+    pos.setX(i, pos.getX(i) * s);
+    pos.setZ(i, pos.getZ(i) * s);
+  }
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+  return geo;
+}
+
 function geometriesFor(def) {
   if (geoCache.has(def.name)) return geoCache.get(def.name);
   const P = def.prop;
@@ -218,24 +307,36 @@ function geometriesFor(def) {
     pelvis: new RoundedBoxGeometry(0.36 * P.torsoW, 0.24, 0.26 * P.torsoD, 4, 0.08),
     band: new RoundedBoxGeometry(0.38 * P.torsoW, 0.06, 0.28 * P.torsoD, 2, 0.02),
     stripe: new THREE.BoxGeometry(0.03, 0.2, 0.05),
-    torso: new RoundedBoxGeometry(0.46 * P.torsoW, 0.52, 0.28 * P.torsoD, 4, 0.1),
-    pec: new RoundedBoxGeometry(0.19 * P.torsoW, 0.13, 0.09, 3, 0.04),
-    abs: new RoundedBoxGeometry(0.07 * P.torsoW, 0.07, 0.05, 2, 0.02),
-    delt: new THREE.SphereGeometry(0.105 * P.armR, 14, 10),
-    neck: new THREE.CylinderGeometry(0.065, 0.08, 0.14 * P.neck, 12),
+    // 어깨(위) 넓고 허리(아래) 좁은 역삼각형. muscle 이 높을수록 차이를 크게 준다
+    torso: taperY(new RoundedBoxGeometry(0.46 * P.torsoW, 0.52, 0.28 * P.torsoD, 5, 0.1),
+      { top: 1.02 + 0.16 * P.muscle, bottom: 0.88 - 0.10 * P.muscle, curve: 0.78 }),
+    // 대흉근: 아래로 갈수록 좁아져 가슴 아래 선이 생긴다
+    pec: taperY(new RoundedBoxGeometry(0.21 * P.torsoW, 0.145, 0.095, 3, 0.045), { top: 1.0, bottom: 0.82 }),
+    abs: new RoundedBoxGeometry(0.075 * P.torsoW, 0.072, 0.05, 2, 0.02),
+    // 삼각근: 어깨 실루엣을 만드는 핵심. 다만 머리만 해지면 안 된다
+    delt: new THREE.SphereGeometry(0.106 * P.armR, 16, 12),
+    // 목: 원작 복서는 목이 굵고 짧게 드러나되, 머리보다는 확실히 가늘다
+    neck: new THREE.CylinderGeometry(0.060 * P.torsoW, 0.076 * P.torsoW, 0.15 * P.neck, 14),
     thigh: new THREE.CapsuleGeometry(0.09 * P.legR, 0.28 * P.legLen, 4, 14),
     shin: new THREE.CapsuleGeometry(0.075 * P.legR, 0.28 * P.legLen, 4, 14),
     foot: new RoundedBoxGeometry(0.14, 0.1, 0.3, 3, 0.035),
     footTrim: new RoundedBoxGeometry(0.15, 0.03, 0.31, 2, 0.01),
     upperArm: new THREE.CapsuleGeometry(0.078 * P.armR, 0.2 * P.armLen, 4, 14),
     forearm: new THREE.CapsuleGeometry(0.07 * P.armR, 0.18 * P.armLen, 4, 14),
-    glove: new THREE.SphereGeometry(0.13, 18, 14),
-    gloveCuff: new THREE.CylinderGeometry(0.085, 0.1, 0.1, 12),
-    head: new THREE.SphereGeometry(0.17 * P.headS, 22, 18),
+    // 글러브: 원작은 구체가 아니라 각이 살아있는 큰 주먹. 앞면이 넓고 손목 쪽으로 좁아진다
+    // 세그먼트·라운드를 넉넉히 준다. 각이 너무 날카로우면 외곽선(인버티드 헐)이 모서리에서 벌어져 격자로 깨진다
+    glove: taperY(new RoundedBoxGeometry(0.25, 0.235, 0.27, 7, 0.108), { top: 0.80, bottom: 1.04, curve: 1.1 }),
+    hand: new THREE.SphereGeometry(0.13, 16, 12),   // 맨손 캐릭터용
+    gloveCuff: new THREE.CylinderGeometry(0.09, 0.108, 0.105, 14),
+    // 3톤 램프는 면 경계를 드러낸다 — 얼굴은 가까이 잡히므로 세그먼트를 넉넉히 준다 (메시 1개라 비용 무시 가능)
+    head: new THREE.SphereGeometry(0.17 * P.headS, 40, 30),
     jaw: new RoundedBoxGeometry(0.2 * P.headS, 0.12, 0.2 * P.headS, 3, 0.06),
     ear: new THREE.SphereGeometry(0.035, 8, 6),
     hair: new THREE.SphereGeometry(0.19 * P.headS, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.55),
     spike: new THREE.ConeGeometry(0.06, 0.2, 6),
+    spikeBig: new THREE.ConeGeometry(0.078, 0.30, 6),          // 크게 뻗치는 머리칼
+    strand: new RoundedBoxGeometry(0.082, 0.30, 0.058, 2, 0.024),   // 늘어지는 긴 머리칼
+    bang: new RoundedBoxGeometry(0.30 * P.headS, 0.11, 0.085, 2, 0.03), // 이마 덮는 앞머리
     sclera: new THREE.SphereGeometry(0.045, 10, 8),
     pupil: new THREE.SphereGeometry(0.02, 8, 6),
     brow: new THREE.BoxGeometry(0.09, def.brows === 'thick' ? 0.035 : 0.014, 0.02),
@@ -301,6 +402,133 @@ function buildHeldItem(kind, glove, part, sx) {
   }
 }
 
+// ---- 얼굴 텍스처 ----
+// 원작의 눈은 "얼굴 평면에 그려진 날카로운 도형"이다. 구체를 박아 넣으면 눈알이 튀어나온 인형이 된다.
+// 눈·눈썹·입을 캔버스에 그려서 얼굴 앞면에 감싼다.
+const faceTexCache = new Map();
+function faceTexture(def) {
+  const key = [def.eyes, def.brows, def.mouth, def.gender].join('|');
+  if (faceTexCache.has(key)) return faceTexCache.get(key);
+
+  const S = 512;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = S;
+  const c = cv.getContext('2d');
+  c.clearRect(0, 0, S, S);
+
+  const narrow = def.eyes === 'narrow';
+  const big = def.eyes === 'big';
+  const round = def.eyes === 'round';
+  const INK = '#120a08';
+
+  // 눈 한 쪽 (sx = -1 왼쪽 / +1 오른쪽). cx, cy 는 캔버스 좌표.
+  const eye = (cx, cy, sx) => {
+    const w = big ? 62 : narrow ? 74 : 58;          // 가로 반폭
+    const h = big ? 58 : narrow ? 16 : 34;          // 세로 반높이
+    const tilt = sx * (narrow ? 0.20 : big ? -0.04 : 0.10);   // 눈꼬리 올라감 = 날카로움
+
+    c.save();
+    c.translate(cx, cy);
+    c.rotate(tilt);
+
+    // 흰자 — 위는 직선에 가깝고 아래가 둥근 아몬드 (애니 눈의 기본형)
+    c.beginPath();
+    c.moveTo(-w, -h * 0.35);
+    c.quadraticCurveTo(-w * 0.35, -h * 1.05, w * 0.55, -h * 0.72);
+    c.quadraticCurveTo(w, -h * 0.5, w, -h * 0.1);
+    c.quadraticCurveTo(w * 0.6, h, -w * 0.2, h * 0.95);
+    c.quadraticCurveTo(-w * 0.85, h * 0.7, -w, -h * 0.35);
+    c.closePath();
+    c.fillStyle = '#f7f4f0';
+    c.fill();
+
+    // 홍채/동공 — 크고 어둡게, 아래 눈꺼풀에 닿도록 살짝 내려 앉힌다
+    if (!narrow) {
+      const ir = big ? 40 : 27;
+      c.save();
+      c.clip();
+      c.beginPath();
+      c.ellipse(sx * w * 0.08, h * 0.16, ir * 0.82, ir * 1.22, 0, 0, Math.PI * 2);
+      c.fillStyle = big ? '#3a2418' : '#14121a';
+      c.fill();
+      // 홍채 위쪽 그림자 (눈꺼풀이 드리우는 음영)
+      c.beginPath();
+      c.rect(-w, -h * 1.2, w * 2, h * 0.55);
+      c.fillStyle = 'rgba(0,0,0,.30)';
+      c.fill();
+      c.restore();
+
+      // 캐치라이트 — 애니 눈은 반드시 있다. 없으면 눈이 죽는다
+      c.beginPath();
+      c.ellipse(sx * w * 0.08 - sx * ir * 0.34, h * 0.16 - ir * 0.44, ir * 0.26, ir * 0.3, 0, 0, Math.PI * 2);
+      c.fillStyle = '#ffffff';
+      c.fill();
+    } else {
+      // 가늘게 찢어진 눈: 흰자 없이 검은 선 + 작은 동공
+      c.beginPath();
+      c.ellipse(sx * w * 0.1, 0, w * 0.26, h * 0.85, 0, 0, Math.PI * 2);
+      c.fillStyle = '#14121a';
+      c.fill();
+    }
+
+    // 윗눈꺼풀 — 가장 굵은 선. 이 선 하나가 눈매를 결정한다
+    c.beginPath();
+    c.moveTo(-w * 1.04, -h * 0.34);
+    c.quadraticCurveTo(-w * 0.35, -h * 1.18, w * 0.58, -h * 0.80);
+    c.quadraticCurveTo(w * 1.0, -h * 0.58, w * 1.06, -h * 0.12);
+    c.strokeStyle = INK;
+    c.lineWidth = narrow ? 15 : big ? 13 : 17;
+    c.lineCap = 'round';
+    c.stroke();
+
+    // 아랫눈꺼풀 — 가늘게
+    c.beginPath();
+    c.moveTo(-w * 0.9, -h * 0.2);
+    c.quadraticCurveTo(-w * 0.1, h * 1.0, w * 0.95, -h * 0.05);
+    c.strokeStyle = INK;
+    c.lineWidth = narrow ? 9 : 6;
+    c.stroke();
+    c.restore();
+
+    // 눈썹 — 두꺼울수록 사납다
+    const bw = def.brows === 'thick' ? 26 : 13;
+    const by = cy - (big ? 118 : narrow ? 74 : 92);
+    c.save();
+    c.beginPath();
+    c.moveTo(cx - sx * 68, by + (narrow ? 26 : 18));
+    c.quadraticCurveTo(cx - sx * 6, by - (narrow ? 16 : 10), cx + sx * 62, by + (narrow ? -6 : 6));
+    c.strokeStyle = INK;
+    c.lineWidth = bw;
+    c.lineCap = 'round';
+    c.stroke();
+    c.restore();
+  };
+
+  eye(S * 0.305, S * 0.40, -1);
+  eye(S * 0.695, S * 0.40, 1);
+
+  // 입
+  c.beginPath();
+  c.strokeStyle = INK;
+  c.lineWidth = 11;
+  c.lineCap = 'round';
+  if (def.mouth === 'grin') {
+    c.moveTo(S * 0.40, S * 0.755);
+    c.quadraticCurveTo(S * 0.50, S * 0.825, S * 0.60, S * 0.750);
+  } else {
+    // 이 악문 입 (grit) — 원작 전투 표정
+    c.moveTo(S * 0.415, S * 0.772);
+    c.quadraticCurveTo(S * 0.50, S * 0.748, S * 0.585, S * 0.772);
+  }
+  c.stroke();
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  faceTexCache.set(key, tex);
+  return tex;
+}
+
 function trunksTextTexture(text, color) {
   const c = document.createElement('canvas');
   c.width = 256; c.height = 96;
@@ -329,9 +557,49 @@ export function buildBoxer(def, opts = {}) {
   const bodyCol = def.bodyColor || def.skin;   // 코치용: 몸은 트레이닝복 색, 얼굴만 피부색
   const G = geometriesFor(def);
   const bodyMats = [];
-  const outlineMat = makeOutlineMaterial(ghost);
 
-  const M = (c) => {
+  // 굵기별 외곽선 재질 (얼굴·머리는 굵게 = 원작의 선 강약)
+  const outlineMats = new Map();
+  const outlineFor = (scale) => {
+    const key = Math.round(scale * 100);
+    let m = outlineMats.get(key);
+    if (!m) { m = makeOutlineMaterial(ghost, 0.013 * scale); outlineMats.set(key, m); }
+    return m;
+  };
+
+  // 부위 판정: 지오메트리 우선, 없으면 색으로 역추적
+  const geomRole = new Map([
+    [G.head, 'face'], [G.jaw, 'face'], [G.ear, 'face'], [G.neck, 'skin'],
+    [G.hair, 'hair'], [G.spike, 'hair'],
+    [G.glove, 'glove'], [G.gloveCuff, 'glove'],
+  ]);
+  const roleFor = (geom, c) => geomRole.get(geom)
+    || (c === def.hair ? 'hair'
+      : (c === def.gloves && !def.noGloves) ? 'glove'
+      : c === def.skin ? 'skin' : 'cloth');
+
+  // 베이스 색에서 3톤 램프 유도 — 그림자로 갈수록 채도 ↑, 색상은 붉은 쪽으로 이동
+  const deriveRamp = (c) => {
+    const hsl = {};
+    new THREE.Color(c).getHSL(hsl);
+    return {
+      lit: new THREE.Color().setHSL(hsl.h, Math.min(1, hsl.s * 1.04), Math.min(1, hsl.l * 1.05 + 0.02)),
+      mid: new THREE.Color().setHSL(hsl.h, Math.min(1, hsl.s * 1.14), hsl.l * 0.70),
+      shadow: new THREE.Color().setHSL((hsl.h - 0.02 + 1) % 1, Math.min(1, hsl.s * 1.38 + 0.04), hsl.l * 0.40),
+    };
+  };
+  const skinRamp = def.ramp || (def.skin != null ? deriveRamp(def.skin) : DEFAULT_SKIN_RAMP);
+  const rampFor = (role, c) => (role === 'skin' || role === 'face')
+    ? { lit: new THREE.Color(skinRamp.lit), mid: new THREE.Color(skinRamp.mid), shadow: new THREE.Color(skinRamp.shadow) }
+    : deriveRamp(c);
+
+  // (역할, 색) 단위 재질 캐시 — 부위 300개가 재질 300개를 만들던 것을 10여 개로 줄인다
+  const matCache = new Map();
+  const M = (c, role) => {
+    const key = role + ':' + c;
+    const cached = matCache.get(key);
+    if (cached) return cached;
+
     let m;
     if (ghost) {
       m = new THREE.MeshBasicMaterial({
@@ -339,35 +607,47 @@ export function buildBoxer(def, opts = {}) {
         transparent: true, opacity: 0.4, depthWrite: false,
       });
     } else {
+      const look = ROLE_LOOK[role] || ROLE_LOOK.cloth;
+      const ramp = rampFor(role, c);
       m = new THREE.MeshToonMaterial({ color: c, gradientMap });
-      // 셀 셰이딩 위에 림라이트 + 작은 스페큘러(땀 반짝임) 주입 → 지점토 느낌 탈피
+      m.userData.ramp = ramp;
       m.onBeforeCompile = (sh) => {
-        sh.fragmentShader = sh.fragmentShader.replace(
+        sh.uniforms.uBaseColor = { value: new THREE.Color(c) };
+        sh.uniforms.uLitColor = { value: ramp.lit };
+        sh.uniforms.uMidColor = { value: ramp.mid };
+        sh.uniforms.uShadowColor = { value: ramp.shadow };
+        sh.uniforms.uGrade = { value: look.grade };
+        sh.uniforms.uRim = { value: look.rim };
+        sh.uniforms.uSpecPower = { value: look.specPower };
+        sh.uniforms.uSpecGain = { value: look.specGain };
+        sh.uniforms.uSpecEdge = { value: look.specEdge };
+        sh.uniforms.uHairBand = { value: look.hairBand ? 1 : 0 };
+        sh.fragmentShader = `
+uniform vec3 uBaseColor; uniform vec3 uLitColor; uniform vec3 uMidColor; uniform vec3 uShadowColor;
+uniform float uGrade; uniform float uRim; uniform float uSpecPower; uniform float uSpecGain;
+uniform float uSpecEdge; uniform float uHairBand;
+` + sh.fragmentShader.replace(
           '#include <dithering_fragment>',
-          `#include <dithering_fragment>
-          {
-            vec3 nrm = normalize(vNormal);
-            vec3 vdir = normalize(vViewPosition);
-            float rim = pow(1.0 - max(0.0, dot(nrm, vdir)), 3.0);
-            vec3 ldir = normalize(vec3(0.4, 0.9, 0.5));
-            vec3 h = normalize(ldir + vdir);
-            float spec = pow(max(0.0, dot(nrm, h)), 42.0);
-            spec = smoothstep(0.55, 0.7, spec) * 0.35;   // 셀 스타일 하이라이트 (경계 뚜렷)
-            gl_FragColor.rgb += vec3(0.55, 0.42, 0.32) * rim * 0.32 + vec3(1.0) * spec;
-          }`
+          '#include <dithering_fragment>\n' + TONE_GRADE_GLSL
         );
       };
     }
+    matCache.set(key, m);
     bodyMats.push(m);
     return m;
   };
 
   const part = (geom, color, parent, x = 0, y = 0, z = 0, outline = true) => {
-    const mesh = new THREE.Mesh(geom, M(color));
+    const role = roleFor(geom, color);
+    const mesh = new THREE.Mesh(geom, M(color, role));
     mesh.castShadow = !ghost;
     mesh.receiveShadow = !ghost;
     mesh.position.set(x, y, z);
-    if (outline) mesh.add(new THREE.Mesh(geom, outlineMat));
+    if (outline) {
+      // 숫자를 넘기면 그 값이 굵기 배율 (작은 부위는 선이 뭉치지 않게 가늘게)
+      const w = typeof outline === 'number' ? outline : (ROLE_LOOK[role] || ROLE_LOOK.cloth).outline;
+      mesh.add(new THREE.Mesh(geom, outlineFor(w)));
+    }
     parent.add(mesh);
     return mesh;
   };
@@ -421,9 +701,10 @@ export function buildBoxer(def, opts = {}) {
   }
   // 근육 디테일 (가슴/복근) — 잔상엔 생략
   if (!ghost && P.muscle > 0.5) {
-    part(G.pec, def.skin, waist, 0.1 * P.torsoW, 0.4, 0.11 * P.torsoD, false);
-    part(G.pec, def.skin, waist, -0.1 * P.torsoW, 0.4, 0.11 * P.torsoD, false);
-    for (let r = 0; r < 3; r++) for (let c = -1; c <= 1; c += 2) part(G.abs, def.skin, waist, c * 0.045 * P.torsoW, 0.26 - r * 0.08, 0.125 * P.torsoD, false);
+    // 원작은 근육을 선으로 구분한다 — 대흉근·복근에도 외곽선을 넣어 윤곽을 만든다 (가늘게)
+    part(G.pec, def.skin, waist, 0.1 * P.torsoW, 0.4, 0.11 * P.torsoD, 0.72);
+    part(G.pec, def.skin, waist, -0.1 * P.torsoW, 0.4, 0.11 * P.torsoD, 0.72);
+    for (let r = 0; r < 3; r++) for (let c = -1; c <= 1; c += 2) part(G.abs, def.skin, waist, c * 0.045 * P.torsoW, 0.26 - r * 0.08, 0.125 * P.torsoD, 0.5);
   }
 
   // 가슴 프린트 (티셔츠 로고)
@@ -470,7 +751,9 @@ export function buildBoxer(def, opts = {}) {
     shoulder.position.set(sx * 0.27 * P.torsoW, 0.0, 0);
     shoulder.rotation.order = 'YZX'; // X(들어올림) → Z(벌림) → Y(휘두름) 순으로 적용
     chest.add(shoulder);
-    part(G.delt, bodyCol, shoulder, 0, 0.02, 0);
+    // 삼각근을 바깥·위로 부풀려 어깨 실루엣을 만든다 (팔에 묻히면 역삼각형이 안 읽힌다)
+    const delt = part(G.delt, bodyCol, shoulder, sx * 0.010 * P.torsoW, 0.028, 0);
+    delt.scale.set(1.14, 0.94, 1.02);
     part(G.upperArm, bodyCol, shoulder, 0, -armLen * 0.5, 0);
     if (def.oversize) {   // 소매가 팔보다 크다
       const sl = part(new THREE.CapsuleGeometry(0.098 * P.armR, armLen * 0.72, 4, 12), def.sleeveColor || bodyCol, shoulder, 0, -armLen * 0.52, 0);
@@ -481,11 +764,11 @@ export function buildBoxer(def, opts = {}) {
     shoulder.add(elbow);
     part(G.forearm, def.sleeves || bodyCol, elbow, 0, -armLen * 0.45, 0);
     if (!def.noGloves) part(G.gloveCuff, def.gloves, elbow, 0, -armLen * 0.78, 0);
-    const glove = part(G.glove, def.gloves, elbow, 0, -armLen - 0.02, 0);
+    const glove = part(def.noGloves ? G.hand : G.glove, def.gloves, elbow, 0, -armLen - 0.02, 0);
     if (def.noGloves) glove.scale.setScalar(0.6);
     else if (!ghost) {
       // 글러브 솔기(엄지 라인) + 손목 스트랩
-      const seam = part(new THREE.TorusGeometry(0.115, 0.012, 6, 24), 0x2a1010, glove, 0, 0.02, 0, false);
+      const seam = part(new THREE.TorusGeometry(0.118, 0.013, 6, 24), 0x2a1010, glove, 0, 0.025, 0.012, false);
       seam.rotation.x = Math.PI / 2; seam.rotation.z = 0.5;
       const strap = part(new THREE.CylinderGeometry(0.1, 0.1, 0.035, 14), 0xf5f5f5, elbow, 0, -armLen * 0.86, 0, false);
     }
@@ -506,11 +789,14 @@ export function buildBoxer(def, opts = {}) {
   const headMesh = part(G.head, def.skin, head, 0, hy, 0);
   headMesh.scale.set(1, P.headY, 1);
   // 턱 (장신 캐릭터는 길고 뾰족한 인상)
-  const jaw = part(G.jaw, def.skin, head, 0, hy - 0.12 * P.headY, 0.02);
-  jaw.scale.set(P.headY > 1.1 ? 0.8 : 1, P.headY > 1.1 ? 1.5 : 1, 1);
+  // 턱은 머리 구면 안에 머물러야 한다 — 앞으로 삐져나오면 얼굴 텍스처를 뚫고 면이 얼룩진다
+  const jaw = part(G.jaw, def.skin, head, 0, hy - 0.115 * P.headY, -0.012);
+  jaw.scale.set(P.headY > 1.1 ? 0.78 : 0.94, P.headY > 1.1 ? 1.45 : 0.96, 0.82);
   part(G.ear, def.skin, head, 0.165 * P.headS, hy, 0);
   part(G.ear, def.skin, head, -0.165 * P.headS, hy, 0);
-  part(G.hair, def.hair, head, 0, hy + 0.03, -0.02);
+  // 머리 캡을 뒤로 젖힌다 — 앞쪽 헤어라인이 올라가 이마와 눈썹이 드러난다 (원작은 눈썹이 항상 보인다)
+  const hairCap = part(G.hair, def.hair, head, 0, hy + 0.028, -0.032);
+  hairCap.rotation.x = -0.26;
   if (def.hairStyle === 'bobsharp') {
     // 칼단발: 턱선에서 직선으로 뚝 떨어지는 실루엣 + 일자 앞머리
     const cap = part(new THREE.SphereGeometry(0.208 * P.headS, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.62), def.hair, head, 0, hy + 0.015, -0.01);
@@ -545,21 +831,76 @@ export function buildBoxer(def, opts = {}) {
     const bang = part(new THREE.BoxGeometry(0.24 * P.headS, 0.06, 0.07), def.hair, head, 0, hy + 0.105, 0.1 * P.headS);
     bang.rotation.x = -0.25;
   } else if (def.hairStyle === 'spiky') {
-    // 사방으로 뻗친 굵은 스파이크
-    const n = 9;
+    // 이치로: 사방으로 크고 굵게 뻗친 스파이크 + 이마로 내려온 앞머리 몇 가닥
+    const n = 11;
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2 + 0.3;
-      const rr = 0.09 + 0.03 * Math.sin(i * 2.1);
-      const s = part(G.spike, def.hair, head, Math.cos(a) * rr, hy + 0.16, Math.sin(a) * rr * 0.9 - 0.04);
-      s.rotation.set(Math.sin(a) * 0.75, 0, -Math.cos(a) * 0.75);
-      s.scale.set(1.1, 1.05 + 0.3 * Math.abs(Math.sin(i * 1.7)), 1.1);
+      const rr = 0.10 + 0.035 * Math.sin(i * 2.1);
+      const s = part(G.spikeBig, def.hair, head, Math.cos(a) * rr, hy + 0.15, Math.sin(a) * rr * 0.9 - 0.035);
+      s.rotation.set(Math.sin(a) * 0.62, 0, -Math.cos(a) * 0.62);
+      s.scale.set(1.0, 0.95 + 0.45 * Math.abs(Math.sin(i * 1.7)), 1.0);
     }
-    // 앞머리 두 갈래
+    // 이마로 흘러내린 앞머리 — 원작의 인상을 만드는 부분
+    for (const [sx, tilt, sc] of [[-1, 0.42, 0.95], [0, 0.10, 1.12], [1, -0.38, 0.9]]) {
+      const s = part(G.spikeBig, def.hair, head, sx * 0.068, hy + 0.135, 0.108 * P.headS);
+      s.rotation.set(2.45, 0, tilt);
+      s.scale.set(0.82, sc * 0.62, 0.82);
+    }
+  } else if (def.hairStyle === 'mane') {
+    // 센도: 뒤·위로 크게 젖혀진 갈기.
+    // 스파이크는 반드시 머리 뒤쪽 아크에만 놓는다 — 원형으로 두르면 앞쪽 가닥이 얼굴을 덮는다
+    const n = 11;
+    for (let i = 0; i < n; i++) {
+      const u = i / (n - 1);                               // 0 = 왼쪽, 1 = 오른쪽
+      const x = (u - 0.5) * 0.235 * P.headS;
+      const z = -0.04 - 0.08 * Math.sin(u * Math.PI);      // 가운데일수록 더 뒤로
+      const s = part(G.spikeBig, def.hair, head, x, hy + 0.145, z);
+      s.rotation.set(-0.95 - 0.22 * Math.sin(u * Math.PI), 0, -(u - 0.5) * 1.15);
+      s.scale.set(1.05, 1.25 + 0.55 * Math.sin(u * Math.PI), 1.05);
+    }
+    // 앞으로 뾰족하게 내려온 앞머리 두 갈래 — 눈을 덮지 않도록 짧고 높게
     for (const sx of [-1, 1]) {
-      const s = part(G.spike, def.hair, head, sx * 0.07, hy + 0.13, 0.12);
-      s.rotation.set(1.1, 0, -sx * 0.4);
-      s.scale.set(0.9, 0.8, 0.9);
+      const s = part(G.spikeBig, def.hair, head, sx * 0.082, hy + 0.152, 0.092 * P.headS);
+      s.rotation.set(2.42, 0, -sx * 0.62);
+      s.scale.set(0.72, 0.46, 0.72);
     }
+  } else if (def.hairStyle === 'longblack') {
+    // 마시바: 정수리에서 뻗치고 얼굴 양옆으로 길게 내려오는 흑발
+    for (let i = 0; i < 7; i++) {
+      const a = Math.PI * 0.5 + (i / 6) * Math.PI * 1.0;
+      const s = part(G.spikeBig, def.hair, head, Math.cos(a) * 0.095, hy + 0.14, Math.sin(a) * 0.08 - 0.05);
+      s.rotation.set(-0.5, 0, -Math.cos(a) * 0.5);
+      s.scale.set(0.95, 1.15, 0.95);
+    }
+    // 얼굴 옆으로 흐르는 긴 머리칼 (턱선 아래까지)
+    for (const sx of [-1, 1]) {
+      for (const [ox, oz, len, tilt] of [[0.155, 0.02, 1.35, 0.10], [0.135, -0.075, 1.6, 0.04]]) {
+        const s = part(G.strand, def.hair, head, sx * ox * P.headS, hy - 0.10, oz);
+        s.rotation.set(0.06, 0, sx * tilt);
+        s.scale.set(0.92, len, 0.85);
+      }
+    }
+    // 관자놀이를 스치는 앞머리 한 가닥 (한쪽으로 쏠림) — 눈은 가리지 않는다
+    const fringe = part(G.strand, def.hair, head, -0.088 * P.headS, hy + 0.088, 0.096 * P.headS);
+    fringe.rotation.set(0.26, 0, 0.46);
+    fringe.scale.set(0.72, 0.42, 0.5);
+  } else if (def.hairStyle === 'bowl') {
+    // 미야타: 이마를 덮는 일자 앞머리 + 귀를 덮는 단정한 중단발
+    // 캡은 눈썹 위에서 멈춰야 한다. 적도 아래까지 내려오면 얼굴을 덮는 검은 헬멧이 된다
+    const cap = part(new THREE.SphereGeometry(0.194 * P.headS, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.46), def.hair, head, 0, hy + 0.022, -0.026);
+    cap.rotation.x = -0.20;
+    cap.scale.set(1.03, 1.0, 1.06);
+    const bang = part(G.bang, def.hair, head, 0, hy + 0.098, 0.100 * P.headS);
+    bang.rotation.x = -0.16;
+    bang.scale.set(1, 0.78, 0.85);
+    for (const sx of [-1, 1]) {
+      // 옆머리는 뒤쪽에 둔다 — 앞으로 오면 볼을 덮는다
+      const side = part(new THREE.CapsuleGeometry(0.048 * P.headS, 0.13, 4, 10), def.hair, head, sx * 0.158 * P.headS, hy - 0.018, -0.045);
+      side.scale.set(1, 1, 0.8);
+    }
+    // 뒤통수를 덮는 뒷머리
+    const back = part(new THREE.CapsuleGeometry(0.115 * P.headS, 0.10, 4, 12), def.hair, head, 0, hy - 0.035, -0.105 * P.headS);
+    back.scale.set(1.28, 1, 0.72);
   } else {
     // 뒤로 넘긴 흑발: 길게 뻗은 뾰족한 머리칼이 뒤/옆으로
     for (let i = 0; i < 7; i++) {
@@ -575,21 +916,25 @@ export function buildBoxer(def, opts = {}) {
       s.scale.set(0.5, 0.8, 0.5);
     }
   }
-  // 눈: 흰자 + 동공 (외곽선 없음)
-  const eyeY = hy + 0.02 * P.headY, eyeZ = 0.14 * P.headS;
-  const narrow = def.eyes === 'narrow';
-  const big = def.eyes === 'big';
-  for (const sx of [-1, 1]) {
-    const sc = part(G.sclera, 0xf6f6f6, head, sx * (big ? 0.072 : 0.065), eyeY, eyeZ, false);
-    sc.scale.set(big ? 1.35 : 1, narrow ? 0.35 : big ? 1.75 : 1.15, 0.5);
-    const pu = part(G.pupil, big ? 0x3a2418 : 0x101018, head, sx * (big ? 0.07 : 0.062), eyeY, eyeZ + 0.022, false);
-    pu.scale.set(narrow ? 0.9 : big ? 1.8 : 1.1, narrow ? 0.45 : big ? 2.1 : 1.4, 0.6);
-    if (big) {   // 큰 눈 하이라이트
-      const hl = part(new THREE.SphereGeometry(0.012, 8, 6), 0xffffff, head, sx * 0.078, eyeY + 0.022, eyeZ + 0.034, false);
-      hl.scale.set(1.1, 1.1, 0.5);
-    }
-    const br = part(G.brow, 0x101018, head, sx * 0.068, eyeY + (narrow ? 0.03 : big ? 0.085 : 0.06), eyeZ + 0.015, false);
-    br.rotation.z = -sx * (narrow ? 0.55 : big ? 0.12 : 0.32);
+  // 얼굴: 머리 구면에 딱 맞는 앞면 패치에 눈·눈썹·입 텍스처를 감싼다 (튀어나온 눈알 없음)
+  const eyeY = hy + 0.02 * P.headY, eyeZ = 0.14 * P.headS;   // 소품(선글라스 등) 기준점
+  let rigFace = null;
+  if (!ghost) {
+    const R = 0.17 * P.headS;
+    const faceGeo = new THREE.SphereGeometry(
+      R * 1.006, 28, 22,
+      Math.PI * 0.5 - 0.62, 1.24,          // 가로: 얼굴 폭
+      Math.PI * 0.5 - 0.50, 0.94,          // 세로: 이마 ~ 턱
+    );
+    const faceMesh = new THREE.Mesh(faceGeo, new THREE.MeshBasicMaterial({
+      map: faceTexture(def), transparent: true, depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    }));
+    faceMesh.renderOrder = 2;
+    faceMesh.position.y = hy;
+    faceMesh.scale.set(1, P.headY, 1);   // 머리통 세로 비율을 그대로 따라간다
+    head.add(faceMesh);
+    rigFace = faceMesh;
   }
   // 헤드폰 (정주원)
   if (def.accessory === 'headphones') {
@@ -615,11 +960,9 @@ export function buildBoxer(def, opts = {}) {
     }
     part(new THREE.BoxGeometry(0.038, 0.012, 0.014), 0x15151c, gl, 0, 0.008, 0, false);
   }
-  // 코
-  const nose = part(new THREE.ConeGeometry(0.028, 0.06, 6), def.skin, head, 0, hy - 0.02 * P.headY, 0.165 * P.headS, false);
+  // 코 — 옆모습 실루엣용으로만 작게. 정면의 코/입은 얼굴 텍스처가 그린다
+  const nose = part(new THREE.ConeGeometry(0.019, 0.042, 6), def.skin, head, 0, hy - 0.025 * P.headY, 0.163 * P.headS, false);
   nose.rotation.x = Math.PI / 2 - 0.35;
-  const mouth = part(G.mouth, 0x1a1014, head, 0, hy - 0.075 * P.headY, 0.155 * P.headS, false);
-  if (def.mouth === 'grin') mouth.rotation.z = 0.18;
 
   const rig = {
     root, hips, waist, chest, head, headMesh, hipsBaseY, headBaseY, def,
@@ -627,13 +970,26 @@ export function buildBoxer(def, opts = {}) {
     shoulderR: armR.shoulder, elbowR: armR.elbow, gloveR: armR.glove,
     thighL: legL.thigh, shinL: legL.shin, thighR: legR.thigh, shinR: legR.shin,
     footL: legL.foot, footR: legR.foot,
-    bodyMats, outlineMat,
+    face: rigFace,
+    bodyMats,
+    get outlineMats() { return [...outlineMats.values()]; },
     setOpacity(o) {
       for (let i = 0; i < bodyMats.length; i++) bodyMats[i].opacity = o;
-      outlineMat.uniforms.opacity.value = Math.min(1, o * 1.3);
+      this.setOutlineOpacity(Math.min(1, o * 1.3));
     },
-    setOutline(thickness) { outlineMat.uniforms.thickness.value = thickness; },
+    setOutlineOpacity(a) {
+      for (const m of outlineMats.values()) {
+        m.uniforms.opacity.value = a;
+        m.transparent = a < 0.999;
+      }
+    },
+    // 인자는 '몸통 기준' 굵기. 얼굴·머리의 굵기 배율은 그대로 유지한다.
+    setOutline(thickness) {
+      const k = thickness / 0.013;
+      for (const [key, m] of outlineMats) m.uniforms.thickness.value = 0.013 * (key / 100) * k;
+    },
   };
   applyPose(rig, defaultPose());
+  if (PHOTOREAL) batchRig(rig, { ghost });
   return rig;
 }

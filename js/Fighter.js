@@ -171,8 +171,7 @@ export class Fighter {
     if (this._fade === a) return;
     this._fade = a;
     for (const m of this.rig.bodyMats) { m.transparent = a < 0.999; m.opacity = a; m.depthWrite = a > 0.5; }
-    this.rig.outlineMat.uniforms.opacity.value = a;
-    this.rig.outlineMat.transparent = a < 0.999;
+    this.rig.setOutlineOpacity(a);
   }
 
   updateVisualFx(rawDt) {

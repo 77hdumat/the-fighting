@@ -1,0 +1,16 @@
+{
+  "generator": "scripts/generate_render_assets.py",
+  "source": "Original analytic lighting and radial opacity data",
+  "assets": [
+    {
+      "file": "arena-original.hdr",
+      "bytes": 524337,
+      "sha256": "d7896ae66f4d575bef13efcce9108fa512674fc899e86377fb5c8b3bf3a18290"
+    },
+    {
+      "file": "contact-shadow.rgba",
+      "bytes": 16384,
+      "sha256": "2ae461cc4b66a781bdf552daae4c2972163f8fa701a42220ae81fadea8a18bc0"
+    }
+  ]
+}
