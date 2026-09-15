@@ -256,7 +256,7 @@ export class Fighter {
       tg.ultDmgRate = tg.ultDmg / dur;
       d.consume();
       this.audio.finisherWind(0.5);
-      const line = fk === 'reels' ? '이건 문화 충격이야!' : fk === 'barbell' ? '자, 10회 3세트 간다!' : '어… 이거 무거운데—!!';
+      const line = fk === 'reels' ? '잡았다! 릴스 각이야, 찍는다!' : fk === 'barbell' ? '자, 10회 3세트 간다!' : '어… 이거 무거운데—!!';
       this.subs.show(line, { duration: 1.6, strong: true });
       this.events.push({ type: 'ultStart', kind: fk, target: tg.slot, charge });
       return true;
@@ -759,9 +759,13 @@ export class Fighter {
       }
       const k = this.ultKind;
       if (k === 'reels') {
-        // 손을 하늘로 뻗어 유물을 불러내고, 폰으로 촬영하는 포즈
-        p.shRX += -2.75; p.shRZ += -0.45; p.elR += -0.25; p.shLX += -1.6; p.elL += -1.5; p.shLY += -0.4;
-        p.headX += -0.45; p.waistX += -0.2; p.hipsY += Math.abs(Math.sin(t * 6)) * 0.05;
+        // 폰을 두 손으로 들고 촬영: 살짝 무릎 굽혀 앵글 잡고 리듬 타기
+        const bob = Math.sin(t * 5.5);
+        p.shRX += -1.55; p.shRY += 0.28; p.elR += -1.25;
+        p.shLX += -1.45; p.shLY += -0.3; p.elL += -1.35;
+        p.headX += -0.18 + bob * 0.05; p.headY += bob * 0.12;
+        p.waistX += 0.12; p.hipsY += -0.06 + Math.abs(bob) * 0.05; p.hipsX += bob * 0.05;
+        p.thighLX += -0.16; p.thighRX += -0.16; p.shinL += 0.28; p.shinR += 0.28;
       } else if (k === 'barbell') {
         // 팔짱 끼고 카운트 세기 → 마지막엔 손 내리기
         p.shLX += -0.95; p.elL += -2.35; p.shLY += -1.0; p.shRX += -0.9; p.elR += -2.35; p.shRY += 1.0;
@@ -800,10 +804,38 @@ export class Fighter {
       const tick = (this.ultDmgRate || 0) * dt;
       if (tick > 0 && !this.ko) { this.hp = Math.max(0, this.hp - tick); if (this.hp <= 0) { this._die(); } }
       if (k === 'reels') {
-        // 머리 감싸고 쏟아지는 유물을 맞는다
-        p.shLX += -2.2; p.shRX += -2.2; p.elL += -2.2; p.elR += -2.2; p.shLZ += 0.5; p.shRZ += -0.5;
-        p.headX += 0.35 + Math.sin(t * 22) * 0.12; p.waistX += 0.45; p.hipsY += -0.16 + Math.abs(Math.sin(t * 9)) * 0.05;
-        this.rattle = Math.max(this.rattle, 0.5);
+        // ---- 강제 유행 댄스 → 오글거려 주저앉음 ----
+        const u = 3.4 - this.ultVictimT;
+        const beat = t * 9.2;                      // 비트
+        const sw = Math.sin(beat), sw2 = Math.sin(beat * 2);
+        if (u < 0.9) {
+          // ① 양손 위로 흔들기 (하트 시그니처)
+          p.shLX += -2.7 + sw * 0.35; p.shRX += -2.7 - sw * 0.35; p.elL += -0.7; p.elR += -0.7;
+          p.shLZ += 0.45; p.shRZ += -0.45;
+          p.hipsX += sw * 0.12; p.waistY += sw * 0.3; p.headY += sw * 0.35; p.hipsY += Math.abs(sw2) * 0.08;
+        } else if (u < 1.8) {
+          // ② 허리 튕기며 사이드 스텝
+          p.hipsX += sw * 0.2; p.hipsRotY += sw * 0.5; p.waistY += -sw * 0.45; p.waistZ += sw2 * 0.18;
+          p.shLX += -1.5 - Math.max(0, sw) * 0.9; p.shRX += -1.5 - Math.max(0, -sw) * 0.9;
+          p.elL += -1.5; p.elR += -1.5; p.headZ += sw2 * 0.22; p.headY += sw * 0.3;
+          p.thighLX += sw * 0.3; p.thighRX += -sw * 0.3; p.shinL += Math.max(0, sw) * 0.5; p.shinR += Math.max(0, -sw) * 0.5;
+        } else if (u < 2.6) {
+          // ③ 손가락 하트 + 윙크 포즈 (카메라 정면)
+          const k2 = Math.min(1, (u - 1.8) / 0.25);
+          p.shRX += -2.35 * k2; p.shRY += 0.55 * k2; p.elR += -1.9 * k2; p.shRZ += -0.35 * k2;
+          p.shLX += -1.0 * k2; p.elL += -2.0 * k2; p.shLY += -0.55 * k2;
+          p.headZ += 0.28 * k2 + sw2 * 0.08; p.headX += -0.18 * k2; p.hipsY += Math.abs(sw2) * 0.05;
+          p.hipsRotY += sw * 0.15;
+        } else {
+          // ④ 정신 차리고 오글거림 폭발 → 얼굴 감싸고 배배 꼬며 주저앉음
+          const k2 = Math.min(1, (u - 2.6) / 0.8);
+          p.shLX += -2.5 + 0.2 * k2; p.shRX += -2.5 + 0.2 * k2; p.elL += -2.5; p.elR += -2.5;   // 두 손으로 얼굴 가림
+          p.shLZ += 0.6; p.shRZ += -0.6;
+          p.headX += 0.55 * k2; p.waistX += 0.85 * k2; p.waistZ += Math.sin(t * 7) * 0.22 * k2;
+          p.hipsY += -0.6 * k2; p.thighLX += -1.15 * k2; p.thighRX += -1.05 * k2; p.shinL += 1.9 * k2; p.shinR += 1.8 * k2;
+          p.hipsRotY += Math.sin(t * 5) * 0.2 * k2;
+          this.rattle = Math.max(this.rattle, 0.3 * k2);
+        }
       } else if (k === 'barbell') {
         // 강제 스쿼트 3회 → 마지막에 깔려 주저앉음
         const u = 3.6 - this.ultVictimT;

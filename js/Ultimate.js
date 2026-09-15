@@ -19,32 +19,16 @@ function outlined(geo, color, group, pos, scale = 1) {
   return m;
 }
 
-// ---- 낙하물: 도자기 / 액자 / 석상 / 두루마리 ----
-function makeArtifact(i) {
+// ---- 릴스 촬영 소품: 하트 / 좋아요 아이콘 ----
+function makeHeart() {
   const g = new THREE.Group();
-  const kind = i % 4;
-  if (kind === 0) {           // 청자 도자기
-    const body = outlined(new THREE.LatheGeometry([
-      new THREE.Vector2(0.001, -0.22), new THREE.Vector2(0.11, -0.16), new THREE.Vector2(0.16, 0.0),
-      new THREE.Vector2(0.1, 0.14), new THREE.Vector2(0.13, 0.2), new THREE.Vector2(0.08, 0.24),
-    ], 14), 0x4a9d8f, g);
-    outlined(new THREE.TorusGeometry(0.1, 0.014, 6, 16), 0xe8d7a6, g, new THREE.Vector3(0, 0.06, 0));
-  } else if (kind === 1) {    // 금빛 액자 그림
-    const frame = outlined(new THREE.BoxGeometry(0.46, 0.34, 0.035), 0xd9a441, g);
-    const canvas = new THREE.Mesh(new THREE.PlaneGeometry(0.38, 0.26), TOON(0xf3e9d2));
-    canvas.position.z = 0.02; frame.add(canvas);
-    const paint = new THREE.Mesh(new THREE.CircleGeometry(0.08, 16), TOON(0x3f6fb5));
-    paint.position.set(-0.06, 0.02, 0.003); canvas.add(paint);
-    const paint2 = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.08), TOON(0xc0572f));
-    paint2.position.set(0.08, -0.05, 0.003); canvas.add(paint2);
-  } else if (kind === 2) {    // 대리석 흉상
-    outlined(new THREE.CylinderGeometry(0.13, 0.17, 0.16, 10), 0xe9e6de, g, new THREE.Vector3(0, -0.16, 0));
-    outlined(new THREE.SphereGeometry(0.12, 14, 10), 0xf1efe8, g, new THREE.Vector3(0, 0.02, 0));
-    outlined(new THREE.BoxGeometry(0.1, 0.09, 0.14), 0xf1efe8, g, new THREE.Vector3(0, -0.06, 0.02));
-  } else {                    // 두루마리 / 고서
-    const b = outlined(new THREE.BoxGeometry(0.3, 0.38, 0.07), 0x8a2b2b, g);
-    outlined(new THREE.BoxGeometry(0.27, 0.35, 0.08), 0xf6f1e2, b, new THREE.Vector3(0.012, 0, 0.002));
+  const mat = TOON(0xff4f8b);
+  for (const sx of [-1, 1]) {
+    const lobe = new THREE.Mesh(new THREE.SphereGeometry(0.075, 12, 10), mat);
+    lobe.position.set(sx * 0.055, 0.045, 0); g.add(lobe);
   }
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.105, 0.16, 12), mat);
+  tip.position.y = -0.055; tip.rotation.x = Math.PI; g.add(tip);
   return g;
 }
 
@@ -59,23 +43,37 @@ export class UltimateFx {
     if (!target) return;
     const root = new THREE.Group();
     this.scene.add(root);
-    const item = { kind, root, t: 0, dur: 3.2, parts: [], attacker, target, tp: target.pos.clone() };
-    if (kind === 'reels') this._buildArtifacts(item);
+    const item = { kind, root, t: 0, dur: kind === 'reels' ? 3.4 : 3.2, parts: [], attacker, target, tp: target.pos.clone() };
+    if (kind === 'reels') this._buildReels(item, attacker);
     else if (kind === 'barbell') this._buildRack(item);
     else if (kind === 'bike') this._buildBike(item, attacker);
     this.active.push(item);
   }
 
-  _buildArtifacts(item) {
-    // 표적 위 하늘에서 24개가 시간차로 쏟아진다
-    for (let i = 0; i < 34; i++) {
-      const a = makeArtifact(i);
-      const ang = Math.random() * Math.PI * 2, rr = Math.random() * 1.15;
-      a.position.set(item.tp.x + Math.cos(ang) * rr, 5.2 + Math.random() * 4.2, item.tp.z + Math.sin(ang) * rr);
-      a.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
-      a.scale.setScalar(1.15 + Math.random() * 0.75);
-      item.root.add(a);
-      item.parts.push({ m: a, delay: 0.1 + i * 0.062, vy: 0, spin: new THREE.Vector3((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6), landed: 0 });
+  _buildReels(item, attacker) {
+    const g = item.root;
+    // 세로형 스마트폰 (촬영자 손 위치에 붙는다)
+    const phone = new THREE.Group();
+    const body = outlined(new THREE.BoxGeometry(0.16, 0.3, 0.025), 0x15151c, phone);
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.14, 0.27), TOON(0xdff1ff));
+    screen.position.z = 0.016; body.add(screen);
+    const rec = new THREE.Mesh(new THREE.CircleGeometry(0.018, 12), TOON(0xff2d2d));
+    rec.position.set(-0.045, 0.1, 0.002); screen.add(rec);
+    item.rec = rec;
+    g.add(phone); item.phone = phone;
+    // 링라이트 (촬영 조명)
+    const ring = outlined(new THREE.TorusGeometry(0.34, 0.05, 8, 24), 0xfff4cf, g);
+    ring.material.emissive = new THREE.Color(0xfff0b0); ring.material.emissiveIntensity = 1.4;
+    item.ring = ring;
+    const light = new THREE.PointLight(0xfff0c0, 0, 6);
+    g.add(light); item.light = light;
+    // 떠오르는 하트 / 좋아요
+    item.hearts = [];
+    for (let i = 0; i < 16; i++) {
+      const h = makeHeart();
+      h.visible = false; h.scale.setScalar(0.5 + Math.random() * 0.5);
+      g.add(h);
+      item.hearts.push({ m: h, delay: 0.35 + i * 0.16, t: 0, x: (Math.random() - 0.5) * 1.4, z: (Math.random() - 0.5) * 0.8, spd: 1.1 + Math.random() * 0.8 });
     }
   }
 
@@ -170,7 +168,7 @@ export class UltimateFx {
       const it = this.active[i];
       it.t += dt;
       const tp = it.target ? it.target.pos : it.tp;
-      if (it.kind === 'reels') this._updArtifacts(it, dt, tp);
+      if (it.kind === 'reels') this._updReels(it, dt, tp);
       else if (it.kind === 'barbell') this._updRack(it, dt, tp);
       else if (it.kind === 'bike') this._updBike(it, dt, tp);
       if (it.t > it.dur + 1.4) {
@@ -181,21 +179,47 @@ export class UltimateFx {
     }
   }
 
-  _updArtifacts(it, dt, tp) {
-    for (const p of it.parts) {
-      if (it.t < p.delay) continue;
-      if (p.landed) { p.landed += dt; p.m.rotation.z += dt * 2; p.m.scale.multiplyScalar(Math.max(0.0001, 1 - dt * 2.2)); if (p.landed > 0.55) p.m.visible = false; continue; }
-      p.vy -= 26 * dt;
-      p.m.position.y += p.vy * dt;
-      // 낙하 중 목표 쪽으로 살짝 끌린다 (확실히 맞게)
-      p.m.position.x += (tp.x - p.m.position.x) * Math.min(1, dt * 1.6);
-      p.m.position.z += (tp.z - p.m.position.z) * Math.min(1, dt * 1.6);
-      p.m.rotation.x += p.spin.x * dt; p.m.rotation.y += p.spin.y * dt; p.m.rotation.z += p.spin.z * dt;
-      if (p.m.position.y <= 0.35) {
-        p.m.position.y = 0.35; p.landed = 0.0001;
-        this.audio.impact(0.55); if (Math.random() < 0.4) this.audio.clang(0.35);
-        if (this.fx) this.fx.flash = Math.max(this.fx.flash || 0, 0.12);
-      }
+  _updReels(it, dt, tp) {
+    const u = it.t, att = it.attacker;
+    // 폰: 촬영자 앞 가슴 높이에서 상대를 향해 겨눈다 (살짝 흔들리는 핸드헬드)
+    if (it.phone && att) {
+      const aim = new THREE.Vector3().subVectors(tp, att.pos).setY(0).normalize();
+      const p = att.pos.clone().addScaledVector(aim, 0.42).add(new THREE.Vector3(0, 1.28 + Math.sin(u * 5) * 0.02, 0));
+      it.phone.position.lerp(p, Math.min(1, dt * 12));
+      it.phone.lookAt(tp.x, 1.15, tp.z);
+      it.phone.rotateY(Math.PI);
+      it.phone.rotation.z += Math.sin(u * 7) * 0.03;
+      if (it.rec) it.rec.visible = Math.sin(u * 9) > -0.2;    // REC 점멸
+    }
+    // 링라이트: 상대 앞쪽에서 비춘다
+    if (it.ring && att) {
+      const aim = new THREE.Vector3().subVectors(tp, att.pos).setY(0).normalize();
+      const rp = tp.clone().addScaledVector(aim, -0.95).add(new THREE.Vector3(0, 1.5, 0));
+      it.ring.position.lerp(rp, Math.min(1, dt * 6));
+      it.ring.lookAt(tp.x, 1.2, tp.z);
+      const on = Math.min(1, u / 0.3) * (u > it.dur - 0.5 ? Math.max(0, (it.dur - u) / 0.5) : 1);
+      it.ring.scale.setScalar(0.6 + 0.4 * on);
+      if (it.light) { it.light.position.copy(it.ring.position); it.light.intensity = 9 * on; }
+    }
+    // 하트가 상대 주변에서 떠오른다 (좋아요 폭발)
+    for (const h of it.hearts) {
+      if (u < h.delay) continue;
+      h.t += dt;
+      if (h.t === dt) { h.m.visible = true; h.m.position.set(tp.x + h.x, 0.9, tp.z + h.z); }
+      h.m.position.y += h.spd * dt;
+      h.m.position.x += Math.sin(h.t * 3 + h.x * 5) * 0.4 * dt;
+      h.m.rotation.z = Math.sin(h.t * 4) * 0.25;
+      const fade = Math.max(0, 1 - h.t / 1.6);
+      h.m.scale.setScalar(Math.max(0.001, (0.5 + 0.5 * Math.min(1, h.t * 4)) * fade));
+      if (fade <= 0) h.m.visible = false;
+    }
+    // 셔터 플래시 (3회)
+    if (!it.flashes) it.flashes = 0;
+    const want = u > 2.7 ? 3 : u > 1.7 ? 2 : u > 0.7 ? 1 : 0;
+    if (want > it.flashes) {
+      it.flashes = want;
+      this.audio.shutter();
+      if (this.fx) this.fx.flash = Math.max(this.fx.flash || 0, 0.45);
     }
   }
 

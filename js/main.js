@@ -172,7 +172,7 @@ class Game {
       mashiba: { style: '히트맨 · 최장 리치', st: '<b>SPACE</b> 플리커 러시 · <b>U</b> 플리커 3연(무예비) · <b>I</b> 초핑 라이트 · <b>L</b> 초핑 라이트 강', pw: 3, sp: 4, hp: 3 },
       miyata: { style: '아웃복서 · 카운터', st: '<b>SPACE</b> 카운터 스탠스(피격 시 자동 회피→졸트) · <b>U</b> 졸트 · <b>I</b> 백스텝 잽 · <b>L</b> 졸트 블로', pw: 2, sp: 5, hp: 2 },
       sendo: { style: '파워 슬러거 · 느리지만 한 방', st: '<b>U</b> 스매시(띄움) · <b>I</b> 러시 3연 · <b>L</b> 스매시 강', pw: 5, sp: 1, hp: 4 },
-      chaechae: { style: '히든 · 문화생활 인플루언서', st: '<b>기본</b> 냥냥펀치(초고속·경량) · <b>U</b> 냥냥 4연타 · <b>I</b> 고양이 할퀴기 · <b>L</b> <b>릴스</b>(상대를 붙잡고 같이 춤 → 다운)<br><i>기 게이지 15% 빨리 참</i>', pw: 1, sp: 5, hp: 2 },
+      chaechae: { style: '히든 · 문화생활 인플루언서', st: '<b>기본</b> 냥냥펀치(초고속·경량) · <b>U</b> 냥냥 4연타 · <b>I</b> 고양이 할퀴기 · <b>L</b> <b>릴스 촬영</b>(상대가 강제로 유행 댄스 → 오글거려 쓰러짐)<br><i>기 게이지 15% 빨리 참</i>', pw: 1, sp: 5, hp: 2 },
       jjeonghyo: { style: '히든 · 3대 500', st: '<b>기본</b> 덤벨 펀치(무겁고 느림) · <b>U</b> 덤벨 훅 · <b>I</b> 데드리프트 업(띄움) · <b>L</b> <b>바벨 내려찍기</b><br><i>기 게이지 20% 느림 · 체력 최고</i>', pw: 5, sp: 2, hp: 5 },
       ppyeo: { style: '히든 · 오토바이 라이더', st: '<b>기본</b> 뼈펀치(리치 최장) · <b>U</b> 뼈 찌르기 · <b>I</b> 회전 팔꿈치 · <b>L</b> <b>오토바이 돌진</b>(소음공해·날려버림)<br><i>몸이 얇아 맷집 약함</i>', pw: 3, sp: 4, hp: 2 },
     };
@@ -1066,7 +1066,7 @@ class Game {
           this.music.setDuck(0.3); setTimeout(() => this.music.setDuck(1), 3600);
           this.applySlow(f.slot, 0.35, 0.25);
           if (f.slot === this.localSlot || (tg && tg.slot === this.localSlot)) this.finisherWindFx();
-          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, e.kind === 'reels' ? '문화 충격!!' : e.kind === 'barbell' ? '3대 500!!' : '교통사고!!', 'groggy');
+          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, e.kind === 'reels' ? '릴스 촬영 중!!' : e.kind === 'barbell' ? '3대 500!!' : '교통사고!!', 'groggy');
           if (this.mode === 'host') this.pendingEvents.push({ t: 'ult', s: f.slot, b: e.target, k: e.kind });
           continue;
         }
@@ -1275,13 +1275,13 @@ class Game {
       const axis = new THREE.Vector3().subVectors(tg.pos, ultF.pos).setY(0).normalize();
       const sideV = new THREE.Vector3(axis.z, 0, -axis.x);
       const k = ultF.ultKind;
-      const up = k === 'reels' ? 2.9 : k === 'barbell' ? 2.6 : 2.2;
-      const back = k === 'reels' ? 6.6 : 5.6;
+      const up = k === 'reels' ? 1.75 : k === 'barbell' ? 2.6 : 2.2;
+      const back = k === 'reels' ? 3.6 : 5.6;
       const want = mid.clone().addScaledVector(sideV, back * 0.75).addScaledVector(axis, -back * 0.5).add(new THREE.Vector3(0, up, 0));
       this.camera.position.lerp(want, Math.min(1, rawDt * 3.4));
-      const look = tg.pos.clone().add(new THREE.Vector3(0, k === 'reels' ? 1.9 : 1.3, 0));
+      const look = tg.pos.clone().add(new THREE.Vector3(0, k === 'reels' ? 1.15 : 1.3, 0));
       this.camera.lookAt(look);
-      const wantFov = k === 'reels' ? 68 : 58;
+      const wantFov = k === 'reels' ? 46 : 58;
       this.camera.fov += (wantFov - this.camera.fov) * Math.min(1, rawDt * 3);
       this.camera.updateProjectionMatrix();
       this.camCtl.initialized = false;   // 연출 끝나면 자연스럽게 다시 붙는다

@@ -1042,32 +1042,16 @@ function outlined(geo, color, group, pos, scale = 1) {
   return m;
 }
 
-// ---- 낙하물: 도자기 / 액자 / 석상 / 두루마리 ----
-function makeArtifact(i) {
+// ---- 릴스 촬영 소품: 하트 / 좋아요 아이콘 ----
+function makeHeart() {
   const g = new THREE.Group();
-  const kind = i % 4;
-  if (kind === 0) {           // 청자 도자기
-    const body = outlined(new THREE.LatheGeometry([
-      new THREE.Vector2(0.001, -0.22), new THREE.Vector2(0.11, -0.16), new THREE.Vector2(0.16, 0.0),
-      new THREE.Vector2(0.1, 0.14), new THREE.Vector2(0.13, 0.2), new THREE.Vector2(0.08, 0.24),
-    ], 14), 0x4a9d8f, g);
-    outlined(new THREE.TorusGeometry(0.1, 0.014, 6, 16), 0xe8d7a6, g, new THREE.Vector3(0, 0.06, 0));
-  } else if (kind === 1) {    // 금빛 액자 그림
-    const frame = outlined(new THREE.BoxGeometry(0.46, 0.34, 0.035), 0xd9a441, g);
-    const canvas = new THREE.Mesh(new THREE.PlaneGeometry(0.38, 0.26), TOON(0xf3e9d2));
-    canvas.position.z = 0.02; frame.add(canvas);
-    const paint = new THREE.Mesh(new THREE.CircleGeometry(0.08, 16), TOON(0x3f6fb5));
-    paint.position.set(-0.06, 0.02, 0.003); canvas.add(paint);
-    const paint2 = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.08), TOON(0xc0572f));
-    paint2.position.set(0.08, -0.05, 0.003); canvas.add(paint2);
-  } else if (kind === 2) {    // 대리석 흉상
-    outlined(new THREE.CylinderGeometry(0.13, 0.17, 0.16, 10), 0xe9e6de, g, new THREE.Vector3(0, -0.16, 0));
-    outlined(new THREE.SphereGeometry(0.12, 14, 10), 0xf1efe8, g, new THREE.Vector3(0, 0.02, 0));
-    outlined(new THREE.BoxGeometry(0.1, 0.09, 0.14), 0xf1efe8, g, new THREE.Vector3(0, -0.06, 0.02));
-  } else {                    // 두루마리 / 고서
-    const b = outlined(new THREE.BoxGeometry(0.3, 0.38, 0.07), 0x8a2b2b, g);
-    outlined(new THREE.BoxGeometry(0.27, 0.35, 0.08), 0xf6f1e2, b, new THREE.Vector3(0.012, 0, 0.002));
+  const mat = TOON(0xff4f8b);
+  for (const sx of [-1, 1]) {
+    const lobe = new THREE.Mesh(new THREE.SphereGeometry(0.075, 12, 10), mat);
+    lobe.position.set(sx * 0.055, 0.045, 0); g.add(lobe);
   }
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.105, 0.16, 12), mat);
+  tip.position.y = -0.055; tip.rotation.x = Math.PI; g.add(tip);
   return g;
 }
 
@@ -1082,23 +1066,37 @@ class UltimateFx {
     if (!target) return;
     const root = new THREE.Group();
     this.scene.add(root);
-    const item = { kind, root, t: 0, dur: 3.2, parts: [], attacker, target, tp: target.pos.clone() };
-    if (kind === 'reels') this._buildArtifacts(item);
+    const item = { kind, root, t: 0, dur: kind === 'reels' ? 3.4 : 3.2, parts: [], attacker, target, tp: target.pos.clone() };
+    if (kind === 'reels') this._buildReels(item, attacker);
     else if (kind === 'barbell') this._buildRack(item);
     else if (kind === 'bike') this._buildBike(item, attacker);
     this.active.push(item);
   }
 
-  _buildArtifacts(item) {
-    // 표적 위 하늘에서 24개가 시간차로 쏟아진다
-    for (let i = 0; i < 34; i++) {
-      const a = makeArtifact(i);
-      const ang = Math.random() * Math.PI * 2, rr = Math.random() * 1.15;
-      a.position.set(item.tp.x + Math.cos(ang) * rr, 5.2 + Math.random() * 4.2, item.tp.z + Math.sin(ang) * rr);
-      a.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
-      a.scale.setScalar(1.15 + Math.random() * 0.75);
-      item.root.add(a);
-      item.parts.push({ m: a, delay: 0.1 + i * 0.062, vy: 0, spin: new THREE.Vector3((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6), landed: 0 });
+  _buildReels(item, attacker) {
+    const g = item.root;
+    // 세로형 스마트폰 (촬영자 손 위치에 붙는다)
+    const phone = new THREE.Group();
+    const body = outlined(new THREE.BoxGeometry(0.16, 0.3, 0.025), 0x15151c, phone);
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.14, 0.27), TOON(0xdff1ff));
+    screen.position.z = 0.016; body.add(screen);
+    const rec = new THREE.Mesh(new THREE.CircleGeometry(0.018, 12), TOON(0xff2d2d));
+    rec.position.set(-0.045, 0.1, 0.002); screen.add(rec);
+    item.rec = rec;
+    g.add(phone); item.phone = phone;
+    // 링라이트 (촬영 조명)
+    const ring = outlined(new THREE.TorusGeometry(0.34, 0.05, 8, 24), 0xfff4cf, g);
+    ring.material.emissive = new THREE.Color(0xfff0b0); ring.material.emissiveIntensity = 1.4;
+    item.ring = ring;
+    const light = new THREE.PointLight(0xfff0c0, 0, 6);
+    g.add(light); item.light = light;
+    // 떠오르는 하트 / 좋아요
+    item.hearts = [];
+    for (let i = 0; i < 16; i++) {
+      const h = makeHeart();
+      h.visible = false; h.scale.setScalar(0.5 + Math.random() * 0.5);
+      g.add(h);
+      item.hearts.push({ m: h, delay: 0.35 + i * 0.16, t: 0, x: (Math.random() - 0.5) * 1.4, z: (Math.random() - 0.5) * 0.8, spd: 1.1 + Math.random() * 0.8 });
     }
   }
 
@@ -1193,7 +1191,7 @@ class UltimateFx {
       const it = this.active[i];
       it.t += dt;
       const tp = it.target ? it.target.pos : it.tp;
-      if (it.kind === 'reels') this._updArtifacts(it, dt, tp);
+      if (it.kind === 'reels') this._updReels(it, dt, tp);
       else if (it.kind === 'barbell') this._updRack(it, dt, tp);
       else if (it.kind === 'bike') this._updBike(it, dt, tp);
       if (it.t > it.dur + 1.4) {
@@ -1204,21 +1202,47 @@ class UltimateFx {
     }
   }
 
-  _updArtifacts(it, dt, tp) {
-    for (const p of it.parts) {
-      if (it.t < p.delay) continue;
-      if (p.landed) { p.landed += dt; p.m.rotation.z += dt * 2; p.m.scale.multiplyScalar(Math.max(0.0001, 1 - dt * 2.2)); if (p.landed > 0.55) p.m.visible = false; continue; }
-      p.vy -= 26 * dt;
-      p.m.position.y += p.vy * dt;
-      // 낙하 중 목표 쪽으로 살짝 끌린다 (확실히 맞게)
-      p.m.position.x += (tp.x - p.m.position.x) * Math.min(1, dt * 1.6);
-      p.m.position.z += (tp.z - p.m.position.z) * Math.min(1, dt * 1.6);
-      p.m.rotation.x += p.spin.x * dt; p.m.rotation.y += p.spin.y * dt; p.m.rotation.z += p.spin.z * dt;
-      if (p.m.position.y <= 0.35) {
-        p.m.position.y = 0.35; p.landed = 0.0001;
-        this.audio.impact(0.55); if (Math.random() < 0.4) this.audio.clang(0.35);
-        if (this.fx) this.fx.flash = Math.max(this.fx.flash || 0, 0.12);
-      }
+  _updReels(it, dt, tp) {
+    const u = it.t, att = it.attacker;
+    // 폰: 촬영자 앞 가슴 높이에서 상대를 향해 겨눈다 (살짝 흔들리는 핸드헬드)
+    if (it.phone && att) {
+      const aim = new THREE.Vector3().subVectors(tp, att.pos).setY(0).normalize();
+      const p = att.pos.clone().addScaledVector(aim, 0.42).add(new THREE.Vector3(0, 1.28 + Math.sin(u * 5) * 0.02, 0));
+      it.phone.position.lerp(p, Math.min(1, dt * 12));
+      it.phone.lookAt(tp.x, 1.15, tp.z);
+      it.phone.rotateY(Math.PI);
+      it.phone.rotation.z += Math.sin(u * 7) * 0.03;
+      if (it.rec) it.rec.visible = Math.sin(u * 9) > -0.2;    // REC 점멸
+    }
+    // 링라이트: 상대 앞쪽에서 비춘다
+    if (it.ring && att) {
+      const aim = new THREE.Vector3().subVectors(tp, att.pos).setY(0).normalize();
+      const rp = tp.clone().addScaledVector(aim, -0.95).add(new THREE.Vector3(0, 1.5, 0));
+      it.ring.position.lerp(rp, Math.min(1, dt * 6));
+      it.ring.lookAt(tp.x, 1.2, tp.z);
+      const on = Math.min(1, u / 0.3) * (u > it.dur - 0.5 ? Math.max(0, (it.dur - u) / 0.5) : 1);
+      it.ring.scale.setScalar(0.6 + 0.4 * on);
+      if (it.light) { it.light.position.copy(it.ring.position); it.light.intensity = 9 * on; }
+    }
+    // 하트가 상대 주변에서 떠오른다 (좋아요 폭발)
+    for (const h of it.hearts) {
+      if (u < h.delay) continue;
+      h.t += dt;
+      if (h.t === dt) { h.m.visible = true; h.m.position.set(tp.x + h.x, 0.9, tp.z + h.z); }
+      h.m.position.y += h.spd * dt;
+      h.m.position.x += Math.sin(h.t * 3 + h.x * 5) * 0.4 * dt;
+      h.m.rotation.z = Math.sin(h.t * 4) * 0.25;
+      const fade = Math.max(0, 1 - h.t / 1.6);
+      h.m.scale.setScalar(Math.max(0.001, (0.5 + 0.5 * Math.min(1, h.t * 4)) * fade));
+      if (fade <= 0) h.m.visible = false;
+    }
+    // 셔터 플래시 (3회)
+    if (!it.flashes) it.flashes = 0;
+    const want = u > 2.7 ? 3 : u > 1.7 ? 2 : u > 0.7 ? 1 : 0;
+    if (want > it.flashes) {
+      it.flashes = want;
+      this.audio.shutter();
+      if (this.fx) this.fx.flash = Math.max(this.fx.flash || 0, 0.45);
     }
   }
 
@@ -3295,7 +3319,7 @@ class Fighter {
       tg.ultDmgRate = tg.ultDmg / dur;
       d.consume();
       this.audio.finisherWind(0.5);
-      const line = fk === 'reels' ? '이건 문화 충격이야!' : fk === 'barbell' ? '자, 10회 3세트 간다!' : '어… 이거 무거운데—!!';
+      const line = fk === 'reels' ? '잡았다! 릴스 각이야, 찍는다!' : fk === 'barbell' ? '자, 10회 3세트 간다!' : '어… 이거 무거운데—!!';
       this.subs.show(line, { duration: 1.6, strong: true });
       this.events.push({ type: 'ultStart', kind: fk, target: tg.slot, charge });
       return true;
@@ -3798,9 +3822,13 @@ class Fighter {
       }
       const k = this.ultKind;
       if (k === 'reels') {
-        // 손을 하늘로 뻗어 유물을 불러내고, 폰으로 촬영하는 포즈
-        p.shRX += -2.75; p.shRZ += -0.45; p.elR += -0.25; p.shLX += -1.6; p.elL += -1.5; p.shLY += -0.4;
-        p.headX += -0.45; p.waistX += -0.2; p.hipsY += Math.abs(Math.sin(t * 6)) * 0.05;
+        // 폰을 두 손으로 들고 촬영: 살짝 무릎 굽혀 앵글 잡고 리듬 타기
+        const bob = Math.sin(t * 5.5);
+        p.shRX += -1.55; p.shRY += 0.28; p.elR += -1.25;
+        p.shLX += -1.45; p.shLY += -0.3; p.elL += -1.35;
+        p.headX += -0.18 + bob * 0.05; p.headY += bob * 0.12;
+        p.waistX += 0.12; p.hipsY += -0.06 + Math.abs(bob) * 0.05; p.hipsX += bob * 0.05;
+        p.thighLX += -0.16; p.thighRX += -0.16; p.shinL += 0.28; p.shinR += 0.28;
       } else if (k === 'barbell') {
         // 팔짱 끼고 카운트 세기 → 마지막엔 손 내리기
         p.shLX += -0.95; p.elL += -2.35; p.shLY += -1.0; p.shRX += -0.9; p.elR += -2.35; p.shRY += 1.0;
@@ -3839,10 +3867,38 @@ class Fighter {
       const tick = (this.ultDmgRate || 0) * dt;
       if (tick > 0 && !this.ko) { this.hp = Math.max(0, this.hp - tick); if (this.hp <= 0) { this._die(); } }
       if (k === 'reels') {
-        // 머리 감싸고 쏟아지는 유물을 맞는다
-        p.shLX += -2.2; p.shRX += -2.2; p.elL += -2.2; p.elR += -2.2; p.shLZ += 0.5; p.shRZ += -0.5;
-        p.headX += 0.35 + Math.sin(t * 22) * 0.12; p.waistX += 0.45; p.hipsY += -0.16 + Math.abs(Math.sin(t * 9)) * 0.05;
-        this.rattle = Math.max(this.rattle, 0.5);
+        // ---- 강제 유행 댄스 → 오글거려 주저앉음 ----
+        const u = 3.4 - this.ultVictimT;
+        const beat = t * 9.2;                      // 비트
+        const sw = Math.sin(beat), sw2 = Math.sin(beat * 2);
+        if (u < 0.9) {
+          // ① 양손 위로 흔들기 (하트 시그니처)
+          p.shLX += -2.7 + sw * 0.35; p.shRX += -2.7 - sw * 0.35; p.elL += -0.7; p.elR += -0.7;
+          p.shLZ += 0.45; p.shRZ += -0.45;
+          p.hipsX += sw * 0.12; p.waistY += sw * 0.3; p.headY += sw * 0.35; p.hipsY += Math.abs(sw2) * 0.08;
+        } else if (u < 1.8) {
+          // ② 허리 튕기며 사이드 스텝
+          p.hipsX += sw * 0.2; p.hipsRotY += sw * 0.5; p.waistY += -sw * 0.45; p.waistZ += sw2 * 0.18;
+          p.shLX += -1.5 - Math.max(0, sw) * 0.9; p.shRX += -1.5 - Math.max(0, -sw) * 0.9;
+          p.elL += -1.5; p.elR += -1.5; p.headZ += sw2 * 0.22; p.headY += sw * 0.3;
+          p.thighLX += sw * 0.3; p.thighRX += -sw * 0.3; p.shinL += Math.max(0, sw) * 0.5; p.shinR += Math.max(0, -sw) * 0.5;
+        } else if (u < 2.6) {
+          // ③ 손가락 하트 + 윙크 포즈 (카메라 정면)
+          const k2 = Math.min(1, (u - 1.8) / 0.25);
+          p.shRX += -2.35 * k2; p.shRY += 0.55 * k2; p.elR += -1.9 * k2; p.shRZ += -0.35 * k2;
+          p.shLX += -1.0 * k2; p.elL += -2.0 * k2; p.shLY += -0.55 * k2;
+          p.headZ += 0.28 * k2 + sw2 * 0.08; p.headX += -0.18 * k2; p.hipsY += Math.abs(sw2) * 0.05;
+          p.hipsRotY += sw * 0.15;
+        } else {
+          // ④ 정신 차리고 오글거림 폭발 → 얼굴 감싸고 배배 꼬며 주저앉음
+          const k2 = Math.min(1, (u - 2.6) / 0.8);
+          p.shLX += -2.5 + 0.2 * k2; p.shRX += -2.5 + 0.2 * k2; p.elL += -2.5; p.elR += -2.5;   // 두 손으로 얼굴 가림
+          p.shLZ += 0.6; p.shRZ += -0.6;
+          p.headX += 0.55 * k2; p.waistX += 0.85 * k2; p.waistZ += Math.sin(t * 7) * 0.22 * k2;
+          p.hipsY += -0.6 * k2; p.thighLX += -1.15 * k2; p.thighRX += -1.05 * k2; p.shinL += 1.9 * k2; p.shinR += 1.8 * k2;
+          p.hipsRotY += Math.sin(t * 5) * 0.2 * k2;
+          this.rattle = Math.max(this.rattle, 0.3 * k2);
+        }
       } else if (k === 'barbell') {
         // 강제 스쿼트 3회 → 마지막에 깔려 주저앉음
         const u = 3.6 - this.ultVictimT;
@@ -5630,7 +5686,7 @@ class Game {
       mashiba: { style: '히트맨 · 최장 리치', st: '<b>SPACE</b> 플리커 러시 · <b>U</b> 플리커 3연(무예비) · <b>I</b> 초핑 라이트 · <b>L</b> 초핑 라이트 강', pw: 3, sp: 4, hp: 3 },
       miyata: { style: '아웃복서 · 카운터', st: '<b>SPACE</b> 카운터 스탠스(피격 시 자동 회피→졸트) · <b>U</b> 졸트 · <b>I</b> 백스텝 잽 · <b>L</b> 졸트 블로', pw: 2, sp: 5, hp: 2 },
       sendo: { style: '파워 슬러거 · 느리지만 한 방', st: '<b>U</b> 스매시(띄움) · <b>I</b> 러시 3연 · <b>L</b> 스매시 강', pw: 5, sp: 1, hp: 4 },
-      chaechae: { style: '히든 · 문화생활 인플루언서', st: '<b>기본</b> 냥냥펀치(초고속·경량) · <b>U</b> 냥냥 4연타 · <b>I</b> 고양이 할퀴기 · <b>L</b> <b>릴스</b>(상대를 붙잡고 같이 춤 → 다운)<br><i>기 게이지 15% 빨리 참</i>', pw: 1, sp: 5, hp: 2 },
+      chaechae: { style: '히든 · 문화생활 인플루언서', st: '<b>기본</b> 냥냥펀치(초고속·경량) · <b>U</b> 냥냥 4연타 · <b>I</b> 고양이 할퀴기 · <b>L</b> <b>릴스 촬영</b>(상대가 강제로 유행 댄스 → 오글거려 쓰러짐)<br><i>기 게이지 15% 빨리 참</i>', pw: 1, sp: 5, hp: 2 },
       jjeonghyo: { style: '히든 · 3대 500', st: '<b>기본</b> 덤벨 펀치(무겁고 느림) · <b>U</b> 덤벨 훅 · <b>I</b> 데드리프트 업(띄움) · <b>L</b> <b>바벨 내려찍기</b><br><i>기 게이지 20% 느림 · 체력 최고</i>', pw: 5, sp: 2, hp: 5 },
       ppyeo: { style: '히든 · 오토바이 라이더', st: '<b>기본</b> 뼈펀치(리치 최장) · <b>U</b> 뼈 찌르기 · <b>I</b> 회전 팔꿈치 · <b>L</b> <b>오토바이 돌진</b>(소음공해·날려버림)<br><i>몸이 얇아 맷집 약함</i>', pw: 3, sp: 4, hp: 2 },
     };
@@ -6524,7 +6580,7 @@ class Game {
           this.music.setDuck(0.3); setTimeout(() => this.music.setDuck(1), 3600);
           this.applySlow(f.slot, 0.35, 0.25);
           if (f.slot === this.localSlot || (tg && tg.slot === this.localSlot)) this.finisherWindFx();
-          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, e.kind === 'reels' ? '문화 충격!!' : e.kind === 'barbell' ? '3대 500!!' : '교통사고!!', 'groggy');
+          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, e.kind === 'reels' ? '릴스 촬영 중!!' : e.kind === 'barbell' ? '3대 500!!' : '교통사고!!', 'groggy');
           if (this.mode === 'host') this.pendingEvents.push({ t: 'ult', s: f.slot, b: e.target, k: e.kind });
           continue;
         }
@@ -6733,13 +6789,13 @@ class Game {
       const axis = new THREE.Vector3().subVectors(tg.pos, ultF.pos).setY(0).normalize();
       const sideV = new THREE.Vector3(axis.z, 0, -axis.x);
       const k = ultF.ultKind;
-      const up = k === 'reels' ? 2.9 : k === 'barbell' ? 2.6 : 2.2;
-      const back = k === 'reels' ? 6.6 : 5.6;
+      const up = k === 'reels' ? 1.75 : k === 'barbell' ? 2.6 : 2.2;
+      const back = k === 'reels' ? 3.6 : 5.6;
       const want = mid.clone().addScaledVector(sideV, back * 0.75).addScaledVector(axis, -back * 0.5).add(new THREE.Vector3(0, up, 0));
       this.camera.position.lerp(want, Math.min(1, rawDt * 3.4));
-      const look = tg.pos.clone().add(new THREE.Vector3(0, k === 'reels' ? 1.9 : 1.3, 0));
+      const look = tg.pos.clone().add(new THREE.Vector3(0, k === 'reels' ? 1.15 : 1.3, 0));
       this.camera.lookAt(look);
-      const wantFov = k === 'reels' ? 68 : 58;
+      const wantFov = k === 'reels' ? 46 : 58;
       this.camera.fov += (wantFov - this.camera.fov) * Math.min(1, rawDt * 3);
       this.camera.updateProjectionMatrix();
       this.camCtl.initialized = false;   // 연출 끝나면 자연스럽게 다시 붙는다
