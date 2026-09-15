@@ -759,6 +759,41 @@ const SPECIALS = {
       p.shinL += 1.2 * w - 0.5 * s; p.shinR += 1.2 * w - 0.5 * s; p.chestX += 0.3 * w - 0.25 * s; p.headX += -0.3 * s;
     },
   },
+  // ---- 히든: 오승현 (빵) ----
+  suddenSmack: {
+    name: 'いきなり平手', ko: '갑자기 때리기', side: 'R', dur: 0.24, power: 1.15, cd: 5, heavy: false, quick: true, staggerT: 1.5, step: 4.2, counterMul: 1.5,
+    wind: { x: 0.35, y: 0.55, z: 0.6, el: -2.45 }, strike: { x: -1.85, y: -0.5, z: 0.45, el: -0.1 },
+    body(p, w, s, sgn) { p.waistY += sgn * (0.2 * w - 0.85 * s); p.headX += 0.12 * w - 0.3 * s; p.hipsZ += 0.3 * s; p.hipsY += -0.05 * w; },
+  },
+  breadThrow: {
+    name: 'パン投げ', ko: '빵 던지기', side: 'L', dur: 0.32, power: 0.8, cd: 4, heavy: false, quick: true, step: 1.4, staggerT: 0.8, hitRadius: 1.7,
+    wind: { x: 0.45, y: 0.5, z: 0.6, el: -2.3 }, strike: { x: -2.2, y: -0.3, z: 0.25, el: -0.15 },
+    body(p, w, s, sgn) { p.waistY += sgn * (0.4 * w - 0.7 * s); p.headX += -0.15 * s; },
+  },
+  // ---- 히든: 정주원 (삼각김밥) ----
+  onigiriThrow: {
+    name: 'おにぎり投げ', ko: '삼각김밥 던지기', side: 'R', dur: 0.3, power: 1.0, cd: 4.5, heavy: false, quick: true, step: 1.4, staggerT: 1.1, hitRadius: 1.8,
+    wind: { x: 0.5, y: 0.65, z: 0.7, el: -2.3 }, strike: { x: -2.25, y: -0.35, z: 0.3, el: -0.12 },
+    body(p, w, s, sgn) { p.waistY += sgn * (0.45 * w - 0.8 * s); p.chestY += sgn * (0.2 * w - 0.35 * s); p.headX += -0.18 * s; },
+  },
+  bellyBump: {
+    name: 'ベリーバンプ', ko: '배치기', side: 'L', dur: 0.46, power: 1.5, cd: 7, heavy: true, staggerT: 1.4, step: 4.0, launch: 0.5, zone: 'body',
+    wind: { x: 0.4, y: 0.3, z: 0.4, el: -2.1 }, strike: { x: -0.9, y: -0.2, z: 0.2, el: -1.2 },
+    body(p, w, s, sgn) { p.waistX += -0.35 * w + 0.6 * s; p.chestX += 0.3 * s; p.hipsZ += 0.4 * s; p.hipsY += 0.05 * w - 0.1 * s; },
+  },
+  // ---- 히든: 고코몽 (무감정) ----
+  babyKick: {
+    name: '育児キック', ko: '집가서 아기봐야돼 킥', side: 'R', dur: 0.44, power: 1.45, cd: 6, heavy: true, kick: true, staggerT: 1.5, step: 3.4, launch: 0.55, zone: 'body',
+    wind: { x: -0.2, y: 0.1, z: 0.2, el: -1.8 }, strike: { x: -0.6, y: 0.0, z: 0.1, el: -0.4 },
+    body(p, w, s, sgn) {
+      p.thighRX += -0.6 * w - 1.55 * s; p.shinR += 1.1 * w - 1.4 * s;
+      p.thighLX += 0.1 * w + 0.2 * s; p.shinL += 0.15 * s;
+      p.waistX += 0.15 * w - 0.35 * s; p.hipsY += -0.1 * w - 0.05 * s; p.headX += -0.1 * s;
+      p.shLX += -0.5 * s; p.shRX += -0.3 * s; p.elL += -0.4 * s;
+    },
+  },
+  lazyJab: {
+    name: 'だるパンチ', ko: '귀찮아 펀치 2연', burst: true, cd: 4 },
   // ---- 히든: 뼈석원 (하이바 / 녹차) ----
   helmetBash: {
     name: 'ヘルメットバッシュ', ko: '하이바 박치기', side: 'L', dur: 0.4, power: 1.5, cd: 6.5, heavy: true, staggerT: 1.5, step: 5.2, launch: 0.35,
@@ -769,7 +804,7 @@ const SPECIALS = {
     },
   },
   teaThrow: {
-    name: '緑茶スロー', ko: '녹차 투척', side: 'R', dur: 0.34, power: 0.95, cd: 4.5, heavy: false, quick: true, step: 1.0, staggerT: 0.9, reachBonus: 1.1,
+    name: '緑茶スロー', ko: '녹차 투척', side: 'R', dur: 0.34, power: 0.95, cd: 4.5, heavy: false, quick: true, step: 1.4, staggerT: 0.9, hitRadius: 1.6,
     wind: { x: 0.5, y: 0.6, z: 0.7, el: -2.35 }, strike: { x: -2.3, y: -0.35, z: 0.3, el: -0.1 },
     body(p, w, s, sgn) { p.waistY += sgn * (0.5 * w - 0.9 * s); p.chestY += sgn * (0.2 * w - 0.4 * s); p.waistX += 0.18 * w - 0.15 * s; p.headX += -0.2 * s; },
   },
@@ -796,6 +831,9 @@ const KITS = {
   chaechae:  { stance: 'flicker', finisher: 'reels',   U: 'marketerPunch', I: 'nyangRush', cdU: 5.5 },
   jjeonghyo: { stance: 'smash',   finisher: 'barbell', U: 'dumbbellPress', I: 'deadlift',  cdU: 6.5 },
   ppyeo:     { stance: 'counter', finisher: 'bike',    U: 'helmetBash',    I: 'teaThrow',  cdU: 5 },
+  ohsh:      { stance: 'counter', finisher: 'snackRain', U: 'suddenSmack',  I: 'breadThrow', cdU: 4.5 },
+  jungjuwon: { stance: 'smash',   finisher: 'cafeRush',  U: 'onigiriThrow', I: 'bellyBump', cdU: 4.5 },
+  gokomong:  { stance: 'counter', finisher: 'coldCut', U: 'babyKick',      I: 'lazyJab',   cdU: 6 },
 };
 
 const STANCE_LINES = {
@@ -809,6 +847,9 @@ const STANCE_LINES = {
 const HIDDEN_LINES = {
   chaechae: { intro: '난 문화생활을 좋아해~', max: '이거 릴스각인데?', fin: '자, 같이 춤춰!', u: '이번 분기 KPI 찍고 간다!', hit: ['냥!', '냥냥!', '이건 찍어야 해'] },
   jjeonghyo: { intro: '3대 500 미만 대화 금지.', max: '무게 올린다.', fin: '데드리프트… 받아!', u: '마지막 한 개 더!', hit: ['하압!', '한 세트 더!', '가볍네'] },
+  ohsh: { intro: '…빵, 빵이 좋아…', max: '자, 잠깐만…!', fin: '빵 다 떨어진다—!', u: '아, 진짜 짜증나!', hit: ['아!', '히잉', '자, 잠깐'] },
+  jungjuwon: { intro: '커피 좋아~', max: '배고픈데 한 판 더?', fin: '커피 마셔야 돼!!', u: '이거나 먹어!', hit: ['우걱', '냠', '헤드폰 벗겨지겠네'] },
+  gokomong: { intro: '…귀찮은데.', max: '빨리 끝내자.', fin: '그래서 어쩌라고.', u: '집 가서 아기 봐야 돼.', hit: ['…', '음', '하아'] },
   ppyeo: { intro: '난 먹어도 살 안 쪄.', max: '시동 건다.', fin: '부아아앙—!!', u: '헬멧은 필수지!', hit: ['뼈!', '뼈뼈!', '부릉'] },
 };
 return { SPECIALS, KITS, STANCE_LINES, HIDDEN_LINES };
@@ -1055,9 +1096,56 @@ function makeHeart() {
   return g;
 }
 
+// ---- 말풍선 (한국어 텍스트) ----
+function bubbleTexture(text, bg = '#ffffff', fg = '#1a1a22') {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 160;
+  const g = c.getContext('2d');
+  g.clearRect(0, 0, 512, 160);
+  g.fillStyle = bg; g.strokeStyle = '#111118'; g.lineWidth = 8;
+  const r = 34;
+  g.beginPath();
+  g.moveTo(r, 6); g.lineTo(512 - r, 6); g.quadraticCurveTo(506, 6, 506, r);
+  g.lineTo(506, 112 - r); g.quadraticCurveTo(506, 112, 512 - r, 112);
+  g.lineTo(300, 112); g.lineTo(268, 152); g.lineTo(250, 112);
+  g.lineTo(r, 112); g.quadraticCurveTo(6, 112, 6, 112 - r);
+  g.lineTo(6, r); g.quadraticCurveTo(6, 6, r, 6); g.closePath();
+  g.fill(); g.stroke();
+  g.fillStyle = fg; g.font = '900 52px "Noto Sans JP", "Apple SD Gothic Neo", sans-serif';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(text, 256, 60, 460);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function makeBubble(text, bg, fg) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.47), new THREE.MeshBasicMaterial({ map: bubbleTexture(text, bg, fg), transparent: true, depthWrite: false }));
+  return m;
+}
+
+// ---- 간식: 소금빵 / 호두과자 ----
+function makeSnack(i) {
+  const g = new THREE.Group();
+  if (i % 2 === 0) {                     // 소금빵 (길쭉한 롤 + 소금)
+    const roll = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.2, 5, 12), TOON(0xe0b064));
+    roll.rotation.z = Math.PI / 2; roll.scale.set(1, 1, 0.8); g.add(roll);
+    for (let k = 0; k < 5; k++) {
+      const salt = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.022, 0.022), TOON(0xffffff));
+      salt.position.set(-0.12 + k * 0.06, 0.09, (Math.random() - 0.5) * 0.06); g.add(salt);
+    }
+  } else {                               // 호두과자 (동그란 과자 + 갈색 무늬)
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.11, 14, 10), TOON(0xd7a052));
+    b.scale.set(1, 0.72, 1); g.add(b);
+    const nut = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 8), TOON(0x8a5a32));
+    nut.position.y = 0.055; nut.scale.set(1, 0.6, 1); g.add(nut);
+  }
+  return g;
+}
+
 class UltimateFx {
-  constructor(scene, audio, fx) {
-    this.scene = scene; this.audio = audio; this.fx = fx;
+  constructor(scene, audio, fx, camera = null) {
+    this.scene = scene; this.audio = audio; this.fx = fx; this.cam = camera;
     this.active = [];
   }
 
@@ -1066,8 +1154,12 @@ class UltimateFx {
     if (!target) return;
     const root = new THREE.Group();
     this.scene.add(root);
-    const item = { kind, root, t: 0, dur: kind === 'reels' ? 3.4 : 3.2, parts: [], attacker, target, tp: target.pos.clone() };
+    const DUR = { reels: 3.4, snackRain: 3.6, cafeRush: 3.2, coldCut: 3.4 };
+    const item = { kind, root, t: 0, dur: DUR[kind] || 3.2, parts: [], attacker, target, tp: target.pos.clone() };
     if (kind === 'reels') this._buildReels(item, attacker);
+    else if (kind === 'snackRain') this._buildSnackRain(item);
+    else if (kind === 'cafeRush') this._buildCafeRush(item, attacker);
+    else if (kind === 'coldCut') this._buildColdCut(item, attacker);
     else if (kind === 'barbell') this._buildRack(item);
     else if (kind === 'bike') this._buildBike(item, attacker);
     this.active.push(item);
@@ -1086,7 +1178,7 @@ class UltimateFx {
     g.add(phone); item.phone = phone;
     // 링라이트 (촬영 조명)
     const ring = outlined(new THREE.TorusGeometry(0.34, 0.05, 8, 24), 0xfff4cf, g);
-    ring.material.emissive = new THREE.Color(0xfff0b0); ring.material.emissiveIntensity = 1.4;
+    if (ring.material.emissive) { ring.material.emissive.set(0xfff0b0); ring.material.emissiveIntensity = 1.4; }
     item.ring = ring;
     const light = new THREE.PointLight(0xfff0c0, 0, 6);
     g.add(light); item.light = light;
@@ -1097,6 +1189,68 @@ class UltimateFx {
       h.visible = false; h.scale.setScalar(0.5 + Math.random() * 0.5);
       g.add(h);
       item.hearts.push({ m: h, delay: 0.35 + i * 0.16, t: 0, x: (Math.random() - 0.5) * 1.4, z: (Math.random() - 0.5) * 0.8, spd: 1.1 + Math.random() * 0.8 });
+    }
+  }
+
+  _buildSnackRain(item) {
+    // 정주원: 하늘에서 소금빵·호두과자가 쏟아진다
+    item.parts = [];
+    for (let i = 0; i < 46; i++) {
+      const sn = makeSnack(i);
+      const ang = Math.random() * Math.PI * 2, rr = Math.random() * 1.25;
+      sn.position.set(item.tp.x + Math.cos(ang) * rr, 4.6 + Math.random() * 4.6, item.tp.z + Math.sin(ang) * rr);
+      sn.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+      sn.scale.setScalar(1.0 + Math.random() * 0.6);
+      item.root.add(sn);
+      item.parts.push({ m: sn, delay: 0.1 + i * 0.05, vy: 0, spin: new THREE.Vector3((Math.random() - 0.5) * 7, (Math.random() - 0.5) * 7, (Math.random() - 0.5) * 7), landed: 0 });
+    }
+  }
+
+  _buildCafeRush(item, attacker) {
+    // 링 저편에 카페가 생긴다: 카운터 + 파라솔 + CAFE 간판 + 김 나는 커피
+    const g = item.root;
+    const aim = attacker ? new THREE.Vector3().subVectors(item.tp, attacker.pos).setY(0).normalize() : new THREE.Vector3(0, 0, 1);
+    const spot = (attacker ? attacker.pos.clone() : item.tp.clone()).addScaledVector(aim, 4.6);
+    spot.x = Math.max(-2.6, Math.min(2.6, spot.x)); spot.z = Math.max(-2.6, Math.min(2.6, spot.z));
+    item.cafeSpot = spot.clone();
+    const cafe = new THREE.Group(); cafe.position.copy(spot); g.add(cafe); item.cafe = cafe;
+    cafe.lookAt(attacker ? attacker.pos.x : 0, 0, attacker ? attacker.pos.z : 0);
+    outlined(new THREE.BoxGeometry(1.5, 0.75, 0.6), 0x6b4a32, cafe, new THREE.Vector3(0, 0.38, 0));       // 카운터
+    outlined(new THREE.BoxGeometry(1.6, 0.08, 0.7), 0x3c2b1e, cafe, new THREE.Vector3(0, 0.79, 0));
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.36), new THREE.MeshBasicMaterial({ map: bubbleTexture('CAFE', '#f6efe4', '#4b2e17'), transparent: true }));
+    sign.position.set(0, 1.5, 0.05); cafe.add(sign);
+    const pole = outlined(new THREE.CylinderGeometry(0.04, 0.04, 1.9, 8), 0x8a8a94, cafe, new THREE.Vector3(0.75, 0.95, -0.1));
+    const shade = outlined(new THREE.ConeGeometry(1.1, 0.42, 12), 0xc0392b, cafe, new THREE.Vector3(0.75, 2.0, -0.1));
+    const cup = outlined(new THREE.CylinderGeometry(0.1, 0.08, 0.22, 12), 0xf3f1ec, cafe, new THREE.Vector3(-0.45, 0.94, 0.1));
+    item.steam = [];
+    for (let i = 0; i < 6; i++) {
+      const p2 = outlined(new THREE.SphereGeometry(0.05, 8, 6), 0xffffff, cafe, new THREE.Vector3(-0.45, 1.1, 0.1));
+      p2.material.transparent = true; p2.material.opacity = 0.7;
+      item.steam.push({ m: p2, t: i * 0.25 });
+    }
+    cafe.scale.setScalar(0.01);
+  }
+
+  _buildColdCut(item, attacker) {
+    // 고코몽: 상대의 푸념 말풍선 → 칼차단(X) → 말풍선 산산조각
+    const g = item.root;
+    const LINES = ['요즘 너무 힘들어서…', '내 말 좀 들어봐…', '진짜 억울한 게…'];
+    item.bubbles = LINES.map((tx, i) => {
+      const b = makeBubble(tx, '#ffffff', '#1a1a22');
+      b.visible = false; g.add(b);
+      return { m: b, at: 0.25 + i * 0.75 };
+    });
+    item.cut = makeBubble('그래서 어쩌라고.', '#12131a', '#8fd6f2'); item.cut.visible = false; item.cut.scale.setScalar(1.25); g.add(item.cut);
+    // 차단 이펙트: 가로로 그어지는 파란 칼선
+    const slash = outlined(new THREE.BoxGeometry(2.6, 0.09, 0.09), 0x8fd6f2, g);
+    if (slash.material.emissive) { slash.material.emissive.set(0x8fd6f2); slash.material.emissiveIntensity = 1.6; }
+    slash.visible = false; g.add(slash); item.slash = slash;
+    // 깨진 조각
+    item.shards = [];
+    for (let i = 0; i < 14; i++) {
+      const sh = outlined(new THREE.BoxGeometry(0.16, 0.12, 0.02), 0xf2f4f8, g);
+      sh.visible = false; g.add(sh);
+      item.shards.push({ m: sh, v: new THREE.Vector3((Math.random() - 0.5) * 3, 1 + Math.random() * 2.2, (Math.random() - 0.5) * 3), spin: new THREE.Vector3(Math.random() * 6, Math.random() * 6, Math.random() * 6) });
     }
   }
 
@@ -1166,7 +1320,7 @@ class UltimateFx {
     bar.rotation.x = Math.PI / 2;
     const head = outlined(new THREE.SphereGeometry(0.13, 12, 10), 0xfff6d0, b, new THREE.Vector3(-0.78, 0.9, 0));
     head.scale.set(0.8, 1, 1);
-    head.material.emissive = new THREE.Color(0xffd98a); head.material.emissiveIntensity = 1.2;
+    if (head.material.emissive) { head.material.emissive.set(0xffd98a); head.material.emissiveIntensity = 1.2; }
     // 엠블럼 (파랑/흰 4분할 원)
     for (const sx of [-1, 1]) {
       const em = new THREE.Group();
@@ -1192,6 +1346,9 @@ class UltimateFx {
       it.t += dt;
       const tp = it.target ? it.target.pos : it.tp;
       if (it.kind === 'reels') this._updReels(it, dt, tp);
+      else if (it.kind === 'snackRain') this._updSnackRain(it, dt, tp);
+      else if (it.kind === 'cafeRush') this._updCafeRush(it, dt, tp);
+      else if (it.kind === 'coldCut') this._updColdCut(it, dt, tp);
       else if (it.kind === 'barbell') this._updRack(it, dt, tp);
       else if (it.kind === 'bike') this._updBike(it, dt, tp);
       if (it.t > it.dur + 1.4) {
@@ -1243,6 +1400,79 @@ class UltimateFx {
       it.flashes = want;
       this.audio.shutter();
       if (this.fx) this.fx.flash = Math.max(this.fx.flash || 0, 0.45);
+    }
+  }
+
+  _updSnackRain(it, dt, tp) {
+    for (const p of it.parts) {
+      if (it.t < p.delay) continue;
+      if (p.landed) { p.landed += dt; p.m.scale.multiplyScalar(Math.max(0.0001, 1 - dt * 2.4)); if (p.landed > 0.5) p.m.visible = false; continue; }
+      p.vy -= 24 * dt;
+      p.m.position.y += p.vy * dt;
+      p.m.position.x += (tp.x - p.m.position.x) * Math.min(1, dt * 1.5);
+      p.m.position.z += (tp.z - p.m.position.z) * Math.min(1, dt * 1.5);
+      p.m.rotation.x += p.spin.x * dt; p.m.rotation.y += p.spin.y * dt; p.m.rotation.z += p.spin.z * dt;
+      if (p.m.position.y <= 0.32) {
+        p.m.position.y = 0.32; p.landed = 0.0001;
+        this.audio.impact(0.4);
+        if (this.fx) this.fx.flash = Math.max(this.fx.flash || 0, 0.08);
+      }
+    }
+  }
+
+  _updCafeRush(it, dt, tp) {
+    const u = it.t;
+    if (it.cafe) {
+      const k = Math.min(1, u / 0.4);
+      it.cafe.scale.setScalar(0.01 + 0.99 * (1 - Math.pow(1 - k, 3)));
+      if (u > 2.9) { const f = Math.max(0, 1 - (u - 2.9) / 0.6); it.cafe.scale.setScalar(Math.max(0.001, f)); }
+      for (const st of it.steam) {
+        st.t += dt;
+        const q = (st.t % 1.2) / 1.2;
+        st.m.position.y = 1.1 + q * 0.6;
+        st.m.position.x = -0.45 + Math.sin(q * 6) * 0.06;
+        st.m.material.opacity = 0.7 * (1 - q);
+        st.m.scale.setScalar(0.6 + q * 0.9);
+      }
+    }
+  }
+
+  _updColdCut(it, dt, tp) {
+    const u = it.t, att = it.attacker;
+    for (const b of it.bubbles) {
+      const on = u > b.at && u < 2.05;
+      b.m.visible = on;
+      if (on) {
+        b.m.position.copy(tp).add(new THREE.Vector3(0, 2.05 + Math.sin(u * 3 + b.at) * 0.05, 0));
+        if (this.cam) b.m.lookAt(this.cam.position);
+        const k = Math.min(1, (u - b.at) / 0.18);
+        b.m.scale.setScalar(0.6 + 0.45 * k);
+      }
+    }
+    if (u > 2.05 && !it.cutDone) {
+      it.cutDone = true;
+      this.audio.counter(); this.audio.impact(0.9);
+      if (this.fx) this.fx.flash = Math.max(this.fx.flash || 0, 0.55);
+      for (const sh of it.shards) { sh.m.visible = true; sh.m.position.copy(tp).add(new THREE.Vector3((Math.random() - 0.5) * 0.9, 2.05, (Math.random() - 0.5) * 0.4)); }
+      if (it.slash) { it.slash.visible = true; it.slash.position.copy(tp).add(new THREE.Vector3(0, 2.05, 0)); }
+    }
+    if (it.slash && it.slash.visible) {
+      const k = Math.min(1, (u - 2.05) / 0.3);
+      it.slash.scale.set(0.2 + 1.3 * k, 1, 1);
+      it.slash.material.opacity = 1;
+      if (u > 2.6) it.slash.visible = false;
+    }
+    for (const sh of it.shards) {
+      if (!sh.m.visible) continue;
+      sh.v.y -= 9 * dt;
+      sh.m.position.addScaledVector(sh.v, dt);
+      sh.m.rotation.x += sh.spin.x * dt; sh.m.rotation.y += sh.spin.y * dt;
+      if (sh.m.position.y < 0.1) sh.m.visible = false;
+    }
+    if (it.cut) {
+      it.cut.visible = u > 2.1 && u < 3.2;
+      it.cut.position.copy(att ? att.pos : tp).add(new THREE.Vector3(0, 2.1, 0));
+      if (this.cam) it.cut.lookAt(this.cam.position);
     }
   }
 
@@ -1437,9 +1667,39 @@ const CHARACTERS = {
     prop: { height: 1.2, torsoW: 0.74, torsoD: 0.72, armR: 0.7, armLen: 1.32, legR: 0.72, legLen: 1.2, headS: 0.94, headY: 1.16, neck: 1.4, muscle: 0.1 },
     hp: 125, powerMul: 1.15, speedMul: 1.4, style: 'bone', gaugeMul: 1.0, hidden: true, sfx: 'bone',
   },
+  // 오승현: 가장 작고 하얀 피부. 빵을 들고 계속 먹는다. 소심하지만 갑자기 때린다
+  ohsh: {
+    name: 'OHSH', skin: 0xfff0e6, trunks: 0xfaf3ea, trunksTrim: 0xe8c9a0, trunksText: '',
+    bodyColor: 0xfdf6ec, sleeves: 0xfff0e6, pants: 0xe8dbc8,
+    gloves: 0xfff0e6, noGloves: true, shoes: 0xf4e7d4, shoesTrim: 0xd9a95c,
+    hair: 0x14131a, hairStyle: 'bobsharp', brows: 'thin', eyes: 'big', mouth: 'grit',
+    hold: { L: 'bread', R: 'croissant' }, oversize: 1,
+    prop: { height: 0.72, torsoW: 0.9, torsoD: 0.88, armR: 0.95, armLen: 0.82, legR: 0.84, legLen: 0.78, headS: 1.14, headY: 1.0, neck: 0.7, muscle: 0.15 },
+    hp: 105, powerMul: 0.9, speedMul: 1.7, style: 'bread', gaugeMul: 1.25, hidden: true, sfx: 'nyang', sleeveColor: 0xfdf6ec,
+  },
+  // 정주원: 뚱뚱한 보통 체격, 헤드폰. 삼각김밥을 계속 먹는다
+  jungjuwon: {
+    name: 'JUNGJUWON', skin: 0xf0c9a0, trunks: 0x2e2e38, trunksTrim: 0x5b5be0, trunksText: '',
+    bodyColor: 0x3c4250, sleeves: 0xf0c9a0, pants: 0x2a2f3a,
+    gloves: 0xf0c9a0, noGloves: true, shoes: 0x2e2e38, shoesTrim: 0x5b5be0,
+    hair: 0x1c1712, hairStyle: 'spiky', brows: 'thick', eyes: 'round', mouth: 'grin',
+    accessory: 'headphones', belly: 1,
+    hold: { L: 'onigiri', R: 'coffee' },
+    prop: { height: 1.0, torsoW: 1.34, torsoD: 1.34, armR: 1.14, armLen: 1.0, legR: 1.12, legLen: 0.94, headS: 1.04, headY: 1.0, neck: 0.85, muscle: 0.15 },
+    hp: 195, powerMul: 1.3, speedMul: 0.85, style: 'snack', gaugeMul: 0.9, hidden: true,
+  },
+  // 고코몽: 약간 작은 체격, 하늘색 긴 티. 감정이 없다
+  gokomong: {
+    name: 'GOKOMONG', skin: 0xecc6a4, trunks: 0x2b3440, trunksTrim: 0x7fd4f5, trunksText: '',
+    bodyColor: 0x8fd6f2, sleeves: 0x8fd6f2, pants: 0x3b4450,     // 하늘색 긴팔 티
+    gloves: 0xecc6a4, noGloves: true, shoes: 0x2b3440, shoesTrim: 0x8fd6f2,
+    hair: 0x1a1a20, hairStyle: 'bob', brows: 'thin', eyes: 'narrow', mouth: 'grit',
+    prop: { height: 0.94, torsoW: 0.98, torsoD: 0.94, armR: 0.94, armLen: 1.04, legR: 0.96, legLen: 0.96, headS: 1.02, headY: 1.0, neck: 0.95, muscle: 0.45 },
+    hp: 150, powerMul: 1.05, speedMul: 1.0, style: 'istp', gaugeMul: 0.95, hidden: true,
+  },
 };
 const CHARACTER_ORDER = ['ippo', 'mashiba', 'miyata', 'sendo'];
-const HIDDEN_ORDER = ['chaechae', 'jjeonghyo', 'ppyeo'];
+const HIDDEN_ORDER = ['chaechae', 'jjeonghyo', 'ppyeo', 'ohsh', 'jungjuwon', 'gokomong'];
 
 // 코치 (링 밖 코너에 서 있는 NPC): 트레이닝복, 글러브 없음
 const COACH_DEFS = [
@@ -1565,10 +1825,33 @@ function buildHeldItem(kind, glove, part, sx) {
     shell.scale.set(1.0, 1.02, 1.08);
     const chin = part(new THREE.BoxGeometry(0.2, 0.12, 0.16), 0xf6f7fa, shell, 0, -0.1, 0.09);
     const visor = part(new THREE.SphereGeometry(0.158, 18, 12, -1.05, 2.1, 0.75, 0.62), 0x35c8ff, shell, 0, 0.015, 0.02, false);
-    visor.material.emissive = new THREE.Color(0x1a6f96); visor.material.emissiveIntensity = 0.8;
+    if (visor.material.emissive) { visor.material.emissive.set(0x1a6f96); visor.material.emissiveIntensity = 0.8; }
     const stripe = part(new THREE.BoxGeometry(0.052, 0.3, 0.3), 0xe0222c, shell, 0, 0.02, -0.02, false);
     const stripe2 = part(new THREE.BoxGeometry(0.19, 0.045, 0.3), 0xe0222c, shell, 0, 0.1, -0.02, false);
     const vent = part(new THREE.BoxGeometry(0.1, 0.03, 0.06), 0x2b2b33, shell, 0, 0.12, 0.13, false);
+  } else if (kind === 'bread') {
+    // 바게트 (한 손) — 한 입 베어 문 자국
+    const loaf = part(new THREE.CapsuleGeometry(0.062, 0.26, 4, 12), 0xd9a95c, glove, 0, -0.02, 0.09);
+    loaf.rotation.x = 1.15; loaf.scale.set(1, 1, 0.85);
+    for (let i = 0; i < 3; i++) {
+      const cut = part(new THREE.BoxGeometry(0.03, 0.012, 0.09), 0xf0d9a8, loaf, 0, 0.06 - i * 0.07, 0.055, false);
+      cut.rotation.z = 0.5;
+    }
+  } else if (kind === 'croissant') {
+    const c = part(new THREE.TorusGeometry(0.085, 0.045, 8, 14, Math.PI * 1.15), 0xe0b062, glove, 0, -0.03, 0.08);
+    c.rotation.set(1.3, 0, 0.4);
+  } else if (kind === 'onigiri') {
+    // 삼각김밥: 흰 밥 삼각기둥 + 검은 김 띠
+    const rice = part(new THREE.CylinderGeometry(0.135, 0.135, 0.075, 3), 0xf8f6ef, glove, 0, -0.02, 0.07);
+    rice.rotation.set(Math.PI / 2, 0, Math.PI);
+    const nori = part(new THREE.CylinderGeometry(0.138, 0.138, 0.078, 3), 0x1c2a22, rice, 0, -0.045, 0);
+    nori.scale.set(1, 0.42, 1);
+  } else if (kind === 'coffee') {
+    const cup = part(new THREE.CylinderGeometry(0.058, 0.045, 0.17, 12), 0xf3f1ec, glove, 0, -0.04, 0.06);
+    part(new THREE.CylinderGeometry(0.062, 0.062, 0.02, 12), 0x8a5a3a, cup, 0, 0.09, 0);
+    const sleeve = part(new THREE.CylinderGeometry(0.062, 0.055, 0.06, 12), 0x8a6a4a, cup, 0, -0.005, 0, false);
+    const straw = part(new THREE.CylinderGeometry(0.008, 0.008, 0.16, 6), 0x2a6a3a, cup, 0.018, 0.16, 0);
+    straw.rotation.z = -0.25;
   } else if (kind === 'bottle') {
     const body = part(new THREE.CylinderGeometry(0.045, 0.05, 0.22, 12), 0x2f7d32, glove, 0, -0.05, 0.05);
     const label = part(new THREE.CylinderGeometry(0.052, 0.052, 0.085, 12), 0xf3f6e8, body, 0, -0.01, 0, false);
@@ -1674,9 +1957,9 @@ function buildBoxer(def, opts = {}) {
     shin.position.y = -legLen;
     thigh.add(shin);
     part(G.shin, def.pants || bodyCol, shin, 0, -legLen * 0.48, 0);
-    part(G.foot, def.shoes, shin, 0, -legLen, 0.05);
+    const foot = part(G.foot, def.shoes, shin, 0, -legLen, 0.05);
     part(G.footTrim, def.shoesTrim, shin, 0, -legLen - 0.04, 0.05, false);
-    return { thigh, shin };
+    return { thigh, shin, foot };
   };
   const legL = mkLeg(1);
   const legR = mkLeg(-1);
@@ -1686,6 +1969,11 @@ function buildBoxer(def, opts = {}) {
   waist.position.y = 0.06;
   hips.add(waist);
   part(G.torso, bodyCol, waist, 0, 0.3, 0);
+  // 뱃살 (정주원)
+  if (def.belly) {
+    const b = part(new THREE.SphereGeometry(0.22, 16, 12), bodyCol, waist, 0, 0.2, 0.06 * P.torsoD);
+    b.scale.set(1.25 * P.torsoW, 0.95, 0.95 * P.torsoD);
+  }
   // 근육 디테일 (가슴/복근) — 잔상엔 생략
   if (!ghost && P.muscle > 0.5) {
     part(G.pec, def.skin, waist, 0.1 * P.torsoW, 0.4, 0.11 * P.torsoD, false);
@@ -1718,6 +2006,14 @@ function buildBoxer(def, opts = {}) {
     sk.material.side = THREE.DoubleSide;
   }
 
+  // 오버핏: 상의를 한 겹 크게 덧입혀 헐렁해 보이게
+  if (def.oversize) {
+    const over = part(new THREE.CapsuleGeometry(0.235 * P.torsoW, 0.34, 5, 14), bodyCol, waist, 0, 0.3, 0);
+    over.scale.set(1.16, 1.06, 1.2);
+    const hem = part(new THREE.CylinderGeometry(0.27 * P.torsoW, 0.29 * P.torsoW, 0.1, 16, 1, true), bodyCol, waist, 0, 0.08, 0);
+    hem.material.side = THREE.DoubleSide;
+  }
+
   const chest = new THREE.Group();
   chest.position.y = 0.52;
   waist.add(chest);
@@ -1731,6 +2027,10 @@ function buildBoxer(def, opts = {}) {
     chest.add(shoulder);
     part(G.delt, bodyCol, shoulder, 0, 0.02, 0);
     part(G.upperArm, bodyCol, shoulder, 0, -armLen * 0.5, 0);
+    if (def.oversize) {   // 소매가 팔보다 크다
+      const sl = part(new THREE.CapsuleGeometry(0.098 * P.armR, armLen * 0.72, 4, 12), def.sleeveColor || bodyCol, shoulder, 0, -armLen * 0.52, 0);
+      sl.scale.set(1.12, 1, 1.12);
+    }
     const elbow = new THREE.Group();
     elbow.position.y = -armLen;
     shoulder.add(elbow);
@@ -1766,7 +2066,19 @@ function buildBoxer(def, opts = {}) {
   part(G.ear, def.skin, head, 0.165 * P.headS, hy, 0);
   part(G.ear, def.skin, head, -0.165 * P.headS, hy, 0);
   part(G.hair, def.hair, head, 0, hy + 0.03, -0.02);
-  if (def.hairStyle === 'bob') {
+  if (def.hairStyle === 'bobsharp') {
+    // 칼단발: 턱선에서 직선으로 뚝 떨어지는 실루엣 + 일자 앞머리
+    const cap = part(new THREE.SphereGeometry(0.208 * P.headS, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.62), def.hair, head, 0, hy + 0.015, -0.01);
+    cap.scale.set(1.03, 1.0, 1.06);
+    // 옆/뒤를 감싸는 원통형 컷 (아래가 일자로 잘린 느낌)
+    const cut = part(new THREE.CylinderGeometry(0.215 * P.headS, 0.225 * P.headS, 0.26, 18, 1, true), def.hair, head, 0, hy - 0.1, -0.012);
+    cut.material.side = THREE.DoubleSide;
+    cut.scale.set(1, 1, 1.02);
+    const backFill = part(new THREE.BoxGeometry(0.3 * P.headS, 0.26, 0.16), def.hair, head, 0, hy - 0.1, -0.11);
+    // 일자 앞머리 (뱅)
+    const bang = part(new THREE.BoxGeometry(0.3 * P.headS, 0.1, 0.075), def.hair, head, 0, hy + 0.085, 0.112 * P.headS);
+    bang.rotation.x = -0.1;
+  } else if (def.hairStyle === 'bob') {
     // 단발: 머리통을 감싸는 짧은 컷 + 앞머리 뱅
     const cap = part(new THREE.SphereGeometry(0.205 * P.headS, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.72), def.hair, head, 0, hy + 0.012, -0.012);
     cap.scale.set(1.02, 1.0, 1.04);
@@ -1834,6 +2146,18 @@ function buildBoxer(def, opts = {}) {
     const br = part(G.brow, 0x101018, head, sx * 0.068, eyeY + (narrow ? 0.03 : big ? 0.085 : 0.06), eyeZ + 0.015, false);
     br.rotation.z = -sx * (narrow ? 0.55 : big ? 0.12 : 0.32);
   }
+  // 헤드폰 (정주원)
+  if (def.accessory === 'headphones') {
+    const band = part(new THREE.TorusGeometry(0.2 * P.headS, 0.022, 8, 20, Math.PI), 0x24242c, head, 0, hy + 0.03, -0.01);
+    band.rotation.set(0, 0, 0);
+    for (const sx of [-1, 1]) {
+      const cup = part(new THREE.CylinderGeometry(0.075, 0.075, 0.05, 14), 0x2e2e3a, head, sx * 0.185 * P.headS, hy + 0.01, 0);
+      cup.rotation.z = Math.PI / 2;
+      const pad = part(new THREE.CylinderGeometry(0.06, 0.06, 0.055, 14), 0x14141a, cup, 0, -0.012, 0, false);
+      const led = part(new THREE.SphereGeometry(0.014, 8, 6), 0x5b5be0, cup, 0, 0.03, 0.045, false);
+      if (led.material.emissive) { led.material.emissive.set(0x5b5be0); led.material.emissiveIntensity = 1.2; }
+    }
+  }
   // 선글라스 (채채더킴)
   if (def.accessory === 'sunglasses') {
     const gl = new THREE.Group(); gl.position.set(0, eyeY + 0.012, eyeZ + 0.028); head.add(gl);
@@ -1857,6 +2181,7 @@ function buildBoxer(def, opts = {}) {
     shoulderL: armL.shoulder, elbowL: armL.elbow, gloveL: armL.glove,
     shoulderR: armR.shoulder, elbowR: armR.elbow, gloveR: armR.glove,
     thighL: legL.thigh, shinL: legL.shin, thighR: legR.thigh, shinR: legR.shin,
+    footL: legL.foot, footR: legR.foot,
     bodyMats, outlineMat,
     setOpacity(o) {
       for (let i = 0; i < bodyMats.length; i++) bodyMats[i].opacity = o;
@@ -3147,6 +3472,8 @@ class Fighter {
     this.events = [];
     this.gloveL = new THREE.Vector3(); this.gloveR = new THREE.Vector3();
     this.prevGloveL = new THREE.Vector3(); this.prevGloveR = new THREE.Vector3();
+    this.footL = new THREE.Vector3(); this.footR = new THREE.Vector3();
+    this.prevFootL = new THREE.Vector3(); this.prevFootR = new THREE.Vector3();
     this.squash = { L: 0, R: 0 }; this.flash = 0;
     this.tell = { L: 0, R: 0 };
     this.guardT = 99;
@@ -3179,6 +3506,7 @@ class Fighter {
     this.rig.root.updateMatrixWorld(true);
     this.rig.gloveL.getWorldPosition(this.gloveL);
     this.rig.gloveR.getWorldPosition(this.gloveR);
+    if (this.rig.footL) { this.rig.footL.getWorldPosition(this.footL); this.rig.footR.getWorldPosition(this.footR); }
     this.rig.headMesh.getWorldPosition(this.headPos);
     this.rig.chest.getWorldPosition(this.chestPos);
     this.rig.hips.getWorldPosition(this.hipsPos);
@@ -3241,6 +3569,8 @@ class Fighter {
     this.punch = createPunch(side, type, dur, power);
     this.punch.heavy = (type === 'hook' && this.dempsey.active && st === 'dempsey') || !!opts.heavy || (type === 'hook' && this.def.style === 'power');
     if (opts.kind) { this.punch.kind = opts.kind; Object.assign(this.punch, opts); }
+    if (opts.kick) this.punch.kick = true;
+    if (opts.hitRadius) this.punch.hitRadius = opts.hitRadius;
     if (opts.fromU) this.punch.fromU = true;
     if (opts.roll) this.punch.roll = true;
     if (opts.rollFinish) { this.punch.rollFinish = true; this.punch.staggerT = opts.staggerT || 0; }
@@ -3292,7 +3622,7 @@ class Fighter {
     if (kind === 'dumbbellPress') this.audio.clang(0.9);
     else if (kind === 'marketerPunch') { this.audio.clang(0.3); this.audio.shutter(); }
     else if (kind === 'helmetBash') this.audio.engine(0.5);
-    const ok = this.startPunch(spec.side, 'special', spec.dur, spec.power, { kind, heavy: !!spec.heavy, launch: spec.launch || 0, staggerT: uStag, zoneForce: spec.zone || null, liver: !!spec.liver, counterMul: spec.counterMul || 1, step: spec.step || 0, noTell: !!spec.quick, fromU: isU });
+    const ok = this.startPunch(spec.side, 'special', spec.dur, spec.power, { kind, heavy: !!spec.heavy, launch: spec.launch || 0, staggerT: uStag, zoneForce: spec.zone || null, liver: !!spec.liver, counterMul: spec.counterMul || 1, step: spec.step || 0, noTell: !!spec.quick, kick: !!spec.kick, hitRadius: spec.hitRadius || 0, fromU: isU });
     if (!ok) { this.cd[slotKey] = 0; this.armor = 0; return false; }
     if (spec.backstep) this.backstep = spec.backstep;
     this.subs.show(this.specialLine(spec, slotKey), { duration: 0.9, mid: !spec.quick });
@@ -3306,9 +3636,21 @@ class Fighter {
     const fk = this.kit.finisher;
     const F = FINISHERS[fk] || FINISHERS.finisherHook;
     const charge = d.charge;
-    const ULT = { reels: 3.4, barbell: 3.6, bike: 3.0 };
+    const ULT = { reels: 3.4, barbell: 3.6, bike: 3.0, snackRain: 3.6, coldCut: 3.4, cafeRush: 3.2 };
+    if (fk === 'cafeRush') {
+      // ---- 카페 돌격: 경로상의 모두에게 스턴 + 데미지 (넘어뜨리진 않는다) ----
+      this.ultT = 3.2; this.ultKind = fk; this.ultTarget = this.target;
+      this.punch = null; this.queue.length = 0; this.armor = 3.2;
+      this.rushHits = new Set();
+      this.rushPower = (16 + 4 * charge) * this.def.powerMul;
+      d.consume();
+      this.audio.engine(1.2); this.audio.finisherWind(0.4);
+      this.subs.show('커피 마셔야 돼—!!', { duration: 1.6, strong: true });
+      this.events.push({ type: 'ultStart', kind: fk, target: this.target ? this.target.slot : this.slot, charge });
+      return true;
+    }
     if (ULT[fk]) {
-      // ---- 연출형 필살 (히든 3인): 상대를 붙잡아두고 스크립트대로 진행 ----
+      // ---- 연출형 필살: 상대를 붙잡아두고 스크립트대로 진행 ----
       const tg = this.target;
       if (!tg || tg.ko || tg.downT > 0) return false;
       const dur = ULT[fk];
@@ -3319,7 +3661,7 @@ class Fighter {
       tg.ultDmgRate = tg.ultDmg / dur;
       d.consume();
       this.audio.finisherWind(0.5);
-      const line = fk === 'reels' ? '잡았다! 릴스 각이야, 찍는다!' : fk === 'barbell' ? '자, 10회 3세트 간다!' : '어… 이거 무거운데—!!';
+      const line = fk === 'reels' ? '잡았다! 릴스 각이야, 찍는다!' : fk === 'barbell' ? '자, 10회 3세트 간다!' : fk === 'snackRain' ? '비, 빵이 떨어진다…!' : fk === 'coldCut' ? '…그래서 어쩌라고.' : '어… 이거 무거운데—!!';
       this.subs.show(line, { duration: 1.6, strong: true });
       this.events.push({ type: 'ultStart', kind: fk, target: tg.slot, charge });
       return true;
@@ -3541,6 +3883,7 @@ class Fighter {
   update(dt, rawDt, input, fighters) {
     this.time += dt; this.rtime += rawDt;
     this.prevGloveL.copy(this.gloveL); this.prevGloveR.copy(this.gloveR);
+    this.prevFootL.copy(this.footL); this.prevFootR.copy(this.footR);
     this.events.length = 0;
     const d = this.dempsey;
     const st = this.stanceStyle;
@@ -3744,9 +4087,9 @@ class Fighter {
     let hitEvent = null;
     const others = fighters.filter((f) => f !== this && (!f.ko || f.koT < 1.2) && !(f.downT > 0));
     const _hit = { zone: 'head', point: new THREE.Vector3(), t: 0 };
-    const tryHit = (side, radius, mk) => {
-      const glove = side === 'L' ? this.gloveL : this.gloveR;
-      const prev = side === 'L' ? this.prevGloveL : this.prevGloveR;
+    const tryHit = (side, radius, mk, useFoot = false) => {
+      const glove = useFoot ? (side === 'L' ? this.footL : this.footR) : (side === 'L' ? this.gloveL : this.gloveR);
+      const prev = useFoot ? (side === 'L' ? this.prevFootL : this.prevFootR) : (side === 'L' ? this.prevGloveL : this.prevGloveR);
       for (const f of others) {
         _d.subVectors(f.pos, this.pos); _d.y = 0;
         if (_d.dot(this.forward) <= 0.2) continue;
@@ -3804,8 +4147,8 @@ class Fighter {
       if (!d.active) this.bufferedHook = null;
       if (!pu.hit && info.p > (pu.kind ? 0.24 : 0.3) && info.p < 0.66) {
         this._applyNow(p);
-        const radius = pu.type === 'flicker' ? (st === 'flicker' && d.active ? 0.55 : 0.48) : pu.kind ? 0.62 : 0.42;
-        hitEvent = tryHit(pu.side, radius, (tg, h) => { pu.hit = true; return { attacker: this, target: tg, side: pu.side, type: pu.type, power: pu.power, pos: h.point.clone(), zone: pu.zoneForce || h.zone, dir: this.forward.clone(), maxSpeed: d.maxSpeed, dempsey: d.active, finisher: !!pu.rollFinish, roll: !!pu.roll, charge: pu.rollFinish ? d.charge : 0, heavy: !!pu.heavy, counter: !!pu.counter || !!pu.forceCounter, counterMul: pu.counterMul || 1, launch: pu.launch || 0, liver: !!pu.liver, staggerT: pu.staggerT || 0, kind: pu.kind || null, fromU: !!pu.fromU }; });
+        const radius = pu.hitRadius || (pu.type === 'flicker' ? (st === 'flicker' && d.active ? 0.55 : 0.48) : pu.kind ? 0.62 : 0.42);
+        hitEvent = tryHit(pu.side, radius, (tg, h) => { pu.hit = true; return { attacker: this, target: tg, side: pu.side, type: pu.type, power: pu.power, pos: h.point.clone(), zone: pu.zoneForce || h.zone, dir: this.forward.clone(), maxSpeed: d.maxSpeed, dempsey: d.active, finisher: !!pu.rollFinish, roll: !!pu.roll, charge: pu.rollFinish ? d.charge : 0, heavy: !!pu.heavy, counter: !!pu.counter || !!pu.forceCounter, counterMul: pu.counterMul || 1, launch: pu.launch || 0, liver: !!pu.liver, staggerT: pu.staggerT || 0, kind: pu.kind || null, fromU: !!pu.fromU }; }, !!pu.kick);
       }
     }
 
@@ -3833,6 +4176,57 @@ class Fighter {
         // 팔짱 끼고 카운트 세기 → 마지막엔 손 내리기
         p.shLX += -0.95; p.elL += -2.35; p.shLY += -1.0; p.shRX += -0.9; p.elR += -2.35; p.shRY += 1.0;
         p.chestX += 0.12; p.headX += -0.1 + Math.sin(t * 3) * 0.06; p.hipsX += Math.sin(t * 1.6) * 0.04;
+      } else if (k === 'coldCut') {
+        // 무표정하게 듣다가 손 들어 차단 → 도리도리 (중요치 않아)
+        const u = 3.4 - this.ultT;
+        if (u < 2.0) {
+          p.shLX += -0.55; p.shRX += -0.5; p.elL += -1.1; p.elR += -1.05; p.headX += -0.05;
+          p.hipsX += Math.sin(t * 1.4) * 0.03;
+        } else if (u < 2.45) {
+          const k2 = Math.min(1, (u - 2.0) / 0.12);
+          p.shRX += -2.5 * k2; p.shRY += 0.15 * k2; p.elR += -0.25 * k2; p.shRZ += -0.3 * k2;   // 손바닥 들어 차단
+          p.waistX += -0.12 * k2; p.headX += -0.18 * k2;
+        } else {
+          p.shRX += -1.4; p.elR += -1.6; p.shRY += 0.3;
+          p.headY += Math.sin(t * 11) * 0.5;      // 도리도리
+          p.headZ += Math.sin(t * 5.5) * 0.06;
+          p.waistY += Math.sin(t * 11) * 0.1;
+        }
+      } else if (k === 'snackRain') {
+        // 하늘을 가리키며 빵을 부른다 → 흐뭇하게 구경
+        const u = 3.6 - this.ultT;
+        if (u < 0.9) {
+          const k2 = Math.min(1, u / 0.4);
+          p.shRX += -2.85 * k2; p.shRZ += -0.3 * k2; p.elR += -0.2 * k2; p.headX += -0.5 * k2;
+          p.shLX += -0.9 * k2; p.elL += -1.6 * k2;
+        } else {
+          p.shLX += -1.35; p.shRX += -1.3; p.elL += -1.9; p.elR += -1.9;   // 두 손 모으고 구경
+          p.headX += -0.25 + Math.sin(t * 3) * 0.05; p.hipsY += Math.abs(Math.sin(t * 4)) * 0.03;
+        }
+      } else if (k === 'cafeRush') {
+        // 커피를 향해 전력 질주: 팔 흔들고 상체 앞으로, 부딪히는 사람은 스턴
+        const u = 3.2 - this.ultT;
+        const run = Math.sin(t * 16);
+        p.waistX += 0.45; p.headX += -0.25; p.chestX += 0.2;
+        p.shLX += -1.1 + run * 0.9; p.shRX += -1.1 - run * 0.9; p.elL += -1.5; p.elR += -1.5;
+        p.thighLX += run * 0.85; p.thighRX += -run * 0.85; p.shinL += Math.max(0, run) * 1.2; p.shinR += Math.max(0, -run) * 1.2;
+        p.hipsY += Math.abs(Math.sin(t * 32)) * 0.05;
+        if (u > 0.35 && u < 2.7) {
+          this.pos.addScaledVector(this.forward, 7.2 * dt);
+          for (const o of fighters) {
+            if (o === this || o.ko || o.downT > 0) continue;
+            if (o.pos.distanceTo(this.pos) < 0.95 && !this.rushHits.has(o.slot)) {
+              this.rushHits.add(o.slot);
+              o.hp = Math.max(0, o.hp - (this.rushPower || 16));
+              o.stagger = Math.max(o.stagger, 1.6); o.staggerKind = 'normal'; o.staggerImmune = 0.6;
+              o.punch = null; o.queue.length = 0; o.rattle = 1;
+              o.knock.addScaledVector(this.forward, 4.2);
+              o.audio.stagger(); o.audio.impact(0.9);
+              if (o.hp <= 0) o._die();
+              this.events.push({ type: 'rushHit', target: o.slot });
+            }
+          }
+        }
       } else if (k === 'bike') {
         // ① 웅크려 들어올림 → ② 머리 위에서 휘청 → ③ 미끄러져 놓침 → ④ 반동으로 뒤로 휘청
         const u = (3.0 - this.ultT);
@@ -3908,6 +4302,90 @@ class Fighter {
         p.waistX += 0.3 * down; p.shLX += -2.6; p.shRX += -2.6; p.elL += -0.4; p.elR += -0.4; p.shLZ += 0.55; p.shRZ += -0.55;
         p.headX += -0.2 + Math.sin(t * 12) * 0.08 * down;
         if (u > 2.45) { p.headZ += Math.sin(t * 14) * 0.2; this.rattle = Math.max(this.rattle, 0.4); }
+      } else if (k === 'coldCut') {
+        // 무표정하게 듣다가 손 들어 차단 → 도리도리 (중요치 않아)
+        const u = 3.4 - this.ultT;
+        if (u < 2.0) {
+          p.shLX += -0.55; p.shRX += -0.5; p.elL += -1.1; p.elR += -1.05; p.headX += -0.05;
+          p.hipsX += Math.sin(t * 1.4) * 0.03;
+        } else if (u < 2.45) {
+          const k2 = Math.min(1, (u - 2.0) / 0.12);
+          p.shRX += -2.5 * k2; p.shRY += 0.15 * k2; p.elR += -0.25 * k2; p.shRZ += -0.3 * k2;   // 손바닥 들어 차단
+          p.waistX += -0.12 * k2; p.headX += -0.18 * k2;
+        } else {
+          p.shRX += -1.4; p.elR += -1.6; p.shRY += 0.3;
+          p.headY += Math.sin(t * 11) * 0.5;      // 도리도리
+          p.headZ += Math.sin(t * 5.5) * 0.06;
+          p.waistY += Math.sin(t * 11) * 0.1;
+        }
+      } else if (k === 'snackRain') {
+        // 하늘을 가리키며 빵을 부른다 → 흐뭇하게 구경
+        const u = 3.6 - this.ultT;
+        if (u < 0.9) {
+          const k2 = Math.min(1, u / 0.4);
+          p.shRX += -2.85 * k2; p.shRZ += -0.3 * k2; p.elR += -0.2 * k2; p.headX += -0.5 * k2;
+          p.shLX += -0.9 * k2; p.elL += -1.6 * k2;
+        } else {
+          p.shLX += -1.35; p.shRX += -1.3; p.elL += -1.9; p.elR += -1.9;   // 두 손 모으고 구경
+          p.headX += -0.25 + Math.sin(t * 3) * 0.05; p.hipsY += Math.abs(Math.sin(t * 4)) * 0.03;
+        }
+      } else if (k === 'cafeRush') {
+        // 커피를 향해 전력 질주: 팔 흔들고 상체 앞으로, 부딪히는 사람은 스턴
+        const u = 3.2 - this.ultT;
+        const run = Math.sin(t * 16);
+        p.waistX += 0.45; p.headX += -0.25; p.chestX += 0.2;
+        p.shLX += -1.1 + run * 0.9; p.shRX += -1.1 - run * 0.9; p.elL += -1.5; p.elR += -1.5;
+        p.thighLX += run * 0.85; p.thighRX += -run * 0.85; p.shinL += Math.max(0, run) * 1.2; p.shinR += Math.max(0, -run) * 1.2;
+        p.hipsY += Math.abs(Math.sin(t * 32)) * 0.05;
+        if (u > 0.35 && u < 2.7) {
+          this.pos.addScaledVector(this.forward, 7.2 * dt);
+          for (const o of fighters) {
+            if (o === this || o.ko || o.downT > 0) continue;
+            if (o.pos.distanceTo(this.pos) < 0.95 && !this.rushHits.has(o.slot)) {
+              this.rushHits.add(o.slot);
+              o.hp = Math.max(0, o.hp - (this.rushPower || 16));
+              o.stagger = Math.max(o.stagger, 1.6); o.staggerKind = 'normal'; o.staggerImmune = 0.6;
+              o.punch = null; o.queue.length = 0; o.rattle = 1;
+              o.knock.addScaledVector(this.forward, 4.2);
+              o.audio.stagger(); o.audio.impact(0.9);
+              if (o.hp <= 0) o._die();
+              this.events.push({ type: 'rushHit', target: o.slot });
+            }
+          }
+        }
+      } else if (k === 'snackRain') {
+        // 쏟아지는 간식을 머리 감싸고 맞다가 기절
+        const u = 3.6 - this.ultVictimT;
+        if (u < 2.8) {
+          p.shLX += -2.3; p.shRX += -2.3; p.elL += -2.3; p.elR += -2.3; p.shLZ += 0.55; p.shRZ += -0.55;
+          p.headX += 0.4 + Math.sin(t * 20) * 0.1; p.waistX += 0.5; p.hipsY += -0.2 + Math.abs(Math.sin(t * 8)) * 0.05;
+          this.rattle = Math.max(this.rattle, 0.45);
+        } else {
+          const k2 = Math.min(1, (u - 2.8) / 0.8);
+          p.hipsY += -0.5 * k2; p.thighLX += -1.0 * k2; p.thighRX += -1.0 * k2; p.shinL += 1.7 * k2; p.shinR += 1.7 * k2;
+          p.waistX += 0.6 * k2; p.headX += 0.5 * k2; p.shLX += -0.8; p.shRX += -0.8;
+          p.headZ += Math.sin(t * 9) * 0.25 * k2;
+        }
+      } else if (k === 'coldCut') {
+        // 하소연 → 차단당함 → 굳음 → 상처받아 기절
+        const u = 3.4 - this.ultVictimT;
+        if (u < 2.05) {
+          // 손짓하며 푸념
+          const g2 = Math.sin(t * 6);
+          p.shLX += -1.5 + g2 * 0.35; p.shRX += -1.45 - g2 * 0.35; p.elL += -1.7; p.elR += -1.7;
+          p.headX += -0.12 + g2 * 0.08; p.headY += g2 * 0.2; p.waistY += g2 * 0.15;
+        } else if (u < 2.55) {
+          // 굳는다 (정지)
+          p.shLX += -1.2; p.shRX += -1.2; p.elL += -1.4; p.elR += -1.4; p.headX += -0.05;
+          this.rattle = Math.max(this.rattle, 0.2);
+        } else {
+          // 무너짐
+          const k2 = Math.min(1, (u - 2.55) / 0.85);
+          p.shLX += -0.3 + 0.3 * k2; p.shRX += -0.3 + 0.3 * k2; p.elL += -0.3; p.elR += -0.3;
+          p.waistX += 0.9 * k2; p.headX += 0.6 * k2; p.hipsY += -0.55 * k2;
+          p.thighLX += -1.0 * k2; p.thighRX += -0.95 * k2; p.shinL += 1.7 * k2; p.shinR += 1.6 * k2;
+          p.waistZ += Math.sin(t * 4) * 0.2 * k2;
+        }
       } else if (k === 'bike') {
         const u = 3.0 - this.ultVictimT;
         if (u < 1.4) { p.shLX += -1.6; p.shRX += -1.6; p.elL += -1.8; p.elR += -1.8; p.headX += -0.3; p.waistX += -0.15 + Math.sin(t * 18) * 0.05; }
@@ -5054,6 +5532,30 @@ class Intro {
               p.waistX += 0.45 * k; p.chestX += 0.2 * k; p.headX += 0.2 * k; p.hipsY += -0.12 * k;
               if (!this.threw) { this.threw = true; try { g.audio.clang(1.1); } catch (e) {} }
             }
+          } else if (key === 'ohsh') {
+            // 오승현: 빵을 오물오물 먹다가 흠칫 → 소심하게 고개 숙여 인사
+            const k = easeOutCubic(Math.min(1, u / 0.4));
+            p.shLX += (-2.0 - p.shLX) * k; p.elL += (-2.3 - p.elL) * k; p.shLY += (-0.35) * k;
+            p.headX += (0.18 + Math.sin(u * 14) * 0.06) * k;      // 오물오물
+            p.shRX += (-0.7 - p.shRX) * k; p.elR += (-1.4 - p.elR) * k;
+            if (u > 1.2) { const k2 = easeOutCubic(Math.min(1, (u - 1.2) / 0.3)); p.waistX += 0.45 * k2; p.headX += 0.35 * k2; p.hipsY += -0.08 * k2; }
+          } else if (key === 'jungjuwon') {
+            // 정주원: 커피를 쭉 들이켜고 만족 (헤드폰 매만지기)
+            const k = easeOutCubic(Math.min(1, u / 0.45));
+            p.shRX += (-2.1 - p.shRX) * k; p.elR += (-2.4 - p.elR) * k; p.shRY += (0.25) * k;
+            p.headX += (-0.35) * k;
+            if (u > 1.1) {
+              const k2 = easeOutCubic(Math.min(1, (u - 1.1) / 0.35));
+              p.shRX += (1.0) * k2; p.headX += (0.45) * k2;        // 컵 내리고 흡족
+              p.shLX += (-1.9 - p.shLX) * k2; p.elL += (-2.2 - p.elL) * k2; p.shLY += (-0.5) * k2;   // 헤드폰 매만짐
+              p.chestZ += Math.sin(u * 5) * 0.05 * k2;
+            }
+          } else if (key === 'gokomong') {
+            // 고코몽: 무표정, 손 주머니에 넣듯 늘어뜨리고 한 번 끄덕
+            const k = easeOutCubic(Math.min(1, u / 0.5));
+            p.shLX += (-0.35 - p.shLX) * k; p.shRX += (-0.32 - p.shRX) * k; p.elL += (-0.55 - p.elL) * k; p.elR += (-0.5 - p.elR) * k;
+            p.waistX += -0.05 * k; p.headX += -0.02 * k;
+            if (u > 1.3) { const k2 = Math.min(1, (u - 1.3) / 0.25); p.headX += 0.3 * k2 * Math.max(0, 1 - (u - 1.55) * 4); }
           } else if (key === 'ppyeo') {
             // 뼈석원: 한 손으로 배를 문지르며 씩 웃기 → 시동 거는 손목 스냅
             const k = easeOutCubic(Math.min(1, u / 0.4));
@@ -5587,7 +6089,7 @@ class Game {
     this.headTrail = new Ribbon(this.scene, { maxPoints: 40, width: 0.025, color: 0x2090ff, coreColor: 0xbfe8ff, opacity: 0.55 });
     this.ghostFx = {};   // defKey → AfterImageEffect (지연 생성)
     this.sparks = new HitSparks(this.scene);
-    this.ultFx = new UltimateFx(this.scene, this.audio, this.fx);
+    this.ultFx = new UltimateFx(this.scene, this.audio, this.fx, this.camera);
     // 거리감 보조: 내 발밑에 리치 반경 링 (상대가 사거리 안이면 붉게)
     this.reachRing = new THREE.Mesh(new THREE.RingGeometry(0.92, 1.0, 48), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide }));
     this.reachRing.rotation.x = -Math.PI / 2; this.reachRing.position.y = 0.015; this.reachRing.visible = false;
@@ -5688,6 +6190,9 @@ class Game {
       sendo: { style: '파워 슬러거 · 느리지만 한 방', st: '<b>U</b> 스매시(띄움) · <b>I</b> 러시 3연 · <b>L</b> 스매시 강', pw: 5, sp: 1, hp: 4 },
       chaechae: { style: '히든 · 문화생활 인플루언서', st: '<b>기본</b> 냥냥펀치(초고속·경량) · <b>U</b> 냥냥 4연타 · <b>I</b> 고양이 할퀴기 · <b>L</b> <b>릴스 촬영</b>(상대가 강제로 유행 댄스 → 오글거려 쓰러짐)<br><i>기 게이지 15% 빨리 참</i>', pw: 1, sp: 5, hp: 2 },
       jjeonghyo: { style: '히든 · 3대 500', st: '<b>기본</b> 덤벨 펀치(무겁고 느림) · <b>U</b> 덤벨 훅 · <b>I</b> 데드리프트 업(띄움) · <b>L</b> <b>바벨 내려찍기</b><br><i>기 게이지 20% 느림 · 체력 최고</i>', pw: 5, sp: 2, hp: 5 },
+      ohsh: { style: '히든 · 빵 러버', st: '<b>기본</b> 빵 들고 타격(가볍고 빠름) · <b>U</b> 갑자기 때리기(기습·스턴) · <b>I</b> 빵 던지기 · <b>L</b> <b>간식 폭격</b>(소금빵·호두과자 46개 낙하)<br><i>가장 작고 약하지만 가장 빨리 기가 참</i>', pw: 1, sp: 5, hp: 1 },
+      jungjuwon: { style: '히든 · 헤드폰 먹방', st: '<b>기본</b> 묵직한 타격 · <b>U</b> 삼각김밥 던지기 · <b>I</b> 배치기(띄움) · <b>L</b> <b>카페 돌격</b>(카페 생성 후 질주, 부딪히는 전원 스턴+데미지)<br><i>체력 두 번째로 높음</i>', pw: 4, sp: 2, hp: 5 },
+      gokomong: { style: '히든 · ISTP 무감정', st: '<b>기본</b> 귀찮아 펀치(낭창) · <b>U</b> 집가서 아기봐야돼 킥(발 판정·띄움) · <b>I</b> 귀찮아 2연 · <b>L</b> <b>칼차단</b>(푸념을 끊고 도리도리 → 상처받아 기절)<br><i>무난한 올라운더</i>', pw: 3, sp: 3, hp: 3 },
       ppyeo: { style: '히든 · 오토바이 라이더', st: '<b>기본</b> 뼈펀치(리치 최장) · <b>U</b> 뼈 찌르기 · <b>I</b> 회전 팔꿈치 · <b>L</b> <b>오토바이 돌진</b>(소음공해·날려버림)<br><i>몸이 얇아 맷집 약함</i>', pw: 3, sp: 4, hp: 2 },
     };
     this.charDesc = DESC;
@@ -6580,10 +7085,11 @@ class Game {
           this.music.setDuck(0.3); setTimeout(() => this.music.setDuck(1), 3600);
           this.applySlow(f.slot, 0.35, 0.25);
           if (f.slot === this.localSlot || (tg && tg.slot === this.localSlot)) this.finisherWindFx();
-          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, e.kind === 'reels' ? '릴스 촬영 중!!' : e.kind === 'barbell' ? '3대 500!!' : '교통사고!!', 'groggy');
+          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, ({ reels: '릴스 촬영 중!!', barbell: '3대 500!!', bike: '교통사고!!', snackRain: '간식 폭격!!', cafeRush: '커피 마셔야 돼!!', coldCut: '칼차단!!' })[e.kind] || '필살!!', 'groggy');
           if (this.mode === 'host') this.pendingEvents.push({ t: 'ult', s: f.slot, b: e.target, k: e.kind });
           continue;
         }
+        if (e.type === 'rushHit') { this.camCtl.onHit(f.forward, 0.8); this.audio.impact(0.9); continue; }
         if (e.type === 'special') continue;
         const type = e.type === 'finisherStart' ? 'finisher' : (e.punchType === 'special' ? 'hook' : e.punchType);
         for (const o of fs) if (o.brain && o !== f && (o.target === f || f.target === o)) o.brain.onEnemyPunch(type, f);
@@ -6789,13 +7295,14 @@ class Game {
       const axis = new THREE.Vector3().subVectors(tg.pos, ultF.pos).setY(0).normalize();
       const sideV = new THREE.Vector3(axis.z, 0, -axis.x);
       const k = ultF.ultKind;
-      const up = k === 'reels' ? 1.75 : k === 'barbell' ? 2.6 : 2.2;
-      const back = k === 'reels' ? 3.6 : 5.6;
+      const up = k === 'reels' ? 1.75 : k === 'coldCut' ? 1.9 : k === 'snackRain' ? 3.0 : k === 'cafeRush' ? 3.4 : k === 'barbell' ? 2.6 : 2.2;
+      const back = k === 'reels' ? 3.6 : k === 'coldCut' ? 4.0 : k === 'cafeRush' ? 7.5 : k === 'snackRain' ? 6.4 : 5.6;
       const want = mid.clone().addScaledVector(sideV, back * 0.75).addScaledVector(axis, -back * 0.5).add(new THREE.Vector3(0, up, 0));
       this.camera.position.lerp(want, Math.min(1, rawDt * 3.4));
-      const look = tg.pos.clone().add(new THREE.Vector3(0, k === 'reels' ? 1.15 : 1.3, 0));
+      const lookBase = k === 'cafeRush' ? ultF.pos : tg.pos;
+      const look = lookBase.clone().add(new THREE.Vector3(0, k === 'reels' ? 1.15 : k === 'coldCut' ? 1.5 : k === 'snackRain' ? 1.8 : 1.3, 0));
       this.camera.lookAt(look);
-      const wantFov = k === 'reels' ? 46 : 58;
+      const wantFov = k === 'reels' ? 46 : k === 'coldCut' ? 48 : k === 'cafeRush' ? 66 : 58;
       this.camera.fov += (wantFov - this.camera.fov) * Math.min(1, rawDt * 3);
       this.camera.updateProjectionMatrix();
       this.camCtl.initialized = false;   // 연출 끝나면 자연스럽게 다시 붙는다

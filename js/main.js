@@ -73,7 +73,7 @@ class Game {
     this.headTrail = new Ribbon(this.scene, { maxPoints: 40, width: 0.025, color: 0x2090ff, coreColor: 0xbfe8ff, opacity: 0.55 });
     this.ghostFx = {};   // defKey → AfterImageEffect (지연 생성)
     this.sparks = new HitSparks(this.scene);
-    this.ultFx = new UltimateFx(this.scene, this.audio, this.fx);
+    this.ultFx = new UltimateFx(this.scene, this.audio, this.fx, this.camera);
     // 거리감 보조: 내 발밑에 리치 반경 링 (상대가 사거리 안이면 붉게)
     this.reachRing = new THREE.Mesh(new THREE.RingGeometry(0.92, 1.0, 48), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide }));
     this.reachRing.rotation.x = -Math.PI / 2; this.reachRing.position.y = 0.015; this.reachRing.visible = false;
@@ -174,6 +174,9 @@ class Game {
       sendo: { style: '파워 슬러거 · 느리지만 한 방', st: '<b>U</b> 스매시(띄움) · <b>I</b> 러시 3연 · <b>L</b> 스매시 강', pw: 5, sp: 1, hp: 4 },
       chaechae: { style: '히든 · 문화생활 인플루언서', st: '<b>기본</b> 냥냥펀치(초고속·경량) · <b>U</b> 냥냥 4연타 · <b>I</b> 고양이 할퀴기 · <b>L</b> <b>릴스 촬영</b>(상대가 강제로 유행 댄스 → 오글거려 쓰러짐)<br><i>기 게이지 15% 빨리 참</i>', pw: 1, sp: 5, hp: 2 },
       jjeonghyo: { style: '히든 · 3대 500', st: '<b>기본</b> 덤벨 펀치(무겁고 느림) · <b>U</b> 덤벨 훅 · <b>I</b> 데드리프트 업(띄움) · <b>L</b> <b>바벨 내려찍기</b><br><i>기 게이지 20% 느림 · 체력 최고</i>', pw: 5, sp: 2, hp: 5 },
+      ohsh: { style: '히든 · 빵 러버', st: '<b>기본</b> 빵 들고 타격(가볍고 빠름) · <b>U</b> 갑자기 때리기(기습·스턴) · <b>I</b> 빵 던지기 · <b>L</b> <b>간식 폭격</b>(소금빵·호두과자 46개 낙하)<br><i>가장 작고 약하지만 가장 빨리 기가 참</i>', pw: 1, sp: 5, hp: 1 },
+      jungjuwon: { style: '히든 · 헤드폰 먹방', st: '<b>기본</b> 묵직한 타격 · <b>U</b> 삼각김밥 던지기 · <b>I</b> 배치기(띄움) · <b>L</b> <b>카페 돌격</b>(카페 생성 후 질주, 부딪히는 전원 스턴+데미지)<br><i>체력 두 번째로 높음</i>', pw: 4, sp: 2, hp: 5 },
+      gokomong: { style: '히든 · ISTP 무감정', st: '<b>기본</b> 귀찮아 펀치(낭창) · <b>U</b> 집가서 아기봐야돼 킥(발 판정·띄움) · <b>I</b> 귀찮아 2연 · <b>L</b> <b>칼차단</b>(푸념을 끊고 도리도리 → 상처받아 기절)<br><i>무난한 올라운더</i>', pw: 3, sp: 3, hp: 3 },
       ppyeo: { style: '히든 · 오토바이 라이더', st: '<b>기본</b> 뼈펀치(리치 최장) · <b>U</b> 뼈 찌르기 · <b>I</b> 회전 팔꿈치 · <b>L</b> <b>오토바이 돌진</b>(소음공해·날려버림)<br><i>몸이 얇아 맷집 약함</i>', pw: 3, sp: 4, hp: 2 },
     };
     this.charDesc = DESC;
@@ -1066,10 +1069,11 @@ class Game {
           this.music.setDuck(0.3); setTimeout(() => this.music.setDuck(1), 3600);
           this.applySlow(f.slot, 0.35, 0.25);
           if (f.slot === this.localSlot || (tg && tg.slot === this.localSlot)) this.finisherWindFx();
-          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, e.kind === 'reels' ? '릴스 촬영 중!!' : e.kind === 'barbell' ? '3대 500!!' : '교통사고!!', 'groggy');
+          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, ({ reels: '릴스 촬영 중!!', barbell: '3대 500!!', bike: '교통사고!!', snackRain: '간식 폭격!!', cafeRush: '커피 마셔야 돼!!', coldCut: '칼차단!!' })[e.kind] || '필살!!', 'groggy');
           if (this.mode === 'host') this.pendingEvents.push({ t: 'ult', s: f.slot, b: e.target, k: e.kind });
           continue;
         }
+        if (e.type === 'rushHit') { this.camCtl.onHit(f.forward, 0.8); this.audio.impact(0.9); continue; }
         if (e.type === 'special') continue;
         const type = e.type === 'finisherStart' ? 'finisher' : (e.punchType === 'special' ? 'hook' : e.punchType);
         for (const o of fs) if (o.brain && o !== f && (o.target === f || f.target === o)) o.brain.onEnemyPunch(type, f);
@@ -1275,13 +1279,14 @@ class Game {
       const axis = new THREE.Vector3().subVectors(tg.pos, ultF.pos).setY(0).normalize();
       const sideV = new THREE.Vector3(axis.z, 0, -axis.x);
       const k = ultF.ultKind;
-      const up = k === 'reels' ? 1.75 : k === 'barbell' ? 2.6 : 2.2;
-      const back = k === 'reels' ? 3.6 : 5.6;
+      const up = k === 'reels' ? 1.75 : k === 'coldCut' ? 1.9 : k === 'snackRain' ? 3.0 : k === 'cafeRush' ? 3.4 : k === 'barbell' ? 2.6 : 2.2;
+      const back = k === 'reels' ? 3.6 : k === 'coldCut' ? 4.0 : k === 'cafeRush' ? 7.5 : k === 'snackRain' ? 6.4 : 5.6;
       const want = mid.clone().addScaledVector(sideV, back * 0.75).addScaledVector(axis, -back * 0.5).add(new THREE.Vector3(0, up, 0));
       this.camera.position.lerp(want, Math.min(1, rawDt * 3.4));
-      const look = tg.pos.clone().add(new THREE.Vector3(0, k === 'reels' ? 1.15 : 1.3, 0));
+      const lookBase = k === 'cafeRush' ? ultF.pos : tg.pos;
+      const look = lookBase.clone().add(new THREE.Vector3(0, k === 'reels' ? 1.15 : k === 'coldCut' ? 1.5 : k === 'snackRain' ? 1.8 : 1.3, 0));
       this.camera.lookAt(look);
-      const wantFov = k === 'reels' ? 46 : 58;
+      const wantFov = k === 'reels' ? 46 : k === 'coldCut' ? 48 : k === 'cafeRush' ? 66 : 58;
       this.camera.fov += (wantFov - this.camera.fov) * Math.min(1, rawDt * 3);
       this.camera.updateProjectionMatrix();
       this.camCtl.initialized = false;   // 연출 끝나면 자연스럽게 다시 붙는다

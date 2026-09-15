@@ -95,6 +95,41 @@ export const SPECIALS = {
       p.shinL += 1.2 * w - 0.5 * s; p.shinR += 1.2 * w - 0.5 * s; p.chestX += 0.3 * w - 0.25 * s; p.headX += -0.3 * s;
     },
   },
+  // ---- 히든: 오승현 (빵) ----
+  suddenSmack: {
+    name: 'いきなり平手', ko: '갑자기 때리기', side: 'R', dur: 0.24, power: 1.15, cd: 5, heavy: false, quick: true, staggerT: 1.5, step: 4.2, counterMul: 1.5,
+    wind: { x: 0.35, y: 0.55, z: 0.6, el: -2.45 }, strike: { x: -1.85, y: -0.5, z: 0.45, el: -0.1 },
+    body(p, w, s, sgn) { p.waistY += sgn * (0.2 * w - 0.85 * s); p.headX += 0.12 * w - 0.3 * s; p.hipsZ += 0.3 * s; p.hipsY += -0.05 * w; },
+  },
+  breadThrow: {
+    name: 'パン投げ', ko: '빵 던지기', side: 'L', dur: 0.32, power: 0.8, cd: 4, heavy: false, quick: true, step: 1.4, staggerT: 0.8, hitRadius: 1.7,
+    wind: { x: 0.45, y: 0.5, z: 0.6, el: -2.3 }, strike: { x: -2.2, y: -0.3, z: 0.25, el: -0.15 },
+    body(p, w, s, sgn) { p.waistY += sgn * (0.4 * w - 0.7 * s); p.headX += -0.15 * s; },
+  },
+  // ---- 히든: 정주원 (삼각김밥) ----
+  onigiriThrow: {
+    name: 'おにぎり投げ', ko: '삼각김밥 던지기', side: 'R', dur: 0.3, power: 1.0, cd: 4.5, heavy: false, quick: true, step: 1.4, staggerT: 1.1, hitRadius: 1.8,
+    wind: { x: 0.5, y: 0.65, z: 0.7, el: -2.3 }, strike: { x: -2.25, y: -0.35, z: 0.3, el: -0.12 },
+    body(p, w, s, sgn) { p.waistY += sgn * (0.45 * w - 0.8 * s); p.chestY += sgn * (0.2 * w - 0.35 * s); p.headX += -0.18 * s; },
+  },
+  bellyBump: {
+    name: 'ベリーバンプ', ko: '배치기', side: 'L', dur: 0.46, power: 1.5, cd: 7, heavy: true, staggerT: 1.4, step: 4.0, launch: 0.5, zone: 'body',
+    wind: { x: 0.4, y: 0.3, z: 0.4, el: -2.1 }, strike: { x: -0.9, y: -0.2, z: 0.2, el: -1.2 },
+    body(p, w, s, sgn) { p.waistX += -0.35 * w + 0.6 * s; p.chestX += 0.3 * s; p.hipsZ += 0.4 * s; p.hipsY += 0.05 * w - 0.1 * s; },
+  },
+  // ---- 히든: 고코몽 (무감정) ----
+  babyKick: {
+    name: '育児キック', ko: '집가서 아기봐야돼 킥', side: 'R', dur: 0.44, power: 1.45, cd: 6, heavy: true, kick: true, staggerT: 1.5, step: 3.4, launch: 0.55, zone: 'body',
+    wind: { x: -0.2, y: 0.1, z: 0.2, el: -1.8 }, strike: { x: -0.6, y: 0.0, z: 0.1, el: -0.4 },
+    body(p, w, s, sgn) {
+      p.thighRX += -0.6 * w - 1.55 * s; p.shinR += 1.1 * w - 1.4 * s;
+      p.thighLX += 0.1 * w + 0.2 * s; p.shinL += 0.15 * s;
+      p.waistX += 0.15 * w - 0.35 * s; p.hipsY += -0.1 * w - 0.05 * s; p.headX += -0.1 * s;
+      p.shLX += -0.5 * s; p.shRX += -0.3 * s; p.elL += -0.4 * s;
+    },
+  },
+  lazyJab: {
+    name: 'だるパンチ', ko: '귀찮아 펀치 2연', burst: true, cd: 4 },
   // ---- 히든: 뼈석원 (하이바 / 녹차) ----
   helmetBash: {
     name: 'ヘルメットバッシュ', ko: '하이바 박치기', side: 'L', dur: 0.4, power: 1.5, cd: 6.5, heavy: true, staggerT: 1.5, step: 5.2, launch: 0.35,
@@ -105,7 +140,7 @@ export const SPECIALS = {
     },
   },
   teaThrow: {
-    name: '緑茶スロー', ko: '녹차 투척', side: 'R', dur: 0.34, power: 0.95, cd: 4.5, heavy: false, quick: true, step: 1.0, staggerT: 0.9, reachBonus: 1.1,
+    name: '緑茶スロー', ko: '녹차 투척', side: 'R', dur: 0.34, power: 0.95, cd: 4.5, heavy: false, quick: true, step: 1.4, staggerT: 0.9, hitRadius: 1.6,
     wind: { x: 0.5, y: 0.6, z: 0.7, el: -2.35 }, strike: { x: -2.3, y: -0.35, z: 0.3, el: -0.1 },
     body(p, w, s, sgn) { p.waistY += sgn * (0.5 * w - 0.9 * s); p.chestY += sgn * (0.2 * w - 0.4 * s); p.waistX += 0.18 * w - 0.15 * s; p.headX += -0.2 * s; },
   },
@@ -132,6 +167,9 @@ export const KITS = {
   chaechae:  { stance: 'flicker', finisher: 'reels',   U: 'marketerPunch', I: 'nyangRush', cdU: 5.5 },
   jjeonghyo: { stance: 'smash',   finisher: 'barbell', U: 'dumbbellPress', I: 'deadlift',  cdU: 6.5 },
   ppyeo:     { stance: 'counter', finisher: 'bike',    U: 'helmetBash',    I: 'teaThrow',  cdU: 5 },
+  ohsh:      { stance: 'counter', finisher: 'snackRain', U: 'suddenSmack',  I: 'breadThrow', cdU: 4.5 },
+  jungjuwon: { stance: 'smash',   finisher: 'cafeRush',  U: 'onigiriThrow', I: 'bellyBump', cdU: 4.5 },
+  gokomong:  { stance: 'counter', finisher: 'coldCut', U: 'babyKick',      I: 'lazyJab',   cdU: 6 },
 };
 
 export const STANCE_LINES = {
@@ -145,5 +183,8 @@ export const STANCE_LINES = {
 export const HIDDEN_LINES = {
   chaechae: { intro: '난 문화생활을 좋아해~', max: '이거 릴스각인데?', fin: '자, 같이 춤춰!', u: '이번 분기 KPI 찍고 간다!', hit: ['냥!', '냥냥!', '이건 찍어야 해'] },
   jjeonghyo: { intro: '3대 500 미만 대화 금지.', max: '무게 올린다.', fin: '데드리프트… 받아!', u: '마지막 한 개 더!', hit: ['하압!', '한 세트 더!', '가볍네'] },
+  ohsh: { intro: '…빵, 빵이 좋아…', max: '자, 잠깐만…!', fin: '빵 다 떨어진다—!', u: '아, 진짜 짜증나!', hit: ['아!', '히잉', '자, 잠깐'] },
+  jungjuwon: { intro: '커피 좋아~', max: '배고픈데 한 판 더?', fin: '커피 마셔야 돼!!', u: '이거나 먹어!', hit: ['우걱', '냠', '헤드폰 벗겨지겠네'] },
+  gokomong: { intro: '…귀찮은데.', max: '빨리 끝내자.', fin: '그래서 어쩌라고.', u: '집 가서 아기 봐야 돼.', hit: ['…', '음', '하아'] },
   ppyeo: { intro: '난 먹어도 살 안 쪄.', max: '시동 건다.', fin: '부아아앙—!!', u: '헬멧은 필수지!', hit: ['뼈!', '뼈뼈!', '부릉'] },
 };

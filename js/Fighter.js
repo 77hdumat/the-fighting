@@ -84,6 +84,8 @@ export class Fighter {
     this.events = [];
     this.gloveL = new THREE.Vector3(); this.gloveR = new THREE.Vector3();
     this.prevGloveL = new THREE.Vector3(); this.prevGloveR = new THREE.Vector3();
+    this.footL = new THREE.Vector3(); this.footR = new THREE.Vector3();
+    this.prevFootL = new THREE.Vector3(); this.prevFootR = new THREE.Vector3();
     this.squash = { L: 0, R: 0 }; this.flash = 0;
     this.tell = { L: 0, R: 0 };
     this.guardT = 99;
@@ -116,6 +118,7 @@ export class Fighter {
     this.rig.root.updateMatrixWorld(true);
     this.rig.gloveL.getWorldPosition(this.gloveL);
     this.rig.gloveR.getWorldPosition(this.gloveR);
+    if (this.rig.footL) { this.rig.footL.getWorldPosition(this.footL); this.rig.footR.getWorldPosition(this.footR); }
     this.rig.headMesh.getWorldPosition(this.headPos);
     this.rig.chest.getWorldPosition(this.chestPos);
     this.rig.hips.getWorldPosition(this.hipsPos);
@@ -178,6 +181,8 @@ export class Fighter {
     this.punch = createPunch(side, type, dur, power);
     this.punch.heavy = (type === 'hook' && this.dempsey.active && st === 'dempsey') || !!opts.heavy || (type === 'hook' && this.def.style === 'power');
     if (opts.kind) { this.punch.kind = opts.kind; Object.assign(this.punch, opts); }
+    if (opts.kick) this.punch.kick = true;
+    if (opts.hitRadius) this.punch.hitRadius = opts.hitRadius;
     if (opts.fromU) this.punch.fromU = true;
     if (opts.roll) this.punch.roll = true;
     if (opts.rollFinish) { this.punch.rollFinish = true; this.punch.staggerT = opts.staggerT || 0; }
@@ -229,7 +234,7 @@ export class Fighter {
     if (kind === 'dumbbellPress') this.audio.clang(0.9);
     else if (kind === 'marketerPunch') { this.audio.clang(0.3); this.audio.shutter(); }
     else if (kind === 'helmetBash') this.audio.engine(0.5);
-    const ok = this.startPunch(spec.side, 'special', spec.dur, spec.power, { kind, heavy: !!spec.heavy, launch: spec.launch || 0, staggerT: uStag, zoneForce: spec.zone || null, liver: !!spec.liver, counterMul: spec.counterMul || 1, step: spec.step || 0, noTell: !!spec.quick, fromU: isU });
+    const ok = this.startPunch(spec.side, 'special', spec.dur, spec.power, { kind, heavy: !!spec.heavy, launch: spec.launch || 0, staggerT: uStag, zoneForce: spec.zone || null, liver: !!spec.liver, counterMul: spec.counterMul || 1, step: spec.step || 0, noTell: !!spec.quick, kick: !!spec.kick, hitRadius: spec.hitRadius || 0, fromU: isU });
     if (!ok) { this.cd[slotKey] = 0; this.armor = 0; return false; }
     if (spec.backstep) this.backstep = spec.backstep;
     this.subs.show(this.specialLine(spec, slotKey), { duration: 0.9, mid: !spec.quick });
@@ -243,9 +248,21 @@ export class Fighter {
     const fk = this.kit.finisher;
     const F = FINISHERS[fk] || FINISHERS.finisherHook;
     const charge = d.charge;
-    const ULT = { reels: 3.4, barbell: 3.6, bike: 3.0 };
+    const ULT = { reels: 3.4, barbell: 3.6, bike: 3.0, snackRain: 3.6, coldCut: 3.4, cafeRush: 3.2 };
+    if (fk === 'cafeRush') {
+      // ---- 카페 돌격: 경로상의 모두에게 스턴 + 데미지 (넘어뜨리진 않는다) ----
+      this.ultT = 3.2; this.ultKind = fk; this.ultTarget = this.target;
+      this.punch = null; this.queue.length = 0; this.armor = 3.2;
+      this.rushHits = new Set();
+      this.rushPower = (16 + 4 * charge) * this.def.powerMul;
+      d.consume();
+      this.audio.engine(1.2); this.audio.finisherWind(0.4);
+      this.subs.show('커피 마셔야 돼—!!', { duration: 1.6, strong: true });
+      this.events.push({ type: 'ultStart', kind: fk, target: this.target ? this.target.slot : this.slot, charge });
+      return true;
+    }
     if (ULT[fk]) {
-      // ---- 연출형 필살 (히든 3인): 상대를 붙잡아두고 스크립트대로 진행 ----
+      // ---- 연출형 필살: 상대를 붙잡아두고 스크립트대로 진행 ----
       const tg = this.target;
       if (!tg || tg.ko || tg.downT > 0) return false;
       const dur = ULT[fk];
@@ -256,7 +273,7 @@ export class Fighter {
       tg.ultDmgRate = tg.ultDmg / dur;
       d.consume();
       this.audio.finisherWind(0.5);
-      const line = fk === 'reels' ? '잡았다! 릴스 각이야, 찍는다!' : fk === 'barbell' ? '자, 10회 3세트 간다!' : '어… 이거 무거운데—!!';
+      const line = fk === 'reels' ? '잡았다! 릴스 각이야, 찍는다!' : fk === 'barbell' ? '자, 10회 3세트 간다!' : fk === 'snackRain' ? '비, 빵이 떨어진다…!' : fk === 'coldCut' ? '…그래서 어쩌라고.' : '어… 이거 무거운데—!!';
       this.subs.show(line, { duration: 1.6, strong: true });
       this.events.push({ type: 'ultStart', kind: fk, target: tg.slot, charge });
       return true;
@@ -478,6 +495,7 @@ export class Fighter {
   update(dt, rawDt, input, fighters) {
     this.time += dt; this.rtime += rawDt;
     this.prevGloveL.copy(this.gloveL); this.prevGloveR.copy(this.gloveR);
+    this.prevFootL.copy(this.footL); this.prevFootR.copy(this.footR);
     this.events.length = 0;
     const d = this.dempsey;
     const st = this.stanceStyle;
@@ -681,9 +699,9 @@ export class Fighter {
     let hitEvent = null;
     const others = fighters.filter((f) => f !== this && (!f.ko || f.koT < 1.2) && !(f.downT > 0));
     const _hit = { zone: 'head', point: new THREE.Vector3(), t: 0 };
-    const tryHit = (side, radius, mk) => {
-      const glove = side === 'L' ? this.gloveL : this.gloveR;
-      const prev = side === 'L' ? this.prevGloveL : this.prevGloveR;
+    const tryHit = (side, radius, mk, useFoot = false) => {
+      const glove = useFoot ? (side === 'L' ? this.footL : this.footR) : (side === 'L' ? this.gloveL : this.gloveR);
+      const prev = useFoot ? (side === 'L' ? this.prevFootL : this.prevFootR) : (side === 'L' ? this.prevGloveL : this.prevGloveR);
       for (const f of others) {
         _d.subVectors(f.pos, this.pos); _d.y = 0;
         if (_d.dot(this.forward) <= 0.2) continue;
@@ -741,8 +759,8 @@ export class Fighter {
       if (!d.active) this.bufferedHook = null;
       if (!pu.hit && info.p > (pu.kind ? 0.24 : 0.3) && info.p < 0.66) {
         this._applyNow(p);
-        const radius = pu.type === 'flicker' ? (st === 'flicker' && d.active ? 0.55 : 0.48) : pu.kind ? 0.62 : 0.42;
-        hitEvent = tryHit(pu.side, radius, (tg, h) => { pu.hit = true; return { attacker: this, target: tg, side: pu.side, type: pu.type, power: pu.power, pos: h.point.clone(), zone: pu.zoneForce || h.zone, dir: this.forward.clone(), maxSpeed: d.maxSpeed, dempsey: d.active, finisher: !!pu.rollFinish, roll: !!pu.roll, charge: pu.rollFinish ? d.charge : 0, heavy: !!pu.heavy, counter: !!pu.counter || !!pu.forceCounter, counterMul: pu.counterMul || 1, launch: pu.launch || 0, liver: !!pu.liver, staggerT: pu.staggerT || 0, kind: pu.kind || null, fromU: !!pu.fromU }; });
+        const radius = pu.hitRadius || (pu.type === 'flicker' ? (st === 'flicker' && d.active ? 0.55 : 0.48) : pu.kind ? 0.62 : 0.42);
+        hitEvent = tryHit(pu.side, radius, (tg, h) => { pu.hit = true; return { attacker: this, target: tg, side: pu.side, type: pu.type, power: pu.power, pos: h.point.clone(), zone: pu.zoneForce || h.zone, dir: this.forward.clone(), maxSpeed: d.maxSpeed, dempsey: d.active, finisher: !!pu.rollFinish, roll: !!pu.roll, charge: pu.rollFinish ? d.charge : 0, heavy: !!pu.heavy, counter: !!pu.counter || !!pu.forceCounter, counterMul: pu.counterMul || 1, launch: pu.launch || 0, liver: !!pu.liver, staggerT: pu.staggerT || 0, kind: pu.kind || null, fromU: !!pu.fromU }; }, !!pu.kick);
       }
     }
 
@@ -770,6 +788,57 @@ export class Fighter {
         // 팔짱 끼고 카운트 세기 → 마지막엔 손 내리기
         p.shLX += -0.95; p.elL += -2.35; p.shLY += -1.0; p.shRX += -0.9; p.elR += -2.35; p.shRY += 1.0;
         p.chestX += 0.12; p.headX += -0.1 + Math.sin(t * 3) * 0.06; p.hipsX += Math.sin(t * 1.6) * 0.04;
+      } else if (k === 'coldCut') {
+        // 무표정하게 듣다가 손 들어 차단 → 도리도리 (중요치 않아)
+        const u = 3.4 - this.ultT;
+        if (u < 2.0) {
+          p.shLX += -0.55; p.shRX += -0.5; p.elL += -1.1; p.elR += -1.05; p.headX += -0.05;
+          p.hipsX += Math.sin(t * 1.4) * 0.03;
+        } else if (u < 2.45) {
+          const k2 = Math.min(1, (u - 2.0) / 0.12);
+          p.shRX += -2.5 * k2; p.shRY += 0.15 * k2; p.elR += -0.25 * k2; p.shRZ += -0.3 * k2;   // 손바닥 들어 차단
+          p.waistX += -0.12 * k2; p.headX += -0.18 * k2;
+        } else {
+          p.shRX += -1.4; p.elR += -1.6; p.shRY += 0.3;
+          p.headY += Math.sin(t * 11) * 0.5;      // 도리도리
+          p.headZ += Math.sin(t * 5.5) * 0.06;
+          p.waistY += Math.sin(t * 11) * 0.1;
+        }
+      } else if (k === 'snackRain') {
+        // 하늘을 가리키며 빵을 부른다 → 흐뭇하게 구경
+        const u = 3.6 - this.ultT;
+        if (u < 0.9) {
+          const k2 = Math.min(1, u / 0.4);
+          p.shRX += -2.85 * k2; p.shRZ += -0.3 * k2; p.elR += -0.2 * k2; p.headX += -0.5 * k2;
+          p.shLX += -0.9 * k2; p.elL += -1.6 * k2;
+        } else {
+          p.shLX += -1.35; p.shRX += -1.3; p.elL += -1.9; p.elR += -1.9;   // 두 손 모으고 구경
+          p.headX += -0.25 + Math.sin(t * 3) * 0.05; p.hipsY += Math.abs(Math.sin(t * 4)) * 0.03;
+        }
+      } else if (k === 'cafeRush') {
+        // 커피를 향해 전력 질주: 팔 흔들고 상체 앞으로, 부딪히는 사람은 스턴
+        const u = 3.2 - this.ultT;
+        const run = Math.sin(t * 16);
+        p.waistX += 0.45; p.headX += -0.25; p.chestX += 0.2;
+        p.shLX += -1.1 + run * 0.9; p.shRX += -1.1 - run * 0.9; p.elL += -1.5; p.elR += -1.5;
+        p.thighLX += run * 0.85; p.thighRX += -run * 0.85; p.shinL += Math.max(0, run) * 1.2; p.shinR += Math.max(0, -run) * 1.2;
+        p.hipsY += Math.abs(Math.sin(t * 32)) * 0.05;
+        if (u > 0.35 && u < 2.7) {
+          this.pos.addScaledVector(this.forward, 7.2 * dt);
+          for (const o of fighters) {
+            if (o === this || o.ko || o.downT > 0) continue;
+            if (o.pos.distanceTo(this.pos) < 0.95 && !this.rushHits.has(o.slot)) {
+              this.rushHits.add(o.slot);
+              o.hp = Math.max(0, o.hp - (this.rushPower || 16));
+              o.stagger = Math.max(o.stagger, 1.6); o.staggerKind = 'normal'; o.staggerImmune = 0.6;
+              o.punch = null; o.queue.length = 0; o.rattle = 1;
+              o.knock.addScaledVector(this.forward, 4.2);
+              o.audio.stagger(); o.audio.impact(0.9);
+              if (o.hp <= 0) o._die();
+              this.events.push({ type: 'rushHit', target: o.slot });
+            }
+          }
+        }
       } else if (k === 'bike') {
         // ① 웅크려 들어올림 → ② 머리 위에서 휘청 → ③ 미끄러져 놓침 → ④ 반동으로 뒤로 휘청
         const u = (3.0 - this.ultT);
@@ -845,6 +914,90 @@ export class Fighter {
         p.waistX += 0.3 * down; p.shLX += -2.6; p.shRX += -2.6; p.elL += -0.4; p.elR += -0.4; p.shLZ += 0.55; p.shRZ += -0.55;
         p.headX += -0.2 + Math.sin(t * 12) * 0.08 * down;
         if (u > 2.45) { p.headZ += Math.sin(t * 14) * 0.2; this.rattle = Math.max(this.rattle, 0.4); }
+      } else if (k === 'coldCut') {
+        // 무표정하게 듣다가 손 들어 차단 → 도리도리 (중요치 않아)
+        const u = 3.4 - this.ultT;
+        if (u < 2.0) {
+          p.shLX += -0.55; p.shRX += -0.5; p.elL += -1.1; p.elR += -1.05; p.headX += -0.05;
+          p.hipsX += Math.sin(t * 1.4) * 0.03;
+        } else if (u < 2.45) {
+          const k2 = Math.min(1, (u - 2.0) / 0.12);
+          p.shRX += -2.5 * k2; p.shRY += 0.15 * k2; p.elR += -0.25 * k2; p.shRZ += -0.3 * k2;   // 손바닥 들어 차단
+          p.waistX += -0.12 * k2; p.headX += -0.18 * k2;
+        } else {
+          p.shRX += -1.4; p.elR += -1.6; p.shRY += 0.3;
+          p.headY += Math.sin(t * 11) * 0.5;      // 도리도리
+          p.headZ += Math.sin(t * 5.5) * 0.06;
+          p.waistY += Math.sin(t * 11) * 0.1;
+        }
+      } else if (k === 'snackRain') {
+        // 하늘을 가리키며 빵을 부른다 → 흐뭇하게 구경
+        const u = 3.6 - this.ultT;
+        if (u < 0.9) {
+          const k2 = Math.min(1, u / 0.4);
+          p.shRX += -2.85 * k2; p.shRZ += -0.3 * k2; p.elR += -0.2 * k2; p.headX += -0.5 * k2;
+          p.shLX += -0.9 * k2; p.elL += -1.6 * k2;
+        } else {
+          p.shLX += -1.35; p.shRX += -1.3; p.elL += -1.9; p.elR += -1.9;   // 두 손 모으고 구경
+          p.headX += -0.25 + Math.sin(t * 3) * 0.05; p.hipsY += Math.abs(Math.sin(t * 4)) * 0.03;
+        }
+      } else if (k === 'cafeRush') {
+        // 커피를 향해 전력 질주: 팔 흔들고 상체 앞으로, 부딪히는 사람은 스턴
+        const u = 3.2 - this.ultT;
+        const run = Math.sin(t * 16);
+        p.waistX += 0.45; p.headX += -0.25; p.chestX += 0.2;
+        p.shLX += -1.1 + run * 0.9; p.shRX += -1.1 - run * 0.9; p.elL += -1.5; p.elR += -1.5;
+        p.thighLX += run * 0.85; p.thighRX += -run * 0.85; p.shinL += Math.max(0, run) * 1.2; p.shinR += Math.max(0, -run) * 1.2;
+        p.hipsY += Math.abs(Math.sin(t * 32)) * 0.05;
+        if (u > 0.35 && u < 2.7) {
+          this.pos.addScaledVector(this.forward, 7.2 * dt);
+          for (const o of fighters) {
+            if (o === this || o.ko || o.downT > 0) continue;
+            if (o.pos.distanceTo(this.pos) < 0.95 && !this.rushHits.has(o.slot)) {
+              this.rushHits.add(o.slot);
+              o.hp = Math.max(0, o.hp - (this.rushPower || 16));
+              o.stagger = Math.max(o.stagger, 1.6); o.staggerKind = 'normal'; o.staggerImmune = 0.6;
+              o.punch = null; o.queue.length = 0; o.rattle = 1;
+              o.knock.addScaledVector(this.forward, 4.2);
+              o.audio.stagger(); o.audio.impact(0.9);
+              if (o.hp <= 0) o._die();
+              this.events.push({ type: 'rushHit', target: o.slot });
+            }
+          }
+        }
+      } else if (k === 'snackRain') {
+        // 쏟아지는 간식을 머리 감싸고 맞다가 기절
+        const u = 3.6 - this.ultVictimT;
+        if (u < 2.8) {
+          p.shLX += -2.3; p.shRX += -2.3; p.elL += -2.3; p.elR += -2.3; p.shLZ += 0.55; p.shRZ += -0.55;
+          p.headX += 0.4 + Math.sin(t * 20) * 0.1; p.waistX += 0.5; p.hipsY += -0.2 + Math.abs(Math.sin(t * 8)) * 0.05;
+          this.rattle = Math.max(this.rattle, 0.45);
+        } else {
+          const k2 = Math.min(1, (u - 2.8) / 0.8);
+          p.hipsY += -0.5 * k2; p.thighLX += -1.0 * k2; p.thighRX += -1.0 * k2; p.shinL += 1.7 * k2; p.shinR += 1.7 * k2;
+          p.waistX += 0.6 * k2; p.headX += 0.5 * k2; p.shLX += -0.8; p.shRX += -0.8;
+          p.headZ += Math.sin(t * 9) * 0.25 * k2;
+        }
+      } else if (k === 'coldCut') {
+        // 하소연 → 차단당함 → 굳음 → 상처받아 기절
+        const u = 3.4 - this.ultVictimT;
+        if (u < 2.05) {
+          // 손짓하며 푸념
+          const g2 = Math.sin(t * 6);
+          p.shLX += -1.5 + g2 * 0.35; p.shRX += -1.45 - g2 * 0.35; p.elL += -1.7; p.elR += -1.7;
+          p.headX += -0.12 + g2 * 0.08; p.headY += g2 * 0.2; p.waistY += g2 * 0.15;
+        } else if (u < 2.55) {
+          // 굳는다 (정지)
+          p.shLX += -1.2; p.shRX += -1.2; p.elL += -1.4; p.elR += -1.4; p.headX += -0.05;
+          this.rattle = Math.max(this.rattle, 0.2);
+        } else {
+          // 무너짐
+          const k2 = Math.min(1, (u - 2.55) / 0.85);
+          p.shLX += -0.3 + 0.3 * k2; p.shRX += -0.3 + 0.3 * k2; p.elL += -0.3; p.elR += -0.3;
+          p.waistX += 0.9 * k2; p.headX += 0.6 * k2; p.hipsY += -0.55 * k2;
+          p.thighLX += -1.0 * k2; p.thighRX += -0.95 * k2; p.shinL += 1.7 * k2; p.shinR += 1.6 * k2;
+          p.waistZ += Math.sin(t * 4) * 0.2 * k2;
+        }
       } else if (k === 'bike') {
         const u = 3.0 - this.ultVictimT;
         if (u < 1.4) { p.shLX += -1.6; p.shRX += -1.6; p.elL += -1.8; p.elR += -1.8; p.headX += -0.3; p.waistX += -0.15 + Math.sin(t * 18) * 0.05; }
