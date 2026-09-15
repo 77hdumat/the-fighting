@@ -32,7 +32,7 @@ const _camR = new THREE.Vector3();
 const _sep = new THREE.Vector3();
 const SPAWNS = [[0, 2.4], [0, -2.4], [2.4, 0], [-2.4, 0]];
 const AUDIO_FWD = ['whoosh', 'swoosh', 'impact', 'bassHit', 'riser', 'maxSpeedHit', 'stagger', 'ko', 'block', 'chargeUp', 'finisherWind', 'finisherHit', 'counter', 'cheer', 'engine', 'clang', 'nyang', 'shutter'];
-const SNAP_HZ = 25;
+const SNAP_HZ = 30;
 
 class Game {
   constructor() {
@@ -1022,6 +1022,7 @@ class Game {
       this.updateCountdown(rawDt);
     } else if (this.mode === 'client') {
       this.net.send({ t: 'in', d: this.localInput.pack() });
+      this.predictInput(input);
       this.pingT = (this.pingT || 0) + rawDt;
       if (this.pingT > 1) { this.pingT = 0; this.net.send({ t: 'ping', t0: performance.now() }); }
       this.clientInterpolate(rawDt);
@@ -1177,7 +1178,16 @@ class Game {
 
   // ================= 클라이언트 =================
   onSnapshot(m) {
-    this.snaps.push({ recv: performance.now(), ts: (m.ts || 0) * 1000, d: m });
+    const now = performance.now();
+    // 도착 간격의 흔들림(지터)을 추적해 재생 지연을 필요한 만큼만 잡는다
+    if (this._lastRecv) {
+      const gap = now - this._lastRecv;
+      const nominal = 1000 / SNAP_HZ;
+      const dev = Math.abs(gap - nominal);
+      this.jitter = this.jitter === undefined ? dev : this.jitter * 0.88 + dev * 0.12;
+    }
+    this._lastRecv = now;
+    this.snaps.push({ recv: now, ts: (m.ts || 0) * 1000, d: m });
     if (this.snaps.length > 10) this.snaps.shift();
     for (const e of m.ev) {
       if (e.t === 'hit') this.hitFx(e);
@@ -1236,7 +1246,8 @@ class Game {
 
     // 재생 지연: 스냅샷 간격 2개 + RTT 절반 (최소 70ms, 최대 220ms)
     const interval = 1000 / SNAP_HZ;
-    const delay = Math.min(220, Math.max(70, interval * 2 + (this.rtt || 60) * 0.5));
+    // 회선이 깨끗하면 지연을 최소로 (= 게스트가 더 빨리 본다). 지터가 크면 그만큼만 더 버퍼링
+    const delay = Math.min(200, Math.max(38, interval * 1.15 + (this.jitter || 6) * 2.2 + (this.rtt || 40) * 0.25));
     if (this.playT === undefined || this.playT === null) this.playT = latest.ts - delay;
 
     // 버퍼 두께에 따라 재생 속도 미세 조정 (±12%) — 튀지 않게 천천히 따라붙는다
@@ -1260,6 +1271,15 @@ class Game {
     for (const f of this.fighters) f.target = f.targetSlot >= 0 ? this.fighters[f.targetSlot] : null;
     this.netBufMs = latest.ts - this.playT;
     this.predictLocal(rawDt);
+  }
+
+  /** 버튼 입력을 받은 그 프레임에 내 캐릭터 동작을 먼저 그려 준다 (호스트 확인 전) */
+  predictInput(input) {
+    const f = this.localFighter; if (!f) return;
+    if (input.justPressed('KeyJ')) f.predictPunch('L', 'straight');
+    else if (input.justPressed('KeyK')) f.predictPunch('R', 'straight');
+    else if (input.justPressed('KeyU') || input.justPressed('KeyI')) f.predictPunch(input.justPressed('KeyU') ? 'R' : 'L', 'special');
+    else if (input.justPressed('KeyL')) f.predictPunch('R', 'hook');
   }
 
   /**
@@ -1286,6 +1306,8 @@ class Game {
     f.pos.x = Math.max(-4.15, Math.min(4.15, f.pos.x));
     f.pos.z = Math.max(-4.15, Math.min(4.15, f.pos.z));
     f._applyNow(f.pose);
+    // 펀치/가드 예측 포즈를 서버 포즈 위에 덮는다
+    f.applyPrediction(rawDt, f.punchProgress > 0.001, this.input.isDown('ShiftLeft') || this.input.isDown('ShiftRight'));
   }
 
   // ================= 렌더/연출 =================

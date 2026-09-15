@@ -124,6 +124,34 @@ export class Fighter {
     this.rig.hips.getWorldPosition(this.hipsPos);
   }
 
+  // ---------- 클라 로컬 예측 (게스트 체감 지연 감소) ----------
+  /** 버튼을 누른 즉시 팔 동작을 그려 준다. 판정은 호스트가 하고, 서버 포즈가 오면 예측은 버린다 */
+  predictPunch(side, type = 'straight') {
+    if (this.ko || this.downT > 0 || this.stagger > 0 || this.ultVictimT > 0) return;
+    const dur = (type === 'hook' ? 0.32 : type === 'special' ? 0.4 : 0.27) / this.def.speedMul;
+    this._predPunch = createPunch(side, type, dur, 0.5);
+    this._predAge = 0;
+  }
+
+  /** 예측 포즈를 서버 포즈 위에 덮어쓴다 (서버가 실제 펀치를 보내오면 즉시 해제) */
+  applyPrediction(dt, serverPunching, guardHeld) {
+    let touched = false;
+    const pu = this._predPunch;
+    if (pu) {
+      this._predAge += dt; pu.t += dt;
+      if (serverPunching || this._predAge > pu.dur * 1.3) this._predPunch = null;
+      else { applyPunchToPose(this.pose, pu); touched = true; }
+    }
+    // 가드도 즉시 반영 (서버 플래그가 아직 안 왔을 때만)
+    if (guardHeld && !this.guard && !this.busy) {
+      const p = this.pose;
+      p.shLX += -1.15; p.shRX += -1.15; p.elL += -1.75; p.elR += -1.75;
+      p.shLZ += 0.42; p.shRZ += -0.42; p.headX += -0.12; p.waistX += 0.16;
+      touched = true;
+    }
+    if (touched) this._applyNow(this.pose);
+  }
+
   /** 카메라에 너무 가까운(시야를 가리는) 파이터를 반투명하게 */
   setFade(a) {
     if (this._fade === a) return;
