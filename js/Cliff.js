@@ -160,7 +160,8 @@ export function buildCliff(scene) {
 
   // ---- 붕괴 상태 ----
   let clock = 0;            // 경기 시작 후 경과
-  let nextBreak = 60;       // 1분 뒤 첫 붕괴, 이후 점점 잦아진다
+  const CRUMBLE = false;    // 암벽 붕괴 연출 사용 안 함 (요청)
+  let nextBreak = Infinity;
   const rubble = [];
   const sectorOf = (x, z) => {
     let a = Math.atan2(z, x); if (a < 0) a += Math.PI * 2;
@@ -194,7 +195,7 @@ export function buildCliff(scene) {
       return sec && sec.state === 'shake' ? 1 : 0;
     },
     reset() {
-      clock = 0; nextBreak = 60;
+      clock = 0; nextBreak = CRUMBLE ? 60 : Infinity;
       for (const sec of sectors) { sec.state = 'ok'; sec.t = 0; sec.vy = 0; sec.spin = 0; sec.g.visible = true; sec.g.position.set(0, 0, 0); sec.g.rotation.set(0, 0, 0); }
       for (const r of rubble) group.remove(r.m);
       rubble.length = 0;
@@ -203,8 +204,8 @@ export function buildCliff(scene) {
       edge.material.opacity = 0.25 + 0.18 * (0.5 + 0.5 * Math.sin(performance.now() * 0.004));
       clock += dt;
 
-      // 1분 뒤부터 랜덤 섹터가 무너진다 (점점 빨라짐)
-      if (clock > nextBreak) {
+      // 1분 뒤부터 랜덤 섹터가 무너진다 (지금은 비활성)
+      if (CRUMBLE && clock > nextBreak) {
         const alive = sectors.filter((x) => x.state === 'ok');
         if (alive.length > 4) {
           const sec = alive[Math.floor(Math.random() * alive.length)];

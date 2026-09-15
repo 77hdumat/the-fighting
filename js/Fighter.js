@@ -596,7 +596,7 @@ export class Fighter {
     let pushing = false;
     if (ARENA.kind === 'cliff') {
       // ---- 암벽: 로프가 없다. 가장자리를 넘으면 그대로 추락 ----
-      if (this.fallT <= 0 && this.fallY <= 0.01) {
+      if (this.fallT <= 0 && !this.fellOut) {
         const r = Math.hypot(this.pos.x, this.pos.z);
         const edge = ARENA.radius(this.pos.x, this.pos.z);
         if (r > edge) {
@@ -1274,7 +1274,7 @@ export class Fighter {
     this.boostT = (f & 64) ? 1 : 0; this.ropeCharge = (f & 128) ? 0.3 : 0; this.downT = (f & 256) ? 1 : 0;
     const bench = !!(f & 512);
     if (bench !== this.benched) { this.benched = bench; this.rig.root.visible = !bench; }
-    if (f & 1024) this.fallY += (b.fy !== undefined ? 0 : 0);   // 낙하 높이는 아래 fy 로 직접 동기화
+    this.falling = !!(f & 1024);   // 클라는 이 플래그로 낙하 중임을 안다 (높이는 fy)
     const d = this.dempsey;
     d.active = !!(f & 2); d.maxSpeed = !!(f & 4); d.intensity = L(a.dI, b.dI); d.sway = L(a.sw, b.sw); d.swayVel = L(a.sv, b.sv);
     d.blend = L(a.bl, b.bl); d.gauge = L(a.ga, b.ga); d.charge = b.ch;

@@ -855,7 +855,7 @@ class Game {
           next.pos.set(sp[0], 0, sp[1]);
           next.forward.set(-sp[0], 0, -sp[1]).normalize();
           next.yaw = Math.atan2(next.forward.x, next.forward.z);
-          next.hp = next.maxHp; next.fallY = 0; next.fallT = 0;
+          next.hp = next.maxHp; next.fallY = 0; next.fallT = 0; next.fellOut = false; next.fallVy = 0; next._fallDir = null; next.rig.root.rotation.set(0, 0, 0);
           this.setBenched(next, false);
           next.subs.show('교대다—!', { duration: 1.4, strong: true });
           this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, `${next.nick || next.name} 등장!`, 'dodge');
@@ -1526,7 +1526,7 @@ class Game {
 
   /** 버튼 입력을 받은 그 프레임에 내 캐릭터 동작을 먼저 그려 준다 (호스트 확인 전) */
   predictInput(input) {
-    const f = this.localFighter; if (!f || f.benched) return;
+    const f = this.localFighter; if (!f || f.benched || f.falling || f.ko) return;
     if (input.justPressed('KeyJ')) f.predictPunch('L', 'straight');
     else if (input.justPressed('KeyK')) f.predictPunch('R', 'straight');
     else if (input.justPressed('KeyU') || input.justPressed('KeyI')) f.predictPunch(input.justPressed('KeyU') ? 'R' : 'L', 'special');
@@ -1539,6 +1539,7 @@ class Game {
    */
   predictLocal(rawDt) {
     const f = this.localFighter; if (!f || f.benched) return;
+    if (f.falling || f.ko || f.fallY > 0.01 || f.downT > 0) { if (this._pred) this._pred.set(0, 0, 0); return; }
     if (!this._pred) this._pred = new THREE.Vector3();
     const p = this._pred;
     const blocked = f.ko || f.downT > 0 || f.stagger > 0 || !!f.finisher || f.airY > 0.01;

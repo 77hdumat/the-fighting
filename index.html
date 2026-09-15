@@ -3779,7 +3779,8 @@ function buildCliff(scene) {
 
   // ---- 붕괴 상태 ----
   let clock = 0;            // 경기 시작 후 경과
-  let nextBreak = 60;       // 1분 뒤 첫 붕괴, 이후 점점 잦아진다
+  const CRUMBLE = false;    // 암벽 붕괴 연출 사용 안 함 (요청)
+  let nextBreak = Infinity;
   const rubble = [];
   const sectorOf = (x, z) => {
     let a = Math.atan2(z, x); if (a < 0) a += Math.PI * 2;
@@ -3813,7 +3814,7 @@ function buildCliff(scene) {
       return sec && sec.state === 'shake' ? 1 : 0;
     },
     reset() {
-      clock = 0; nextBreak = 60;
+      clock = 0; nextBreak = CRUMBLE ? 60 : Infinity;
       for (const sec of sectors) { sec.state = 'ok'; sec.t = 0; sec.vy = 0; sec.spin = 0; sec.g.visible = true; sec.g.position.set(0, 0, 0); sec.g.rotation.set(0, 0, 0); }
       for (const r of rubble) group.remove(r.m);
       rubble.length = 0;
@@ -3822,8 +3823,8 @@ function buildCliff(scene) {
       edge.material.opacity = 0.25 + 0.18 * (0.5 + 0.5 * Math.sin(performance.now() * 0.004));
       clock += dt;
 
-      // 1분 뒤부터 랜덤 섹터가 무너진다 (점점 빨라짐)
-      if (clock > nextBreak) {
+      // 1분 뒤부터 랜덤 섹터가 무너진다 (지금은 비활성)
+      if (CRUMBLE && clock > nextBreak) {
         const alive = sectors.filter((x) => x.state === 'ok');
         if (alive.length > 4) {
           const sec = alive[Math.floor(Math.random() * alive.length)];
@@ -4467,7 +4468,7 @@ class Fighter {
     let pushing = false;
     if (ARENA.kind === 'cliff') {
       // ---- 암벽: 로프가 없다. 가장자리를 넘으면 그대로 추락 ----
-      if (this.fallT <= 0 && this.fallY <= 0.01) {
+      if (this.fallT <= 0 && !this.fellOut) {
         const r = Math.hypot(this.pos.x, this.pos.z);
         const edge = ARENA.radius(this.pos.x, this.pos.z);
         if (r > edge) {
@@ -5145,7 +5146,7 @@ class Fighter {
     this.boostT = (f & 64) ? 1 : 0; this.ropeCharge = (f & 128) ? 0.3 : 0; this.downT = (f & 256) ? 1 : 0;
     const bench = !!(f & 512);
     if (bench !== this.benched) { this.benched = bench; this.rig.root.visible = !bench; }
-    if (f & 1024) this.fallY += (b.fy !== undefined ? 0 : 0);   // 낙하 높이는 아래 fy 로 직접 동기화
+    this.falling = !!(f & 1024);   // 클라는 이 플래그로 낙하 중임을 안다 (높이는 fy)
     const d = this.dempsey;
     d.active = !!(f & 2); d.maxSpeed = !!(f & 4); d.intensity = L(a.dI, b.dI); d.sway = L(a.sw, b.sw); d.swayVel = L(a.sv, b.sv);
     d.blend = L(a.bl, b.bl); d.gauge = L(a.ga, b.ga); d.charge = b.ch;
@@ -7529,7 +7530,7 @@ class Game {
           next.pos.set(sp[0], 0, sp[1]);
           next.forward.set(-sp[0], 0, -sp[1]).normalize();
           next.yaw = Math.atan2(next.forward.x, next.forward.z);
-          next.hp = next.maxHp; next.fallY = 0; next.fallT = 0;
+          next.hp = next.maxHp; next.fallY = 0; next.fallT = 0; next.fellOut = false; next.fallVy = 0; next._fallDir = null; next.rig.root.rotation.set(0, 0, 0);
           this.setBenched(next, false);
           next.subs.show('교대다—!', { duration: 1.4, strong: true });
           this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, `${next.nick || next.name} 등장!`, 'dodge');
@@ -8200,7 +8201,7 @@ class Game {
 
   /** 버튼 입력을 받은 그 프레임에 내 캐릭터 동작을 먼저 그려 준다 (호스트 확인 전) */
   predictInput(input) {
-    const f = this.localFighter; if (!f || f.benched) return;
+    const f = this.localFighter; if (!f || f.benched || f.falling || f.ko) return;
     if (input.justPressed('KeyJ')) f.predictPunch('L', 'straight');
     else if (input.justPressed('KeyK')) f.predictPunch('R', 'straight');
     else if (input.justPressed('KeyU') || input.justPressed('KeyI')) f.predictPunch(input.justPressed('KeyU') ? 'R' : 'L', 'special');
@@ -8213,6 +8214,7 @@ class Game {
    */
   predictLocal(rawDt) {
     const f = this.localFighter; if (!f || f.benched) return;
+    if (f.falling || f.ko || f.fallY > 0.01 || f.downT > 0) { if (this._pred) this._pred.set(0, 0, 0); return; }
     if (!this._pred) this._pred = new THREE.Vector3();
     const p = this._pred;
     const blocked = f.ko || f.downT > 0 || f.stagger > 0 || !!f.finisher || f.airY > 0.01;
