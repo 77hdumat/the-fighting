@@ -32,7 +32,7 @@ const _camR = new THREE.Vector3();
 const _sep = new THREE.Vector3();
 const SPAWNS = [[0, 2.4], [0, -2.4], [2.4, 0], [-2.4, 0]];
 const AUDIO_FWD = ['whoosh', 'swoosh', 'impact', 'bassHit', 'riser', 'maxSpeedHit', 'stagger', 'ko', 'block', 'chargeUp', 'finisherWind', 'finisherHit', 'counter', 'cheer', 'engine', 'clang', 'nyang', 'shutter'];
-const SNAP_HZ = 20;
+const SNAP_HZ = 25;
 
 class Game {
   constructor() {
@@ -326,7 +326,7 @@ class Game {
     for (const k in this.ghostFx) { for (const g of this.ghostFx[k].ghosts) this.scene.remove(g.root); }
     this.ghostFx = {};
     this.started = false; this.over = false; this.phase = 'lobby';
-    this.hitStop = 0; this.slowMo = 0; this.snaps = []; this.coachBrains = {};
+    this.hitStop = 0; this.slowMo = 0; this.snaps = []; this.playT = null; this._pred = null; this.coachBrains = {};
     if (this.ultFx) this.ultFx.clear();
     try { this.audio.stopDrone(); } catch (e) {}
     for (const id of ['next-overlay', 'pause-menu', 'skip-hint', 'countdown', 'intro-name', 'coach', 'guard-badge']) document.getElementById(id).classList.add('hidden');
@@ -488,6 +488,7 @@ class Game {
       if (m.t === 'in' && this.netInputs[slot]) this.netInputs[slot].set(m.d[0], m.d[1], m.d[2]);
       else if (m.t === 'chat' && typeof m.text === 'string') { const text = m.text.slice(0, 120); this.addChat(slot, text); this.net.broadcast({ t: 'chat', from: slot, text }); }
       else if (m.t === 'skip') { this.voteSkip(slot); }
+      else if (m.t === 'ping') { const c = this.net.conns[slot - 1]; if (c && c.open) { try { c.send({ t: 'pong', t0: m.t0 }); } catch (e) {} } }
       else if (m.t === 'wantlobby') { this.addChat(0, `${this.chatName(slot)} 님이 대기실로 가자고 합니다 (경기 종료 후 '대기실로' 버튼)`, true); }
       else if (m.t === 'pick') {
         if (CHARACTERS[m.char]) { this.chars[slot] = m.char; if (this.roster[slot]) this.roster[slot].char = m.char; this.renderRoster(this.roster); this.broadcastLobby(); }
@@ -542,6 +543,7 @@ class Game {
       else if (m.t === 'full') this.lobbyMsg('방이 가득 찼거나 이미 시작됨');
       else if (m.t === 'start') { this.names = []; m.cfg.forEach((c) => { this.names[c.netSlot] = c.name; }); this.localSlot = Math.max(0, m.cfg.findIndex((c) => c.netSlot === net.mySlot)); this.startMatch('client', m.cfg); }
       else if (m.t === 'snap') { if (this.phase === 'fight') this.onSnapshot(m); }
+      else if (m.t === 'pong') { const r = performance.now() - m.t0; this.rtt = this.rtt ? this.rtt * 0.8 + r * 0.2 : r; }
       else if (m.t === 'skipv') { this.showSkipHint(m.n, m.total); }
       else if (m.t === 'phase') { if (m.p === 'countdown') this.endIntro(); else if (m.p === 'fight') { this.phase = 'fight'; document.getElementById('countdown').classList.add('hidden'); } }
       else if (m.t === 'chat') this.addChat(m.from, String(m.text).slice(0, 120), !!m.sys);
@@ -594,6 +596,7 @@ class Game {
     try { document.getElementById('gl').focus(); window.focus(); } catch (e) {}
     this.input.down.clear();
     document.getElementById('netinfo').textContent = mode === 'solo' ? this.soloLabel() : `ROOM ${this.net.code} · ${mode.toUpperCase()} · Enter = 채팅`;
+    this.netLabel = mode === 'solo' ? '' : `ROOM ${this.net.code} · ${mode.toUpperCase()} · Enter = 채팅`;
     if (mode !== 'solo') { this.showChat(true); this.addChat(0, '시합 개시. Enter 로 채팅', true); }
     this.music.pendingTrack = 'battle'; this.music.play('battle');
     this.beginIntro();
@@ -629,7 +632,7 @@ class Game {
     this.coachBrains = {};
     for (const f of this.fighters) if (!f.isAI) this.coachBrains[f.slot] = new CoachBrain();
     document.getElementById('coach').classList.add('hidden');
-    this.hitStop = 0; this.slowMo = 0; this.snaps = [];
+    this.hitStop = 0; this.slowMo = 0; this.snaps = []; this.playT = null; this._pred = null;
     if (this.ultFx) this.ultFx.clear();
     this.camCtl.initialized = false;
   }
@@ -1019,7 +1022,9 @@ class Game {
       this.updateCountdown(rawDt);
     } else if (this.mode === 'client') {
       this.net.send({ t: 'in', d: this.localInput.pack() });
-      this.clientInterpolate();
+      this.pingT = (this.pingT || 0) + rawDt;
+      if (this.pingT > 1) { this.pingT = 0; this.net.send({ t: 'ping', t0: performance.now() }); }
+      this.clientInterpolate(rawDt);
     } else {
       this.simulate(rawDt);
       if (this.mode === 'host') {
@@ -1172,8 +1177,8 @@ class Game {
 
   // ================= 클라이언트 =================
   onSnapshot(m) {
-    this.snaps.push({ recv: performance.now(), d: m });
-    if (this.snaps.length > 3) this.snaps.shift();
+    this.snaps.push({ recv: performance.now(), ts: (m.ts || 0) * 1000, d: m });
+    if (this.snaps.length > 10) this.snaps.shift();
     for (const e of m.ev) {
       if (e.t === 'hit') this.hitFx(e);
       else if (e.t === 'a') {
@@ -1218,15 +1223,69 @@ class Game {
     }
   }
 
-  clientInterpolate() {
+  /**
+   * 클라 보간: 서버 타임스탬프 기준으로 "조금 늦게" 재생한다.
+   * 도착 시각 기준으로 맞추면 네트워크 지터가 그대로 튐/멈춤으로 보이므로,
+   * 재생 시계(playT)를 두고 버퍼가 두꺼우면 살짝 빠르게, 얇으면 살짝 느리게 돌려 지터를 흡수한다.
+   */
+  clientInterpolate(rawDt = 1 / 60) {
     const n = this.snaps.length;
     if (n === 0) return;
-    if (n === 1) { const s = this.snaps[0].d.f; this.fighters.forEach((f, i) => f.applySnapshot(s[i], s[i], 1)); return; }
-    const A = this.snaps[n - 2], B = this.snaps[n - 1];
-    const span = Math.max(1, B.recv - A.recv);
-    const t = Math.min(1.2, (performance.now() - B.recv) / span);
-    this.fighters.forEach((f, i) => f.applySnapshot(A.d.f[i], B.d.f[i], Math.min(1, t)));
+    const latest = this.snaps[n - 1];
+    if (n === 1) { const s0 = latest.d.f; this.fighters.forEach((f, i) => f.applySnapshot(s0[i], s0[i], 1)); return; }
+
+    // 재생 지연: 스냅샷 간격 2개 + RTT 절반 (최소 70ms, 최대 220ms)
+    const interval = 1000 / SNAP_HZ;
+    const delay = Math.min(220, Math.max(70, interval * 2 + (this.rtt || 60) * 0.5));
+    if (this.playT === undefined || this.playT === null) this.playT = latest.ts - delay;
+
+    // 버퍼 두께에 따라 재생 속도 미세 조정 (±12%) — 튀지 않게 천천히 따라붙는다
+    const target = latest.ts - delay;
+    const drift = target - this.playT;
+    let rate = 1;
+    if (Math.abs(drift) > 400) this.playT = target;                    // 크게 벌어지면 그냥 점프 (렉 스파이크)
+    else rate = 1 + Math.max(-0.12, Math.min(0.12, drift / 600));
+    this.playT += rawDt * 1000 * rate;
+
+    // playT 를 감싸는 두 스냅샷 찾기
+    let A = this.snaps[0], B = this.snaps[1];
+    for (let i = 0; i < n - 1; i++) {
+      if (this.snaps[i].ts <= this.playT && this.snaps[i + 1].ts >= this.playT) { A = this.snaps[i]; B = this.snaps[i + 1]; break; }
+      if (this.snaps[i + 1].ts < this.playT) { A = this.snaps[i]; B = this.snaps[i + 1]; }
+    }
+    const span = Math.max(1, B.ts - A.ts);
+    // 최신 스냅샷보다 앞서 있으면 잠깐만 외삽 (최대 1프레임 분량)
+    const t = Math.max(0, Math.min(1.35, (this.playT - A.ts) / span));
+    this.fighters.forEach((f, i) => f.applySnapshot(A.d.f[i], B.d.f[i], t));
     for (const f of this.fighters) f.target = f.targetSlot >= 0 ? this.fighters[f.targetSlot] : null;
+    this.netBufMs = latest.ts - this.playT;
+    this.predictLocal(rawDt);
+  }
+
+  /**
+   * 내 캐릭터만 로컬 예측: 입력을 즉시 반영하고(오프셋 누적), 서버 위치로 부드럽게 되돌린다.
+   * 왕복 지연(입력→호스트→스냅샷) 때문에 게스트의 내 캐릭터가 늦게 따라오던 버벅임을 없앤다.
+   */
+  predictLocal(rawDt) {
+    const f = this.localFighter; if (!f) return;
+    if (!this._pred) this._pred = new THREE.Vector3();
+    const p = this._pred;
+    const blocked = f.ko || f.downT > 0 || f.stagger > 0 || !!f.finisher || f.airY > 0.01;
+    if (!blocked) {
+      const speed = 2.5 * Math.pow(f.def.speedMul, 0.75) * (f.dempsey.active ? 0.9 : 1) * (f.guard ? 0.55 : 1);
+      p.x += this.move.x * speed * rawDt;
+      p.z += this.move.z * speed * rawDt;
+    }
+    // 서버 위치로 수렴 (0.35초 시정수) + 과도한 어긋남 방지
+    const decay = Math.exp(-rawDt / 0.35);
+    p.multiplyScalar(decay);
+    const max = 0.7;
+    const len = Math.hypot(p.x, p.z);
+    if (len > max) { p.x *= max / len; p.z *= max / len; }
+    f.pos.x += p.x; f.pos.z += p.z;
+    f.pos.x = Math.max(-4.15, Math.min(4.15, f.pos.x));
+    f.pos.z = Math.max(-4.15, Math.min(4.15, f.pos.z));
+    f._applyNow(f.pose);
   }
 
   // ================= 렌더/연출 =================
@@ -1375,7 +1434,13 @@ class Game {
     this.ring.update(rawDt, this.excitement);
     this.coaches.update(rawDt, this.excitement);
     this.hudAccum += rawDt;
-    if (this.hudAccum >= 1 / 30) { this.hudAccum = 0; this.hud.update(rawDt, this.fighters, local); this.touch.update(local); }
+    if (this.hudAccum >= 1 / 30) {
+      this.hudAccum = 0; this.hud.update(rawDt, this.fighters, local); this.touch.update(local);
+      if (this.mode === 'client' && this.netLabel) {
+        const el = document.getElementById('netinfo');
+        if (el) el.textContent = `${this.netLabel} · PING ${Math.round(this.rtt || 0)}ms · BUF ${Math.round(this.netBufMs || 0)}ms`;
+      }
+    }
     // 포커스 경고: 창에 포커스가 없거나(다른 앱/탭), 입력창에 포커스가 가 있으면 알린다
     const ae = document.activeElement;
     const typing = ae && ae.tagName === 'INPUT';
