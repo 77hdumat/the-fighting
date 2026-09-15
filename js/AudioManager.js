@@ -1,15 +1,16 @@
 // AudioManager.js — Web Audio API 절차적 효과음 + 타격음 샘플
 // whoosh(스웨이 동기, 패닝/피치), swoosh(펀치), impact(적중), bassHit(강타), drone(뎀프시 지속음), riser, maxSpeed, stagger, ko, block
 //
-// 타격음만 외부 mp3 샘플을 쓴다 (assets/sfx/). 나머지는 전부 합성음이다.
-// 샘플 로드에 실패하면(file:// 로 열었거나 오프라인) 기존 합성 타격음으로 자동 대체된다.
+// 타격음과 라운드 공만 외부 mp3 샘플을 쓴다 (assets/sfx/). 나머지는 전부 합성음이다.
+// 샘플 로드에 실패하면(file:// 로 열었거나 오프라인) 기존 합성음으로 자동 대체된다.
 // 출처: Pixabay (Universfield) — assets/sfx/CREDITS.md
 
-const HIT_SAMPLES = {
+const SFX_SAMPLES = {
   jab: 'punch-jab.mp3',       // 잽 · 플리커 — 가볍고 짧다
   hook: 'punch-hook.mp3',     // 훅 · 카운터 · 필살기 — 묵직하다
   follow: 'punch-follow.mp3', // 뎀프시 연타 등 후속타
   body: 'punch-body.mp3',     // 보디 · 리버
+  bell: 'bell.mp3',           // 라운드 공 (시작 · 교대 출전)
 };
 
 export class AudioManager {
@@ -18,16 +19,16 @@ export class AudioManager {
     this.master = null;
     this.noise = null;
     this.drone = null;
-    this.sfx = null;          // { jab, hook, follow, body } AudioBuffer — 로드 전엔 null
+    this.sfx = null;          // { jab, hook, follow, body, bell } AudioBuffer — 로드 전엔 null
     this._sfxLoading = false;
   }
 
-  /** 타격음 샘플을 비동기로 받아 디코드한다. 실패해도 게임은 합성음으로 계속 돈다. */
-  async _loadHitSamples() {
+  /** 효과음 샘플을 비동기로 받아 디코드한다. 실패해도 게임은 합성음으로 계속 돈다. */
+  async _loadSamples() {
     if (this.sfx || this._sfxLoading || !this.ctx) return;
     this._sfxLoading = true;
     const out = {};
-    await Promise.all(Object.entries(HIT_SAMPLES).map(async ([key, file]) => {
+    await Promise.all(Object.entries(SFX_SAMPLES).map(async ([key, file]) => {
       try {
         const res = await fetch('assets/sfx/' + file);
         if (!res.ok) return;
@@ -87,7 +88,7 @@ export class AudioManager {
     this.shaper.curve = curve;
     this.shaper.connect(this.master);
 
-    this._loadHitSamples();   // 비동기 — 도착 전 타격은 합성음으로 난다
+    this._loadSamples();   // 비동기 — 도착 전 타격은 합성음으로 난다
   }
 
   get ready() { return !!this.ctx; }
@@ -462,6 +463,18 @@ export class AudioManager {
   bell(times = 2) {
     if (!this.ctx) return;
     const ctx = this.ctx;
+    // 샘플이 있으면 샘플을 쓴다. 원본 자체에 울림(테일)이 들어 있어 간격을 넉넉히 준다
+    if (this.sfx && this.sfx.bell) {
+      for (let n = 0; n < times; n++) {
+        const src = ctx.createBufferSource();
+        src.buffer = this.sfx.bell;
+        const g = ctx.createGain();
+        g.gain.value = 0.9;
+        src.connect(g); g.connect(this.master);
+        src.start(ctx.currentTime + n * 0.9);
+      }
+      return;
+    }
     for (let n = 0; n < times; n++) {
       const t = ctx.currentTime + n * 0.55;
       const partials = [[1000, 1.0], [1520, 0.55], [2410, 0.35], [3300, 0.2], [640, 0.4]];
