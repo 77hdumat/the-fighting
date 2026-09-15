@@ -1527,10 +1527,12 @@ class Game {
   /** 버튼 입력을 받은 그 프레임에 내 캐릭터 동작을 먼저 그려 준다 (호스트 확인 전) */
   predictInput(input) {
     const f = this.localFighter; if (!f || f.benched || f.falling || f.ko) return;
-    if (input.justPressed('KeyJ')) f.predictPunch('L', 'straight');
-    else if (input.justPressed('KeyK')) f.predictPunch('R', 'straight');
-    else if (input.justPressed('KeyU') || input.justPressed('KeyI')) f.predictPunch(input.justPressed('KeyU') ? 'R' : 'L', 'special');
-    else if (input.justPressed('KeyL')) f.predictPunch('R', 'hook');
+    // 호스트가 거부할 입력(쿨다운·경직·게이지 부족 등)은 예측도 하지 않는다
+    if (input.justPressed('KeyJ')) { if (f.canPredict('J')) f.predictPunch('L', 'straight'); }
+    else if (input.justPressed('KeyK')) { if (f.canPredict('K')) f.predictPunch('R', 'straight'); }
+    else if (input.justPressed('KeyU')) { if (f.canPredict('U')) f.predictPunch('R', 'special'); }
+    else if (input.justPressed('KeyI')) { if (f.canPredict('I')) f.predictPunch('L', 'special'); }
+    else if (input.justPressed('KeyL')) { if (f.canPredict('L')) f.predictPunch('R', 'hook'); }
   }
 
   /**

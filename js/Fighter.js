@@ -130,6 +130,15 @@ export class Fighter {
   }
 
   // ---------- 클라 로컬 예측 (게스트 체감 지연 감소) ----------
+  /** 호스트가 실제로 받아 줄 입력인지 (클라 예측이 헛돌지 않게 같은 조건으로 검사) */
+  canPredict(slotKey) {
+    if (this.busy || this.benched || this.fallT > 0 || this.falling) return false;
+    if (this.punch && this.punch.t < this.punch.dur * (this.dempsey.active ? 0.42 : 0.55)) return false;
+    if (slotKey === 'U' || slotKey === 'I') return this.cd[slotKey] <= 0;
+    if (slotKey === 'L') return !!this.dempsey.maxSpeed;
+    return true;
+  }
+
   /** 버튼을 누른 즉시 팔 동작을 그려 준다. 판정은 호스트가 하고, 서버 포즈가 오면 예측은 버린다 */
   predictPunch(side, type = 'straight') {
     if (this.ko || this.downT > 0 || this.stagger > 0 || this.ultVictimT > 0) return;
@@ -1251,7 +1260,8 @@ export class Fighter {
     let i = 0; for (const k in this.pose) po[i++] = +this.pose[k].toFixed(2);   // 소수 2자리면 시각 차이 없음, 페이로드는 20~30% 감소
     return {
       x: +this.pos.x.toFixed(2), z: +this.pos.z.toFixed(2), y: +(this.yaw + this.koAngle).toFixed(3), rx: +this.rig.root.rotation.x.toFixed(2), ay: +this.airY.toFixed(2),
-      hp: +this.hp.toFixed(1), f: flags, fy: +(this.fallY || 0).toFixed(2), dI: +d.intensity.toFixed(3), sw: +d.sway.toFixed(3), sv: +d.swayVel.toFixed(2),
+      hp: +this.hp.toFixed(1), f: flags, fy: +(this.fallY || 0).toFixed(2),
+      st: +Math.max(0, this.stagger).toFixed(2), sk: this.staggerKind === 'groggy' ? 2 : this.staggerKind === 'liver' ? 1 : 0, dI: +d.intensity.toFixed(3), sw: +d.sway.toFixed(3), sv: +d.swayVel.toFixed(2),
       bl: +d.blend.toFixed(2), ga: +d.gauge.toFixed(1), ch: d.charge, ra: +this.rattle.toFixed(2),
       ps: this.punch ? (this.punch.side === 'L' ? 1 : 2) : 0, pp: +this.punchProgress.toFixed(2),
       tg: this.target ? this.target.slot : -1, cb: this.combo, cu: +this.cd.U.toFixed(1), ci: +this.cd.I.toFixed(1), po,
@@ -1269,7 +1279,10 @@ export class Fighter {
     this.rig.root.rotation.x = L(a.rx, b.rx);
     this.hp = L(a.hp, b.hp);
     const f = b.f;
-    this.ko = !!(f & 1); this.guard = !!(f & 8); this.stagger = (f & 16) ? 1 : 0;
+    this.ko = !!(f & 1); this.guard = !!(f & 8);
+    // 스태거는 실제 남은 시간까지 동기화 (예측/판정이 서버와 같은 기준을 쓰도록)
+    this.stagger = b.st !== undefined ? b.st : ((f & 16) ? 1 : 0);
+    this.staggerKind = b.sk === 2 ? 'groggy' : b.sk === 1 ? 'liver' : 'normal';
     this.finisher = (f & 32) ? { t: 0 } : null;
     this.boostT = (f & 64) ? 1 : 0; this.ropeCharge = (f & 128) ? 0.3 : 0; this.downT = (f & 256) ? 1 : 0;
     const bench = !!(f & 512);

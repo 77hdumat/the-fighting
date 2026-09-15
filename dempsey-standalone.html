@@ -2340,7 +2340,7 @@ return { BIT, InputState };
 __M.AfterImageEffect = (() => {
 // AfterImageEffect.js — 이전 프레임의 위치·회전·포즈를 링버퍼에 저장하고,
 // 시간차를 둔 고스트 리그 4~8개가 따라오게 하는 잔상 시스템
-const { buildBoxer, defaultPose, applyPose, copyPose, lerpPose } = __M.Rig;
+const { buildBoxer, defaultPose, applyPose, copyPose, lerpPose, FIGHTER_SCALE } = __M.Rig;
 
 const BUFFER = 180; // 약 3초 @60fps
 
@@ -2436,7 +2436,8 @@ class AfterImageEffect {
       const op = strength * (0.62 * Math.pow(1 - age, 1.3) + 0.06);
       g.setOpacity(op);
       g.setOutline(0.014 + 0.012 * age);
-      const sc = 1 + 0.035 * age;
+      // 본체와 같은 축척(FIGHTER_SCALE)을 쓰고, 오래될수록 아주 살짝만 팽창
+      const sc = FIGHTER_SCALE * (1 + 0.035 * age);
       g.root.scale.set(sc, sc, sc);
     }
   }
@@ -4002,6 +4003,15 @@ class Fighter {
   }
 
   // ---------- 클라 로컬 예측 (게스트 체감 지연 감소) ----------
+  /** 호스트가 실제로 받아 줄 입력인지 (클라 예측이 헛돌지 않게 같은 조건으로 검사) */
+  canPredict(slotKey) {
+    if (this.busy || this.benched || this.fallT > 0 || this.falling) return false;
+    if (this.punch && this.punch.t < this.punch.dur * (this.dempsey.active ? 0.42 : 0.55)) return false;
+    if (slotKey === 'U' || slotKey === 'I') return this.cd[slotKey] <= 0;
+    if (slotKey === 'L') return !!this.dempsey.maxSpeed;
+    return true;
+  }
+
   /** 버튼을 누른 즉시 팔 동작을 그려 준다. 판정은 호스트가 하고, 서버 포즈가 오면 예측은 버린다 */
   predictPunch(side, type = 'straight') {
     if (this.ko || this.downT > 0 || this.stagger > 0 || this.ultVictimT > 0) return;
@@ -5123,7 +5133,8 @@ class Fighter {
     let i = 0; for (const k in this.pose) po[i++] = +this.pose[k].toFixed(2);   // 소수 2자리면 시각 차이 없음, 페이로드는 20~30% 감소
     return {
       x: +this.pos.x.toFixed(2), z: +this.pos.z.toFixed(2), y: +(this.yaw + this.koAngle).toFixed(3), rx: +this.rig.root.rotation.x.toFixed(2), ay: +this.airY.toFixed(2),
-      hp: +this.hp.toFixed(1), f: flags, fy: +(this.fallY || 0).toFixed(2), dI: +d.intensity.toFixed(3), sw: +d.sway.toFixed(3), sv: +d.swayVel.toFixed(2),
+      hp: +this.hp.toFixed(1), f: flags, fy: +(this.fallY || 0).toFixed(2),
+      st: +Math.max(0, this.stagger).toFixed(2), sk: this.staggerKind === 'groggy' ? 2 : this.staggerKind === 'liver' ? 1 : 0, dI: +d.intensity.toFixed(3), sw: +d.sway.toFixed(3), sv: +d.swayVel.toFixed(2),
       bl: +d.blend.toFixed(2), ga: +d.gauge.toFixed(1), ch: d.charge, ra: +this.rattle.toFixed(2),
       ps: this.punch ? (this.punch.side === 'L' ? 1 : 2) : 0, pp: +this.punchProgress.toFixed(2),
       tg: this.target ? this.target.slot : -1, cb: this.combo, cu: +this.cd.U.toFixed(1), ci: +this.cd.I.toFixed(1), po,
@@ -5141,7 +5152,10 @@ class Fighter {
     this.rig.root.rotation.x = L(a.rx, b.rx);
     this.hp = L(a.hp, b.hp);
     const f = b.f;
-    this.ko = !!(f & 1); this.guard = !!(f & 8); this.stagger = (f & 16) ? 1 : 0;
+    this.ko = !!(f & 1); this.guard = !!(f & 8);
+    // 스태거는 실제 남은 시간까지 동기화 (예측/판정이 서버와 같은 기준을 쓰도록)
+    this.stagger = b.st !== undefined ? b.st : ((f & 16) ? 1 : 0);
+    this.staggerKind = b.sk === 2 ? 'groggy' : b.sk === 1 ? 'liver' : 'normal';
     this.finisher = (f & 32) ? { t: 0 } : null;
     this.boostT = (f & 64) ? 1 : 0; this.ropeCharge = (f & 128) ? 0.3 : 0; this.downT = (f & 256) ? 1 : 0;
     const bench = !!(f & 512);
@@ -8202,10 +8216,12 @@ class Game {
   /** 버튼 입력을 받은 그 프레임에 내 캐릭터 동작을 먼저 그려 준다 (호스트 확인 전) */
   predictInput(input) {
     const f = this.localFighter; if (!f || f.benched || f.falling || f.ko) return;
-    if (input.justPressed('KeyJ')) f.predictPunch('L', 'straight');
-    else if (input.justPressed('KeyK')) f.predictPunch('R', 'straight');
-    else if (input.justPressed('KeyU') || input.justPressed('KeyI')) f.predictPunch(input.justPressed('KeyU') ? 'R' : 'L', 'special');
-    else if (input.justPressed('KeyL')) f.predictPunch('R', 'hook');
+    // 호스트가 거부할 입력(쿨다운·경직·게이지 부족 등)은 예측도 하지 않는다
+    if (input.justPressed('KeyJ')) { if (f.canPredict('J')) f.predictPunch('L', 'straight'); }
+    else if (input.justPressed('KeyK')) { if (f.canPredict('K')) f.predictPunch('R', 'straight'); }
+    else if (input.justPressed('KeyU')) { if (f.canPredict('U')) f.predictPunch('R', 'special'); }
+    else if (input.justPressed('KeyI')) { if (f.canPredict('I')) f.predictPunch('L', 'special'); }
+    else if (input.justPressed('KeyL')) { if (f.canPredict('L')) f.predictPunch('R', 'hook'); }
   }
 
   /**

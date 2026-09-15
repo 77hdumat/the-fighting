@@ -1,7 +1,7 @@
 // AfterImageEffect.js — 이전 프레임의 위치·회전·포즈를 링버퍼에 저장하고,
 // 시간차를 둔 고스트 리그 4~8개가 따라오게 하는 잔상 시스템
 import * as THREE from 'three';
-import { buildBoxer, defaultPose, applyPose, copyPose, lerpPose } from './Rig.js';
+import { buildBoxer, defaultPose, applyPose, copyPose, lerpPose, FIGHTER_SCALE } from './Rig.js';
 
 const BUFFER = 180; // 약 3초 @60fps
 
@@ -97,7 +97,8 @@ export class AfterImageEffect {
       const op = strength * (0.62 * Math.pow(1 - age, 1.3) + 0.06);
       g.setOpacity(op);
       g.setOutline(0.014 + 0.012 * age);
-      const sc = 1 + 0.035 * age;
+      // 본체와 같은 축척(FIGHTER_SCALE)을 쓰고, 오래될수록 아주 살짝만 팽창
+      const sc = FIGHTER_SCALE * (1 + 0.035 * age);
       g.root.scale.set(sc, sc, sc);
     }
   }
