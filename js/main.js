@@ -542,8 +542,6 @@ class Game {
       else if (m.t === 'full') this.lobbyMsg('방이 가득 찼거나 이미 시작됨');
       else if (m.t === 'start') { this.names = []; m.cfg.forEach((c) => { this.names[c.netSlot] = c.name; }); this.localSlot = Math.max(0, m.cfg.findIndex((c) => c.netSlot === net.mySlot)); this.startMatch('client', m.cfg); }
       else if (m.t === 'snap') { if (this.phase === 'fight') this.onSnapshot(m); }
-      else if (m.t === 'ultblk') { const a = this.fighters[m.s]; this.audio.guardHeavy(1.2); if (a) this.camCtl.onHit(a.forward, 0.7); this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.34, '가드!!', 'dodge'); }
-      else if (m.t === 'ult') { const a = this.fighters[m.s], b = this.fighters[m.b]; if (a) { this.ultFx.play(m.k, a, b); this.music.setDuck(0.3); setTimeout(() => this.music.setDuck(1), 3600); } }
       else if (m.t === 'skipv') { this.showSkipHint(m.n, m.total); }
       else if (m.t === 'phase') { if (m.p === 'countdown') this.endIntro(); else if (m.p === 'fight') { this.phase = 'fight'; document.getElementById('countdown').classList.add('hidden'); } }
       else if (m.t === 'chat') this.addChat(m.from, String(m.text).slice(0, 120), !!m.sys);
@@ -1094,6 +1092,7 @@ class Game {
           if (this._rushFxT % 3 === 0) { this.camCtl.onHit(f.forward, 0.45); this.audio.impact(0.5); }
           const tg = this.fighters[e.target];
           if (tg && this._rushFxT % 2 === 0) this.sparks.burst(tg.chestPos, f.forward, 8, new THREE.Color(1, 0.85, 0.5), 0.9, 0.35);
+          if (this.mode === 'host' && this._rushFxT % 3 === 0) this.pendingEvents.push({ t: 'rush', s: f.slot, b: e.target });
           continue;
         }
         if (e.type === 'special') continue;
@@ -1189,6 +1188,33 @@ class Game {
       } else if (e.t === 'fin' && e.s === this.localSlot) this.finisherWindFx();
       else if (e.t === 'coach') { this.coaches.shout(e.s); if (e.s === this.localSlot) this.coach.show(e.key); }
       else if (e.t === 'rope') { const f = this.fighters[e.s]; if (f) this.ropeFx(f, e.k); }
+      else if (e.t === 'ult') {
+        // 연출형 필살: 게스트도 3D 소품(유물/랙/오토바이/폰·링라이트/카페)을 똑같이 본다
+        const a = this.fighters[e.s], b = this.fighters[e.b];
+        if (a) {
+          this.ultFx.play(e.k, a, b);
+          // 클라는 파이터 로직을 돌리지 않으므로 연출 카메라용 상태를 직접 세팅한다 (renderFrame 에서 감쇠)
+          const DUR = { reels: 3.4, snackRain: 3.6, cafeRush: 3.2, coldCut: 3.4, barbell: 3.6, bike: 3.0 };
+          a.ultT = DUR[e.k] || 3.2; a.ultKind = e.k; a.ultTarget = b || a;
+          this.music.setDuck(0.3); setTimeout(() => this.music.setDuck(1), 3600);
+          this.applySlow(a.slot, 0.35, 0.25);
+          if (a.slot === this.localSlot || (b && b.slot === this.localSlot)) this.finisherWindFx();
+          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, ({ reels: '릴스 촬영 중!!', barbell: '3대 500!!', bike: '교통사고!!', snackRain: '간식 폭격!!', cafeRush: '커피 마셔야 돼!!', coldCut: '칼차단!!' })[e.k] || '필살!!', 'groggy');
+        }
+      }
+      else if (e.t === 'ultblk') {
+        const a = this.fighters[e.s], b = this.fighters[e.b];
+        this.audio.guardHeavy(1.2);
+        if (a) this.camCtl.onHit(a.forward, 0.7);
+        this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.34, '가드!!', 'dodge');
+        if (b) this.sparks.burst(b.chestPos, a ? a.forward : new THREE.Vector3(0, 0, 1), 26, new THREE.Color(0.75, 0.9, 1), 1.4, 0.7);
+      }
+      else if (e.t === 'rush') {
+        const a = this.fighters[e.s], b = this.fighters[e.b];
+        this.audio.impact(0.5);
+        if (a) this.camCtl.onHit(a.forward, 0.45);
+        if (b && a) this.sparks.burst(b.chestPos, a.forward, 8, new THREE.Color(1, 0.85, 0.5), 0.9, 0.35);
+      }
     }
   }
 
@@ -1205,6 +1231,12 @@ class Game {
 
   // ================= 렌더/연출 =================
   renderFrame(rawDt, simDt) {
+    // 클라이언트: 연출형 필살 카메라용 타이머 감쇠 (시뮬레이션을 돌리지 않으므로 직접 깎는다)
+    if (this.mode === 'client') {
+      for (const f of this.fighters) {
+        if (f.ultT > 0) { f.ultT -= rawDt; if (f.ultT <= 0) { f.ultT = 0; f.ultKind = null; f.ultTarget = null; } }
+      }
+    }
     const [view, opp] = this.viewPair();
     const local = this.localFighter;
     const d = view.dempsey;
