@@ -542,6 +542,7 @@ class Game {
       else if (m.t === 'full') this.lobbyMsg('방이 가득 찼거나 이미 시작됨');
       else if (m.t === 'start') { this.names = []; m.cfg.forEach((c) => { this.names[c.netSlot] = c.name; }); this.localSlot = Math.max(0, m.cfg.findIndex((c) => c.netSlot === net.mySlot)); this.startMatch('client', m.cfg); }
       else if (m.t === 'snap') { if (this.phase === 'fight') this.onSnapshot(m); }
+      else if (m.t === 'ultblk') { const a = this.fighters[m.s]; this.audio.guardHeavy(1.2); if (a) this.camCtl.onHit(a.forward, 0.7); this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.34, '가드!!', 'dodge'); }
       else if (m.t === 'ult') { const a = this.fighters[m.s], b = this.fighters[m.b]; if (a) { this.ultFx.play(m.k, a, b); this.music.setDuck(0.3); setTimeout(() => this.music.setDuck(1), 3600); } }
       else if (m.t === 'skipv') { this.showSkipHint(m.n, m.total); }
       else if (m.t === 'phase') { if (m.p === 'countdown') this.endIntro(); else if (m.p === 'fight') { this.phase = 'fight'; document.getElementById('countdown').classList.add('hidden'); } }
@@ -1071,6 +1072,20 @@ class Game {
           if (f.slot === this.localSlot || (tg && tg.slot === this.localSlot)) this.finisherWindFx();
           this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, ({ reels: '릴스 촬영 중!!', barbell: '3대 500!!', bike: '교통사고!!', snackRain: '간식 폭격!!', cafeRush: '커피 마셔야 돼!!', coldCut: '칼차단!!' })[e.kind] || '필살!!', 'groggy');
           if (this.mode === 'host') this.pendingEvents.push({ t: 'ult', s: f.slot, b: e.target, k: e.kind });
+          continue;
+        }
+        if (e.type === 'ultBlocked') {
+          const tg = this.fighters[e.target];
+          this.audio.guardHeavy(1.2); this.camCtl.onHit(f.forward, 0.7);
+          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.34, '가드!!', 'dodge');
+          if (tg) this.sparks.burst(tg.chestPos, f.forward, 26, new THREE.Color(0.75, 0.9, 1), 1.4, 0.7);
+          if (this.mode === 'host') this.pendingEvents.push({ t: 'ultblk', s: f.slot, b: e.target });
+          continue;
+        }
+        if (e.type === 'ultHurt') {
+          // 간식 폭격에 맞는 동안 계속 비명 + 카메라 흔들림
+          this.voice.hurt(f.slot, f.defKey, 0.8);
+          this.camCtl.onHit(f.forward, 0.3);
           continue;
         }
         if (e.type === 'rushHit') {

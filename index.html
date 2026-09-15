@@ -3746,7 +3746,7 @@ class Fighter {
       // ---- 카페 돌격: 경로상의 모두에게 스턴 + 데미지 (넘어뜨리진 않는다) ----
       this.ultT = 3.2; this.ultKind = fk; this.ultTarget = this.target;
       this.punch = null; this.queue.length = 0; this.armor = 3.2;
-      this.rushHits = new Map();          // slot → 다음 타격 시각 (0.3초 간격 연속 히트)
+      this.rushHits = new Map();          // slot → 다음 타격 시각 (0.1초 도트)
       this.rushPower = (16 + 4 * charge) * this.def.powerMul;
       this.rushT = 0;
       d.consume();
@@ -3759,6 +3759,21 @@ class Fighter {
       // ---- 연출형 필살: 상대를 붙잡아두고 스크립트대로 진행 ----
       const tg = this.target;
       if (!tg || tg.ko || tg.downT > 0) return false;
+      // 가드 중이면 연출형 필살도 막힌다 (가드는 모든 공격을 막는다는 규칙 유지)
+      if (tg.guard || tg.block > 0) {
+        const chip = Math.max(1.5, (34 + 7 * charge) * this.def.powerMul * 0.08);
+        tg.hp = Math.max(0, tg.hp - chip);
+        tg.block = Math.max(tg.block, 0.5); tg.blockShock = 1; tg.blockGhost = 0.5;
+        tg.knock.addScaledVector(this.forward, 1.6);
+        tg.cd.U = Math.max(0, tg.cd.U - 0.4);
+        if (tg.hp <= 0) tg._die();
+        this.stagger = Math.max(this.stagger, 0.7); this.staggerKind = 'normal';
+        d.consume();
+        this.audio.guardHeavy(1.2);
+        this.subs.show('막혔다…!?', { duration: 1.2, mid: true });
+        this.events.push({ type: 'ultBlocked', kind: fk, target: tg.slot });
+        return true;
+      }
       const dur = ULT[fk];
       this.ultT = dur; this.ultKind = fk; this.ultTarget = tg;
       this.punch = null; this.queue.length = 0; this.armor = dur;
@@ -4327,6 +4342,18 @@ class Fighter {
             if (!caught && o.pos.distanceTo(this.pos) > 0.95) continue;
             // 닿는 즉시 첫 타격, 이후 0.1초마다 도트. 기절/다운 중이어도 데미지는 그대로 들어간다
             if (!caught) { this.rushHits.set(o.slot, -1); o.audio.stagger(); }
+            const guarding = o.guard || o.block > 0;
+            if (guarding) {
+              // 가드 중이면 밀리지도 않고 칩 데미지만 (0.1초 도트 × 12%)
+              o.block = Math.max(o.block, 0.35); o.blockShock = Math.max(o.blockShock, 0.7);
+              const next2 = this.rushHits.get(o.slot);
+              if (this.rushT >= next2) {
+                this.rushHits.set(o.slot, this.rushT + 0.1);
+                o.hp = Math.max(0, o.hp - tickDmg * 0.12);
+                if (o.hp <= 0) o._die();
+              }
+              continue;
+            }
             if (o.downT <= 0) {
               const want = this.pos.clone().addScaledVector(this.forward, 0.82);
               o.pos.lerp(want, Math.min(1, dt * 14));
@@ -4429,82 +4456,33 @@ class Fighter {
         p.waistX += 0.3 * down; p.shLX += -2.6; p.shRX += -2.6; p.elL += -0.4; p.elR += -0.4; p.shLZ += 0.55; p.shRZ += -0.55;
         p.headX += -0.2 + Math.sin(t * 12) * 0.08 * down;
         if (u > 2.45) { p.headZ += Math.sin(t * 14) * 0.2; this.rattle = Math.max(this.rattle, 0.4); }
-      } else if (k === 'coldCut') {
-        // 무표정하게 듣다가 손 들어 차단 → 도리도리 (중요치 않아)
-        const u = 3.4 - this.ultT;
-        if (u < 2.0) {
-          p.shLX += -0.55; p.shRX += -0.5; p.elL += -1.1; p.elR += -1.05; p.headX += -0.05;
-          p.hipsX += Math.sin(t * 1.4) * 0.03;
-        } else if (u < 2.45) {
-          const k2 = Math.min(1, (u - 2.0) / 0.12);
-          p.shRX += -2.5 * k2; p.shRY += 0.15 * k2; p.elR += -0.25 * k2; p.shRZ += -0.3 * k2;   // 손바닥 들어 차단
-          p.waistX += -0.12 * k2; p.headX += -0.18 * k2;
-        } else {
-          p.shRX += -1.4; p.elR += -1.6; p.shRY += 0.3;
-          p.headY += Math.sin(t * 11) * 0.5;      // 도리도리
-          p.headZ += Math.sin(t * 5.5) * 0.06;
-          p.waistY += Math.sin(t * 11) * 0.1;
-        }
       } else if (k === 'snackRain') {
-        // 하늘을 가리키며 빵을 부른다 → 흐뭇하게 구경
-        const u = 3.6 - this.ultT;
-        if (u < 0.9) {
-          const k2 = Math.min(1, u / 0.4);
-          p.shRX += -2.85 * k2; p.shRZ += -0.3 * k2; p.elR += -0.2 * k2; p.headX += -0.5 * k2;
-          p.shLX += -0.9 * k2; p.elL += -1.6 * k2;
-        } else {
-          p.shLX += -1.35; p.shRX += -1.3; p.elL += -1.9; p.elR += -1.9;   // 두 손 모으고 구경
-          p.headX += -0.25 + Math.sin(t * 3) * 0.05; p.hipsY += Math.abs(Math.sin(t * 4)) * 0.03;
-        }
-      } else if (k === 'cafeRush') {
-        // 커피를 향해 전력 질주: 팔 흔들고 상체 앞으로, 부딪히는 사람은 스턴
-        const u = 3.2 - this.ultT;
-        const run = Math.sin(t * 16);
-        p.waistX += 0.45; p.headX += -0.25; p.chestX += 0.2;
-        p.shLX += -1.1 + run * 0.9; p.shRX += -1.1 - run * 0.9; p.elL += -1.5; p.elR += -1.5;
-        p.thighLX += run * 0.85; p.thighRX += -run * 0.85; p.shinL += Math.max(0, run) * 1.2; p.shinR += Math.max(0, -run) * 1.2;
-        p.hipsY += Math.abs(Math.sin(t * 32)) * 0.05;
-        this.rushT = (this.rushT || 0) + dt;
-        if (u > 0.35 && u < 2.7) {
-          this.pos.addScaledVector(this.forward, 7.2 * dt);
-          const tickDmg = (this.rushPower || 16) * 0.075;   // 0.1초 간격 도트 (≈23히트, 총량은 다른 필살기와 동일)
-          for (const o of fighters) {
-            if (o === this || o.ko) continue;
-            const caught = this.rushHits.has(o.slot);
-            if (!caught && o.pos.distanceTo(this.pos) > 0.95) continue;
-            // 닿는 즉시 첫 타격, 이후 0.1초마다 도트. 기절/다운 중이어도 데미지는 그대로 들어간다
-            if (!caught) { this.rushHits.set(o.slot, -1); o.audio.stagger(); }
-            if (o.downT <= 0) {
-              const want = this.pos.clone().addScaledVector(this.forward, 0.82);
-              o.pos.lerp(want, Math.min(1, dt * 14));
-              o.stagger = Math.max(o.stagger, 0.6); o.staggerKind = 'normal'; o.staggerImmune = 0.4;
-              o.punch = null; o.queue.length = 0;
-            }
-            const next = this.rushHits.get(o.slot);
-            if (this.rushT >= next) {
-              this.rushHits.set(o.slot, this.rushT + 0.1);
-              o.hp = Math.max(0, o.hp - tickDmg);
-              o.rattle = Math.max(o.rattle, 0.55);
-              o.react.headX = -0.22; o.react.waistX = -0.12;
-              o.audio.impact(0.45);
-              if (o.hp <= 0) o._die();
-              this.events.push({ type: 'rushHit', target: o.slot });
-            }
-          }
-        } else if (u >= 2.7) {
-          // 돌격 종료: 밀고 온 상대들을 앞으로 튕겨내고 스태거만 남긴다 (넘어지진 않음)
-          for (const o of fighters) {
-            if (!this.rushHits.has(o.slot) || o.ko || o.downT > 0) continue;
-            if (!o._rushReleased) { o._rushReleased = true; o.knock.addScaledVector(this.forward, 3.4); o.stagger = Math.max(o.stagger, 1.4); o.staggerImmune = 1.2; o.audio.stagger(); }
-          }
-        }
-      } else if (k === 'snackRain') {
-        // 쏟아지는 간식을 머리 감싸고 맞다가 기절
+        // 쏟아지는 간식을 맞으며 몸부림 → 무릎 꺾임 → 기절
         const u = 3.6 - this.ultVictimT;
         if (u < 2.8) {
-          p.shLX += -2.3; p.shRX += -2.3; p.elL += -2.3; p.elR += -2.3; p.shLZ += 0.55; p.shRZ += -0.55;
-          p.headX += 0.4 + Math.sin(t * 20) * 0.1; p.waistX += 0.5; p.hipsY += -0.2 + Math.abs(Math.sin(t * 8)) * 0.05;
-          this.rattle = Math.max(this.rattle, 0.45);
+          const phase = u / 2.8;                       // 갈수록 더 괴로워진다
+          const wob = Math.sin(t * 7.5), wob2 = Math.sin(t * 13), fast = Math.sin(t * 24);
+          // 머리를 감싸 쥐고 팔을 퍼덕임
+          p.shLX += -2.35 + wob * 0.45; p.shRX += -2.35 - wob * 0.45;
+          p.elL += -2.4 + Math.abs(fast) * 0.35; p.elR += -2.4 + Math.abs(fast) * 0.35;
+          p.shLZ += 0.6 + wob2 * 0.15; p.shRZ += -0.6 - wob2 * 0.15;
+          // 상체를 웅크리고 좌우로 비틀거림
+          p.waistX += 0.55 + 0.35 * phase + Math.abs(wob) * 0.15;
+          p.waistZ += wob * (0.28 + 0.2 * phase);
+          p.waistY += wob2 * 0.22;
+          p.hipsX += wob * (0.12 + 0.1 * phase);
+          p.hipsRotY += wob2 * 0.3;
+          // 무릎이 점점 꺾인다
+          const sink = 0.25 + 0.45 * phase;
+          p.hipsY += -sink + Math.abs(Math.sin(t * 9)) * 0.05;
+          p.thighLX += -0.55 * sink * 2 + wob * 0.2; p.thighRX += -0.5 * sink * 2 - wob * 0.2;
+          p.shinL += 1.1 * sink + Math.max(0, wob) * 0.3; p.shinR += 1.05 * sink + Math.max(0, -wob) * 0.3;
+          // 고개를 마구 흔들며 비명
+          p.headX += 0.45 + fast * 0.14; p.headY += wob2 * 0.4; p.headZ += fast * 0.2;
+          this.rattle = Math.max(this.rattle, 0.55 + 0.25 * phase);
+          this.react.headX = -0.25 - 0.2 * phase;
+          this._snackCry = (this._snackCry || 0) + dt;
+          if (this._snackCry > 0.42) { this._snackCry = 0; this.events.push({ type: 'ultHurt' }); }
         } else {
           const k2 = Math.min(1, (u - 2.8) / 0.8);
           p.hipsY += -0.5 * k2; p.thighLX += -1.0 * k2; p.thighRX += -1.0 * k2; p.shinL += 1.7 * k2; p.shinR += 1.7 * k2;
@@ -4538,7 +4516,7 @@ class Fighter {
       }
       this.queue.length = 0;
       if (this.ultVictimT <= 0) {
-        this.ultVictimT = 0; this.ultVictimKind = null; this._bikeHit = false; this.ultDmg = 0; this.ultDmgRate = 0;
+        this.ultVictimT = 0; this.ultVictimKind = null; this._bikeHit = false; this.ultDmg = 0; this.ultDmgRate = 0; this._snackCry = 0;
         if (!this.ko) { this.downT = this.downDur; this.rattle = 1; }
       }
     }
@@ -6752,6 +6730,7 @@ class Game {
       else if (m.t === 'full') this.lobbyMsg('방이 가득 찼거나 이미 시작됨');
       else if (m.t === 'start') { this.names = []; m.cfg.forEach((c) => { this.names[c.netSlot] = c.name; }); this.localSlot = Math.max(0, m.cfg.findIndex((c) => c.netSlot === net.mySlot)); this.startMatch('client', m.cfg); }
       else if (m.t === 'snap') { if (this.phase === 'fight') this.onSnapshot(m); }
+      else if (m.t === 'ultblk') { const a = this.fighters[m.s]; this.audio.guardHeavy(1.2); if (a) this.camCtl.onHit(a.forward, 0.7); this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.34, '가드!!', 'dodge'); }
       else if (m.t === 'ult') { const a = this.fighters[m.s], b = this.fighters[m.b]; if (a) { this.ultFx.play(m.k, a, b); this.music.setDuck(0.3); setTimeout(() => this.music.setDuck(1), 3600); } }
       else if (m.t === 'skipv') { this.showSkipHint(m.n, m.total); }
       else if (m.t === 'phase') { if (m.p === 'countdown') this.endIntro(); else if (m.p === 'fight') { this.phase = 'fight'; document.getElementById('countdown').classList.add('hidden'); } }
@@ -7281,6 +7260,20 @@ class Game {
           if (f.slot === this.localSlot || (tg && tg.slot === this.localSlot)) this.finisherWindFx();
           this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, ({ reels: '릴스 촬영 중!!', barbell: '3대 500!!', bike: '교통사고!!', snackRain: '간식 폭격!!', cafeRush: '커피 마셔야 돼!!', coldCut: '칼차단!!' })[e.kind] || '필살!!', 'groggy');
           if (this.mode === 'host') this.pendingEvents.push({ t: 'ult', s: f.slot, b: e.target, k: e.kind });
+          continue;
+        }
+        if (e.type === 'ultBlocked') {
+          const tg = this.fighters[e.target];
+          this.audio.guardHeavy(1.2); this.camCtl.onHit(f.forward, 0.7);
+          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.34, '가드!!', 'dodge');
+          if (tg) this.sparks.burst(tg.chestPos, f.forward, 26, new THREE.Color(0.75, 0.9, 1), 1.4, 0.7);
+          if (this.mode === 'host') this.pendingEvents.push({ t: 'ultblk', s: f.slot, b: e.target });
+          continue;
+        }
+        if (e.type === 'ultHurt') {
+          // 간식 폭격에 맞는 동안 계속 비명 + 카메라 흔들림
+          this.voice.hurt(f.slot, f.defKey, 0.8);
+          this.camCtl.onHit(f.forward, 0.3);
           continue;
         }
         if (e.type === 'rushHit') {
