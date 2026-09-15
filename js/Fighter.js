@@ -525,12 +525,15 @@ export class Fighter {
     this.audio.ko();
   }
 
+  /** 팀전에서 같은 편인가 (난투는 team === null 이라 항상 false) */
+  sameTeam(o) { return this.team !== null && o && o.team !== null && o.team === this.team; }
+
   pickTarget(fighters) {
     if (this.target && this.target.ko && this.target.koT < 1.2 && this.target.pos.distanceTo(this.pos) < 1.8) return;
     let best = null, bd = 1e9;
     for (const f of fighters) {
       if (f === this || f.ko || f.benched) continue;
-      if (this.team !== null && f.team !== null && f.team === this.team) continue;   // 팀전: 같은 편은 노리지 않는다
+      if (this.sameTeam(f)) continue;   // 팀전: 같은 편은 노리지 않는다
       const dd = f.pos.distanceToSquared(this.pos);
       let w = f === this.target ? dd * 0.7 : dd;
       if (this.brain) {
@@ -762,7 +765,7 @@ export class Fighter {
     d.applyToPose(p);
 
     let hitEvent = null;
-    const others = fighters.filter((f) => f !== this && !f.benched && (!f.ko || f.koT < 1.2) && !(f.downT > 0));
+    const others = fighters.filter((f) => f !== this && !f.benched && !this.sameTeam(f) && (!f.ko || f.koT < 1.2) && !(f.downT > 0));
     const _hit = { zone: 'head', point: new THREE.Vector3(), t: 0 };
     const tryHit = (side, radius, mk, useFoot = false) => {
       const glove = useFoot ? (side === 'L' ? this.footL : this.footR) : (side === 'L' ? this.gloveL : this.gloveR);
@@ -921,7 +924,7 @@ export class Fighter {
           this.pos.addScaledVector(this.forward, 7.2 * dt);
           const tickDmg = (this.rushPower || 16) * 0.075;   // 0.1초 간격 도트 (≈23히트, 총량은 다른 필살기와 동일)
           for (const o of fighters) {
-            if (o === this || o.ko) continue;
+            if (o === this || o.ko || this.sameTeam(o)) continue;
             const caught = this.rushHits.has(o.slot);
             if (!caught && o.pos.distanceTo(this.pos) > 0.95) continue;
             // 닿는 즉시 첫 타격, 이후 0.1초마다 도트. 기절/다운 중이어도 데미지는 그대로 들어간다
