@@ -427,8 +427,10 @@ export class Fighter {
       this.react.headY = sgn * 0.8;
       return { dmg: 0, downed: true, ko: true };
     }
-    // 지친 상대의 주먹은 힘이 실리지 않는다 — 스태미나를 다 쓴 난타는 실질 위력이 떨어진다
-    if (ev.attacker && ev.attacker.stam < 20 && !ev.finisher) P *= 0.55 + 0.45 * (ev.attacker.stam / 20);
+    // 지친 상대의 주먹은 힘이 실리지 않는다 — 스태미나를 다 쓴 난타는 실질 위력이 떨어진다.
+    // P 는 const 이고 넉백·경직 판정에도 쓰이므로 건드리지 않고, 데미지에만 계수로 곱한다.
+    const tired = (ev.attacker && ev.attacker.stam < 20 && !ev.finisher)
+      ? 0.55 + 0.45 * (ev.attacker.stam / 20) : 1;
     let dmg = ev.type === 'hook' ? 2.5 + 4.5 * P : ev.type === 'flicker' ? 2.1 + 2.6 * P : ev.type === 'special' ? 3 + 4.5 * P : 3 + 3 * P;
     if (ev.dempsey) dmg *= 1.1;
     if (ev.roll) dmg *= 0.45;   // 뎀프시롤 난타: 한 방은 가볍고 수로 민다
@@ -436,6 +438,7 @@ export class Fighter {
     if (counter || ev.counter) dmg *= 1.8 * (ev.counterMul || 1);
     if (this.stagger > 0) dmg *= (this.staggerKind === 'groggy' ? 1.3 : 1.2);
     if (this.dempsey.active && !this.dempsey.maxSpeed) dmg *= 1.2;
+    dmg *= tired;
     this.readSkill = Math.min(0.3, this.readSkill + 0.025);
 
     // ---- 뎀프시롤 회피: 롤 중엔 공격도 하면서 상체를 크게 흔들어 70% 확률로 피한다 (필살기·카운터는 예외) ----
