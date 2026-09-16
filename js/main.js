@@ -1372,6 +1372,20 @@ class Game {
       if (hit) hits.push(hit);
       for (const e of f.events) {
         if (e.type === 'punchEnd') { const cb = this.coachBrains[f.slot]; if (cb) cb.onPunchEnd(e.hit); continue; }
+        if (e.type === 'comboArt') {
+          // 콤비네이션 성립 — 기술명을 띄우고 살짝 힘을 준다
+          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.28, e.name + '!!', 'groggy');
+          this.audio.riser(0.22, 0.22);
+          if (f.slot === this.localSlot) this.camCtl.fovPunch = -6;
+          if (e.cry) this.subs.show(e.cry, { duration: 1.0, mid: true, speaker: f.slot === this.localSlot ? 'player' : 'opp' });
+          continue;
+        }
+        if (e.type === 'guardBreak') {
+          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.32, '가드 브레이크!!', 'groggy');
+          this.audio.guardHeavy ? this.audio.guardHeavy(1.1) : this.audio.block();
+          if (f.slot === this.localSlot) { this.camCtl.shakeAmp = Math.max(this.camCtl.shakeAmp, 0.12); this.fx.hurtFlash(0.7); }
+          continue;
+        }
         if (e.type === 'ropeLaunch') { this.ropeFx(f, e.k); if (this.mode === 'host') this.pendingEvents.push({ t: 'rope', s: f.slot, k: e.k }); continue; }
         if (e.type === 'ultStart') {
           const tg = this.fighters[e.target];

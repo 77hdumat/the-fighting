@@ -10,6 +10,31 @@ const RING_LIMIT = 4.15;   // 링 1.5배 확장
 
 // 현재 경기장 (Game 이 맵을 만들 때 설정). cliff 는 로프가 없고 가장자리 밖은 낙사
 let ARENA = { kind: 'ring', radius: () => RING_LIMIT };
+// ---- 콤비네이션 (전 캐릭터 공통) ----
+// 입력을 순서대로 맞추면 마지막 타가 특수 마무리로 바뀐다.
+// 교대로 누르는 동안엔 스트레이트가 아니라 훅이 나가서 '붕붕' 휘두르는 그림이 된다.
+const COMBOS = [
+  { seq: 'JKJK', name: '붕붕 어퍼', cry: 'アッパーッ！！', stam: 26,
+    fire: (f, side) => f.startPunch(side, 'special', 0.44, 2.0 * f.def.powerMul,
+      { heavy: true, launch: 0.95, staggerT: 1.35, comboFinish: 'upper' }) },
+  { seq: 'KJKJ', name: '붕붕 어퍼', cry: 'アッパーッ！！', stam: 26,
+    fire: (f, side) => f.startPunch(side, 'special', 0.44, 2.0 * f.def.powerMul,
+      { heavy: true, launch: 0.95, staggerT: 1.35, comboFinish: 'upper' }) },
+  { seq: 'JJK', name: '원투 훅', cry: 'ワンツー…フック！', stam: 17,
+    fire: (f, side) => f.startPunch(side, 'hook', 0.30, 1.4 * f.def.powerMul,
+      { heavy: true, staggerT: 0.85, comboFinish: 'hook' }) },
+  { seq: 'KKJ', name: '원투 훅', cry: 'ワンツー…フック！', stam: 17,
+    fire: (f, side) => f.startPunch(side, 'hook', 0.30, 1.4 * f.def.powerMul,
+      { heavy: true, staggerT: 0.85, comboFinish: 'hook' }) },
+];
+/** 입력 꼬리와 가장 긴 것부터 맞춰 본다 */
+function matchCombo(seq) {
+  const s = seq.join('');
+  let best = null;
+  for (const c of COMBOS) if (s.endsWith(c.seq) && (!best || c.seq.length > best.seq.length)) best = c;
+  return best;
+}
+
 export function setArena(a) { ARENA = a || { kind: 'ring', radius: () => RING_LIMIT }; }
 const _d = new THREE.Vector3();
 const _g = new THREE.Vector3();
@@ -60,8 +85,13 @@ export class Fighter {
     this.queue = [];
     this.bufferedHook = null;
     this.finisher = null;
-    this.cd = { U: 0, I: 0, S: 0 };    // 고유기 / 밀치기 쿨다운
-    this.shove = null;                  // 밀치기 동작 { t, dur, hit }
+    this.cd = { U: 0, I: 0, S: 0 };    // 고유기 / 위빙훅 쿨다운
+    this.weave = null;                  // 위빙 훅 { t, dur, hit }
+    // 가드 스태미나: 막는 동안 줄고, 다 떨어지면 가드가 깨져 한동안 못 올린다.
+    // 무한 가드를 막아 '언제 막고 언제 뺄지'를 고르게 만드는 자원.
+    this.stamMax = 100; this.stam = 100;
+    this.stamIdle = 0;                  // 가드를 뗀 뒤 회복이 시작되기까지의 유예
+    this.guardBroken = 0;               // > 0 이면 가드 잠김
     this.armor = 0;                     // U 반격기 슈퍼아머 남은 시간
     this.prevPos = new THREE.Vector3(); this.vel = new THREE.Vector3(); this.walkPhase = 0; this.walkAmt = 0;
     this.ropeCharge = 0; this.ropeAxis = null; this.ropeDir = 0; this.ropeCool = 0; this.boostT = 0; this.dash = new THREE.Vector3();
@@ -86,6 +116,7 @@ export class Fighter {
     this.airY = 0; this.airV = 0;      // 띄워짐 (가젤/스매시)
     this.ko = false; this.koT = 0; this.koSpin = 0; this.koAngle = 0; this.koLift = 0;
     this.combo = 0; this.comboTimer = 0;
+    this.inputSeq = []; this.seqT = 0;   // 콤비네이션 입력 기록
     this.target = null;
     this.events = [];
     this.gloveL = new THREE.Vector3(); this.gloveR = new THREE.Vector3();
@@ -102,7 +133,7 @@ export class Fighter {
 
   get dempseyActive() { return this.dempsey.active; }
   get stanceStyle() { return this.dempsey.style; }
-  get busy() { return this.ko || this.fallT > 0 || this.stagger > 0 || !!this.finisher || !!this.shove || this.airY > 0.01 || this.downT > 0 || this.danceT > 0 || this.ultT > 0 || this.ultVictimT > 0; }
+  get busy() { return this.ko || this.fallT > 0 || this.stagger > 0 || !!this.finisher || !!this.weave || this.airY > 0.01 || this.downT > 0 || this.danceT > 0 || this.ultT > 0 || this.ultVictimT > 0; }
   get rolling() { return this.rollT > 0; }
   get alive() { return !this.ko; }
   get isCounterWindow() { return !!this.punch && this.punch.t / this.punch.dur < 0.55; }
@@ -243,6 +274,10 @@ export class Fighter {
     if (opts.roll) this.punch.roll = true;
     if (opts.rollFinish) { this.punch.rollFinish = true; this.punch.staggerT = opts.staggerT || 0; }
     if (opts.staggerT && !opts.kind) this.punch.staggerT = opts.staggerT;
+    // 펀치도 스태미나를 쓴다. 막누르면 바닥나서 가드를 못 올리게 되므로, 난타에 대가가 생긴다.
+    // (가드 전용 자원이면 '때리는 쪽'은 아무 위험이 없어 긴장감이 한쪽으로만 생긴다)
+    this.stam = Math.max(0, this.stam - (type === 'hook' ? 7 : type === 'special' ? 10 : 4.5));
+    this.stamIdle = 0;
     if (!opts.noTell) this.tell[side] = 1;
     this.audio.swoosh(side === 'L' ? -1 : 1, power, type === 'hook');
     // 뎀프시롤: 좌우 훅이 나갈 때마다 번개가 친다 (마무리 훅은 더 크게)
@@ -392,6 +427,8 @@ export class Fighter {
       this.react.headY = sgn * 0.8;
       return { dmg: 0, downed: true, ko: true };
     }
+    // 지친 상대의 주먹은 힘이 실리지 않는다 — 스태미나를 다 쓴 난타는 실질 위력이 떨어진다
+    if (ev.attacker && ev.attacker.stam < 20 && !ev.finisher) P *= 0.55 + 0.45 * (ev.attacker.stam / 20);
     let dmg = ev.type === 'hook' ? 2.5 + 4.5 * P : ev.type === 'flicker' ? 2.1 + 2.6 * P : ev.type === 'special' ? 3 + 4.5 * P : 3 + 3 * P;
     if (ev.dempsey) dmg *= 1.1;
     if (ev.roll) dmg *= 0.45;   // 뎀프시롤 난타: 한 방은 가볍고 수로 민다
@@ -455,23 +492,26 @@ export class Fighter {
       const heavy = ev.dempsey || ev.heavy || ev.finisher || ev.counter || counter || P >= 0.75;
       this.react.headX = -0.1 - 0.15 * P; this.react.waistX = -0.08 - 0.1 * P;
       this.knock.copy(ev.dir).multiplyScalar((0.9 + 1.5 * P) * (ev.finisher ? 2.0 : 1));   // 가드는 밀리되 과하지 않게
+      // 한 대 막을 때마다 크게 깎인다 — 센 공격일수록 더. 무한히 버틸 수 없다.
+      this.stam = Math.max(0, this.stam - (7 + 13 * P) * (ev.finisher ? 2.2 : 1));
+      this.stamIdle = 0;
       this.block = Math.max(this.block, 0.3);
       this.blockShock = Math.max(this.blockShock, heavy ? 1 : 0.4);
       if (heavy) this.blockGhost = 0.4;
       return { dmg, blocked: true, staggered: false, ko: this.ko, heavy };
     }
 
-    // ---- 밀치기 피격: 데미지는 적지만 크게 밀려나며 넘어진다 (가드로는 막힌다 — 위 분기에서 처리) ----
-    if (ev.shove) {
-      const dmgS = 2;
-      this.hp = Math.max(0, this.hp - dmgS);
-      this.knock.copy(ev.dir).setLength(13);
-      this.downT = this.downDur;
-      this.stagger = 0; this.punch = null; this.queue.length = 0; this.finisher = null;
-      this.dempsey.stop(); this.airY = 0; this.airV = 0;
-      this.react.waistX = -0.5; this.react.headX = -0.4;
+    // ---- 위빙 훅 피격: 뒤로 크게 밀리고 길게 경직된다 (가드로는 막힌다 — 위 분기에서 처리) ----
+    if (ev.weave) {
+      const dmgW = 6 + 6 * P;
+      this.hp = Math.max(0, this.hp - dmgW);
+      this.knock.copy(ev.dir).setLength(18);      // '많이 밀린다' — 일반 훅(약 3)의 6배
+      this.stagger = Math.max(this.stagger, 1.5); this.staggerKind = 'normal'; this.staggerImmune = 1.2;
+      this.punch = null; this.queue.length = 0; this.hitCount = 0;
+      this.react.headX = -0.65; this.react.waistX = -0.45; this.react.headY = 0.5;
+      this.stam = Math.max(0, this.stam - 18);    // 맞으면 스태미나도 깎인다
       if (this.hp <= 0) this._die();
-      return { dmg: dmgS, shove: true, down: true, staggered: false, ko: this.ko };
+      return { dmg: dmgW, weave: true, staggered: true, ko: this.ko, heavy: true };
     }
 
     const body = ev.zone === 'body';
@@ -715,6 +755,21 @@ export class Fighter {
     if (this.comboTimer <= 0) this.combo = 0;
     this.cd.U = Math.max(0, this.cd.U - dt); this.cd.I = Math.max(0, this.cd.I - dt);
     this.cd.S = Math.max(0, this.cd.S - dt);
+    // 가드 스태미나. 막는 동안 줄고, 손을 내리면 잠깐 뒤부터 빠르게 찬다.
+    if (this.guard) {
+      this.stam = Math.max(0, this.stam - 16 * dt);
+      this.stamIdle = 0;
+      if (this.stam <= 0 && this.guardBroken <= 0) {
+        this.guardBroken = 1.6;                 // 가드 깨짐 — 그동안 못 올린다
+        this.guard = false;
+        this.audio.guardHeavy ? this.audio.guardHeavy(1) : this.audio.block();
+        this.events.push({ type: 'guardBreak' });
+      }
+    } else {
+      this.stamIdle += dt;
+      if (this.stamIdle > 0.45) this.stam = Math.min(this.stamMax, this.stam + 26 * dt);
+    }
+    if (this.guardBroken > 0) this.guardBroken -= dt;
     if (this.armor > 0) this.armor -= dt;
 
     // ---- 입력 ----
@@ -732,17 +787,20 @@ export class Fighter {
     // SHIFT 를 뗐는데도 후속타까지 계속 자동으로 막혔다.
     // 단 block 은 AI 가 가드하는 수단이기도 하므로(AIBrain.doBlock) AI 에게는 남겨 둔다.
     const wantGuard = this.isAI ? (shift || this.block > 0) : shift;
-    this.guard = wantGuard && !d.active && !this.punch && !guardLocked;
+    // 스태미나가 바닥나 가드가 깨졌으면, 잠김이 풀리고 최소치(25)를 회복할 때까지 못 올린다
+    const stamOk = this.guardBroken <= 0 && this.stam > (this.guard ? 0 : 25);
+    this.guard = wantGuard && stamOk && !d.active && !this.punch && !guardLocked;
     this.guardT = this.guard ? (wasGuard ? this.guardT + dt : 0) : 99;
     this.guardHold = this.guard ? (this.guardHold || 0) + dt : 0;   // 코치용: 가드 연속 유지 시간
     // ---- 밀치기 (Space) ----
     // 막고만 있으면 아무것도 못 하니, 가드 중에도 눌러서 상대를 밀어낼 수 있게 한다.
     // 맞으면 크게 밀리며 넘어진다. 단 상대도 가드로 막을 수 있다.
-    if (input.justPressed('Space') && !this.shove && !this.punch && !this.busy && this.cd.S <= 0) {
-      this.shove = { t: 0, dur: 0.42, hit: false };
-      this.cd.S = 1.2;
+    if (input.justPressed('Space') && !this.weave && !this.punch && !this.busy && this.cd.S <= 0) {
+      this.weave = { t: 0, dur: 0.52, hit: false };
+      this.cd.S = 1.3;
       this.guard = false;
-      this.audio.swoosh(0, 0.55, false);
+      this.slip = 0.26; this.slipDir = this.dempsey.sway >= 0 ? 1 : -1;   // 앞머리 0.26초는 상체를 낮춰 흘린다
+      this.audio.swoosh(this.slipDir, 0.7, true);
     }
     const jDown = input.isDown('KeyJ'), kDown = input.isDown('KeyK');
     const jPress = input.justPressed('KeyJ'), kPress = input.justPressed('KeyK');
@@ -763,8 +821,28 @@ export class Fighter {
       else if (input.justPressed('KeyU')) this.startSpecial('U');
       else if (input.justPressed('KeyI')) this.startSpecial('I');
       else {
-        if (jPress) this.startPunch('L', 'straight');
-        else if (kPress) this.startPunch('R', 'straight');
+        const press = jPress ? 'J' : kPress ? 'K' : null;
+        if (press) {
+          // 0.6초 안에 이어 누른 것만 한 콤비네이션으로 본다
+          if (this.time - this.seqT > 0.6) this.inputSeq.length = 0;
+          this.seqT = this.time;
+          this.inputSeq.push(press);
+          if (this.inputSeq.length > 6) this.inputSeq.shift();
+
+          const side = press === 'J' ? 'L' : 'R';
+          const cb = matchCombo(this.inputSeq);
+          if (cb && this.stam >= cb.stam) {
+            this.inputSeq.length = 0;
+            this.stam = Math.max(0, this.stam - cb.stam);
+            cb.fire(this, side);
+            this.events.push({ type: 'comboArt', name: cb.name, cry: cb.cry });
+          } else {
+            // 좌우 교대로 누르는 동안엔 훅이 나간다 → '붕붕' 휘두르는 그림
+            const n = this.inputSeq.length;
+            const alt = n >= 2 && this.inputSeq[n - 1] !== this.inputSeq[n - 2];
+            this.startPunch(side, alt ? 'hook' : 'straight');
+          }
+        }
         else if (!this.punch && this.queue.length && this.block <= 0) {
           const q = this.queue.shift();
           this.startPunch(q.side, q.type, q.dur, q.power, q);
@@ -891,30 +969,41 @@ export class Fighter {
       return null;
     };
 
-    // ---- 밀치기 동작 ----
-    if (this.shove) {
-      const s = this.shove;
-      s.t += dt;
-      const u = Math.min(1, s.t / s.dur);
-      // 0~0.3 팔을 당기고, 0.3~0.62 두 손으로 밀어내고, 이후 되돌아온다
-      const push = u < 0.3 ? -(u / 0.3) * 0.35
-        : u < 0.62 ? (-0.35 + ((u - 0.3) / 0.32) * 1.75)
-        : 1.4 * (1 - (u - 0.62) / 0.38);
-      p.shLX += -push * 0.55; p.shRX += -push * 0.55;
-      p.elL += -Math.max(0, push) * 0.65; p.elR += -Math.max(0, push) * 0.65;
-      p.shLZ += 0.18; p.shRZ += -0.18;
-      p.waistX += push * 0.18; p.hipsY += -Math.max(0, push) * 0.02;
-      if (!s.hit && u > 0.3 && u < 0.62) {
-        for (const sd of ['L', 'R']) {
-          if (s.hit) break;
-          hitEvent = tryHit(sd, 0.5, (tg, h) => {
-            s.hit = true;
-            return { attacker: this, target: tg, side: sd, type: 'shove', shove: true, power: 0.7,
-                     pos: h.point.clone(), zone: h.zone, dir: this.forward.clone() };
-          }) || hitEvent;
-        }
+    // ---- 위빙 훅 ----
+    // 앞 절반은 상체를 낮춰 흘리고(위빙), 뒤 절반에 아래에서 올려치는 훅이 나간다.
+    // 맞으면 크게 뒤로 밀린다. 가드로는 막힌다.
+    if (this.weave) {
+      const wv = this.weave;
+      wv.t += dt;
+      const u = Math.min(1, wv.t / wv.dur);
+      const sd = wv.side || (wv.side = this.slipDir >= 0 ? 'L' : 'R');
+      const sgn = sd === 'L' ? 1 : -1;
+      if (u < 0.5) {
+        // 위빙: 무릎을 굽혀 몸을 낮추고 옆으로 흘린다
+        const k = Math.sin((u / 0.5) * Math.PI);
+        p.hipsY += -0.10 * k;
+        p.thighLX += -0.45 * k; p.shinL += 0.75 * k;
+        p.thighRX += -0.45 * k; p.shinR += 0.75 * k;
+        p.waistX += 0.42 * k; p.waistZ += -sgn * 0.42 * k;
+        p.hipsX += sgn * 0.16 * k;
+        p.headX += 0.30 * k; p.headZ += -sgn * 0.26 * k;
+      } else {
+        // 올려치는 훅: 낮춘 몸을 펴면서 어깨를 돌린다
+        const k = Math.sin(((u - 0.5) / 0.5) * Math.PI);
+        const kx = sd === 'L' ? 'shLX' : 'shRX', ky = sd === 'L' ? 'shLY' : 'shRY', ke = sd === 'L' ? 'elL' : 'elR';
+        p[kx] += -1.55 * k; p[ky] += sgn * 0.95 * k; p[ke] += 1.25 * k;
+        p.waistY += -sgn * 0.55 * k; p.waistX += -0.30 * k;
+        p.hipsRotY += -sgn * 0.35 * k; p.hipsY += 0.05 * k;
+        p.chestY += -sgn * 0.30 * k;
       }
-      if (s.t >= s.dur) this.shove = null;
+      if (!wv.hit && u > 0.55 && u < 0.82) {
+        hitEvent = tryHit(sd, 0.46, (tg, h) => {
+          wv.hit = true;
+          return { attacker: this, target: tg, side: sd, type: 'hook', weave: true, heavy: true, power: 1.15,
+                   pos: h.point.clone(), zone: h.zone, dir: this.forward.clone() };
+        }) || hitEvent;
+      }
+      if (wv.t >= wv.dur) this.weave = null;
     }
 
     // ---- 필살 ----

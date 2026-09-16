@@ -18,9 +18,9 @@ export class HUD {
     this.cards = fighters.map((f) => {
       const el = document.createElement('div');
       el.className = 'fcard' + (f.slot === localSlot ? ' me' : '') + (f.team !== null && f.team !== undefined ? ` team${f.team}` : '');
-      el.innerHTML = `<div class="name"><span class="tag">${f.nick || (f.isAI ? 'CPU' : 'P' + (f.netSlot + 1))}${f.slot === localSlot ? ' (YOU)' : ''}</span>${f.name}<span class="charge"></span><span class="hpnum"></span></div><div class="bar hp"><div class="ghost"></div><div class="fill"></div></div><div class="bar mini"><div class="fill"></div></div>`;
+      el.innerHTML = `<div class="name"><span class="tag">${f.nick || (f.isAI ? 'CPU' : 'P' + (f.netSlot + 1))}${f.slot === localSlot ? ' (YOU)' : ''}</span>${f.name}<span class="charge"></span><span class="hpnum"></span></div><div class="bar hp"><div class="ghost"></div><div class="fill"></div></div><div class="bar mini"><div class="fill"></div></div><div class="bar stam"><div class="fill"></div></div>`;
       this.top.appendChild(el);
-      return { el, fill: el.querySelector('.hp .fill'), ghost: el.querySelector('.hp .ghost'), ghostV: 1, ghostHold: 0, mini: el.querySelector('.mini'), miniFill: el.querySelector('.mini .fill'), charge: el.querySelector('.charge'), hpnum: el.querySelector('.hpnum') };
+      return { el, fill: el.querySelector('.hp .fill'), ghost: el.querySelector('.hp .ghost'), ghostV: 1, ghostHold: 0, mini: el.querySelector('.mini'), miniFill: el.querySelector('.mini .fill'), stam: el.querySelector('.stam'), stamFill: el.querySelector('.stam .fill'), charge: el.querySelector('.charge'), hpnum: el.querySelector('.hpnum') };
     });
   }
   update(dt, fighters, local) {
@@ -46,6 +46,13 @@ export class HUD {
       c.miniFill.style.width = d.gauge.toFixed(1) + '%';
       c.mini.classList.toggle('max', d.maxSpeed);
       c.charge.textContent = d.maxSpeed ? (d.charge > 0 ? `MAX ×${d.charge}` : 'MAX') : '';
+      // 가드 스태미나 — 바닥나면 가드가 깨져 빨갛게 깜빡인다
+      if (c.stamFill) {
+        const sr = Math.max(0, f.stam / f.stamMax);
+        c.stamFill.style.width = (sr * 100).toFixed(1) + '%';
+        c.stam.classList.toggle('low', sr < 0.3);
+        c.stam.classList.toggle('broken', f.guardBroken > 0);
+      }
     });
     if (!local) return;
     const d = local.dempsey;
