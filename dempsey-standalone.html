@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta name="build-id" content="1789528878">
+<meta name="build-id" content="1789529075">
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -440,7 +440,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   }
 }
 </script>
-<script>window.__BUILD_ID = "1789528878";</script>
+<script>window.__BUILD_ID = "1789529075";</script>
 </head>
 <body>
   <canvas id="gl" tabindex="0"></canvas>
@@ -547,7 +547,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
             <button id="btn-join" class="btn green">참가</button>
           </div>
         </div>
-        <div class="hint">J/K 펀치 · U 반격기 · I 고유기 · L 필살 · SHIFT 가드</div>
+        <div class="hint">J/K 펀치 · U 반격기 · I 고유기 · L 필살 · SHIFT 가드 · SPACE 밀치기</div>
         <button id="btn-fs-menu" class="fs-link">전체화면</button>
       </div>
 
@@ -4010,6 +4010,33 @@ class AudioManager {
     const pg = ctx.createGain(); pg.gain.setValueAtTime(0.25, t); pg.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
     p1.connect(pg); pg.connect(this.master); p1.start(t); p1.stop(t + 0.5);
     if (power > 0.9) this.bassHit();
+  }
+
+  /**
+   * UI 블립 — "띡" 하는 짧고 부드러운 확인음.
+   * 사인파 두 음을 겹쳐 쓴다. 사각파를 쓰면 도트음처럼 딱딱해져서 일부러 피했다.
+   * @param up true = 열림(음이 올라감) / false = 닫힘(내려감)
+   */
+  blip(up = true) {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 3800; lp.Q.value = 0.6;
+    lp.connect(this.master);
+    const notes = up ? [[920, 0, 0.075], [1380, 0.055, 0.11]] : [[1380, 0, 0.075], [920, 0.055, 0.11]];
+    for (const [freq, delay, dur] of notes) {
+      const t0 = t + delay;
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(freq, t0);
+      o.frequency.exponentialRampToValueAtTime(freq * (up ? 1.06 : 0.94), t0 + dur);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.22, t0 + 0.008);   // 톡 튀는 어택
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(g); g.connect(lp);
+      o.start(t0); o.stop(t0 + dur + 0.02);
+    }
   }
 
   /** 카운트다운 비프 */
@@ -8385,7 +8412,7 @@ class Game {
       if (!this.hiddenShown && CHARACTERS[this.myChar] && CHARACTERS[this.myChar].hidden) this.pickChar('ippo');
       this.buildCharSel(document.getElementById('charsel'));
       this.buildCharSel(document.getElementById('charsel2'));
-      if (this.hiddenShown) { try { this.audio.init(); this.audio.chargeUp(3); } catch (e) {} }
+      try { this.audio.init(); this.audio.blip(this.hiddenShown); } catch (e) {}
     });
     container.appendChild(btn);
     this.showCharDetail(container, this.myChar);

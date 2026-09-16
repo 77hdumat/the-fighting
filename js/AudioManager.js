@@ -540,6 +540,33 @@ export class AudioManager {
     if (power > 0.9) this.bassHit();
   }
 
+  /**
+   * UI 블립 — "띡" 하는 짧고 부드러운 확인음.
+   * 사인파 두 음을 겹쳐 쓴다. 사각파를 쓰면 도트음처럼 딱딱해져서 일부러 피했다.
+   * @param up true = 열림(음이 올라감) / false = 닫힘(내려감)
+   */
+  blip(up = true) {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 3800; lp.Q.value = 0.6;
+    lp.connect(this.master);
+    const notes = up ? [[920, 0, 0.075], [1380, 0.055, 0.11]] : [[1380, 0, 0.075], [920, 0.055, 0.11]];
+    for (const [freq, delay, dur] of notes) {
+      const t0 = t + delay;
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(freq, t0);
+      o.frequency.exponentialRampToValueAtTime(freq * (up ? 1.06 : 0.94), t0 + dur);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.22, t0 + 0.008);   // 톡 튀는 어택
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(g); g.connect(lp);
+      o.start(t0); o.stop(t0 + dur + 0.02);
+    }
+  }
+
   /** 카운트다운 비프 */
   // 카운트다운은 합성 사각파 그대로 둔다 (샘플로 바꿔봤지만 기존 쪽이 더 낫다는 판단)
   beep(high = false) {

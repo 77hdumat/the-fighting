@@ -321,7 +321,7 @@ class Game {
       if (!this.hiddenShown && CHARACTERS[this.myChar] && CHARACTERS[this.myChar].hidden) this.pickChar('ippo');
       this.buildCharSel(document.getElementById('charsel'));
       this.buildCharSel(document.getElementById('charsel2'));
-      if (this.hiddenShown) { try { this.audio.init(); this.audio.chargeUp(3); } catch (e) {} }
+      try { this.audio.init(); this.audio.blip(this.hiddenShown); } catch (e) {}
     });
     container.appendChild(btn);
     this.showCharDetail(container, this.myChar);
