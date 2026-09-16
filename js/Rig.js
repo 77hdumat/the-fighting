@@ -113,7 +113,7 @@ export const CHARACTERS = {
     gloves: 0xc8241f, hair: 0x0f0c0d, shoes: 0xc92626, shoesTrim: 0xffffff,
     hairStyle: 'spiky', brows: 'thick', eyes: 'round', mouth: 'grit',
     prop: { height: 0.95, torsoW: 1.14, torsoD: 1.12, armR: 1.18, armLen: 0.96, legR: 1.12, legLen: 0.95, headS: 1.02, headY: 1.0, neck: 0.9, muscle: 1 },
-    hp: 140, powerMul: 1.05, speedMul: 1.05, style: 'infighter',
+    hp: 140, powerMul: 1.05, speedMul: 1.05, style: 'infighter', guardMax: 110, guardRegen: 1.0, weaveCd: 1.2,
   },
   mashiba: {
     name: 'MASHIBA', gender: 'm', skin: 0xf1c8a6, trunks: 0x1d1226, trunksTrim: 0x9b4de0, trunksText: 'MASHIBA',
@@ -122,7 +122,7 @@ export const CHARACTERS = {
     hairStyle: 'longblack', brows: 'thin', eyes: 'narrow', mouth: 'grin',
     // 원작은 마르되 근육 윤곽이 뚜렷하다 — 복근/대흉근 디테일이 나오도록 상향
     prop: { height: 1.13, torsoW: 0.86, torsoD: 0.82, armR: 0.82, armLen: 1.24, legR: 0.84, legLen: 1.12, headS: 0.96, headY: 1.18, neck: 1.35, muscle: 0.75 },
-    hp: 150, powerMul: 0.9, speedMul: 1.35, style: 'hitman',
+    hp: 150, powerMul: 0.9, speedMul: 1.22, style: 'hitman', guardMax: 85, guardRegen: 1.15, weaveCd: 1.1,
   },
   // 아웃복서: 늘씬하고 빠름, 갈색 머리, 남색/흰 트렁크
   miyata: {
@@ -131,7 +131,7 @@ export const CHARACTERS = {
     gloves: 0xcf2a22, hair: 0x0c0909, shoes: 0x1b2a6b, shoesTrim: 0xffffff,
     hairStyle: 'bowl', brows: 'thin', eyes: 'round', mouth: 'grit',
     prop: { height: 1.02, torsoW: 0.92, torsoD: 0.9, armR: 0.9, armLen: 1.08, legR: 0.9, legLen: 1.04, headS: 0.98, headY: 1.05, neck: 1.1, muscle: 0.6 },
-    hp: 115, powerMul: 0.8, speedMul: 2.0, style: 'outboxer',
+    hp: 115, powerMul: 0.8, speedMul: 1.45, style: 'outboxer', guardMax: 80, guardRegen: 1.35, weaveCd: 0.95,
   },
   // 나니와의 호랑이: 야성적인 갈색 스파이크 헤어, 검정/주황 트렁크, 강력한 스매시
   sendo: {
@@ -140,7 +140,7 @@ export const CHARACTERS = {
     gloves: 0xd3391c, hair: 0x0f0c0e, shoes: 0x141414, shoesTrim: 0xff7a00,
     hairStyle: 'mane', brows: 'thick', eyes: 'narrow', mouth: 'grin',
     prop: { height: 1.06, torsoW: 1.22, torsoD: 1.15, armR: 1.22, armLen: 1.08, legR: 1.15, legLen: 1.04, headS: 1.03, headY: 1.0, neck: 1.0, muscle: 1 },
-    hp: 220, powerMul: 1.75, speedMul: 0.55, style: 'power',
+    hp: 220, powerMul: 1.75, speedMul: 0.82, style: 'power', guardMax: 135, guardRegen: 0.8, weaveCd: 1.7,
   },
   // ---- 히든 캐릭터 ----
   // 채채더킴: 작은 키, 단발머리 + 큰 눈. 냥냥펀치(빠르고 가벼움), 필살 = 릴스 (상대를 붙잡아 같이 춤)
@@ -151,7 +151,7 @@ export const CHARACTERS = {
     hair: 0x2a1a16, hairStyle: 'bob', brows: 'thin', eyes: 'big', mouth: 'grin',
     accessory: 'sunglasses', skirt: 0x17171e, hold: { L: 'book', R: 'book' },
     prop: { height: 0.82, torsoW: 0.88, torsoD: 0.86, armR: 0.86, armLen: 0.88, legR: 0.9, legLen: 0.86, headS: 1.08, headY: 1.0, neck: 0.8, muscle: 0.3 },
-    hp: 120, powerMul: 0.8, speedMul: 1.8, style: 'idol', gaugeMul: 1.15, hidden: true, sfx: 'nyang',
+    hp: 120, powerMul: 0.8, speedMul: 1.38, style: 'idol', guardMax: 75, guardRegen: 1.35, weaveCd: 1.0, gaugeMul: 1.15, hidden: true, sfx: 'nyang',
   },
   // 쩡효: 중간 키, 긴 생머리 + 흰 피부. 덤벨 펀치(무겁다), 필살 = 바벨 내려찍기
   jjeonghyo: {
@@ -162,7 +162,7 @@ export const CHARACTERS = {
     hair: 0x241b18, hairStyle: 'long', brows: 'thin', eyes: 'narrow', mouth: 'grit',
     hold: { L: 'dumbbell', R: 'dumbbell' },
     prop: { height: 1.0, torsoW: 1.06, torsoD: 1.0, armR: 1.12, armLen: 1.0, legR: 1.12, legLen: 0.98, headS: 0.98, headY: 1.0, neck: 1.0, muscle: 1 },
-    hp: 185, powerMul: 1.45, speedMul: 0.8, style: 'gym', gaugeMul: 0.8, hidden: true, sfx: 'clang',
+    hp: 185, powerMul: 1.45, speedMul: 0.90, style: 'gym', guardMax: 130, guardRegen: 0.85, weaveCd: 1.6, gaugeMul: 0.8, hidden: true, sfx: 'clang',
   },
   // 뼈석원: 큰 키, 구릿빛 피부에 마른 몸. 뼈펀치(리치 최장), 필살 = 오토바이 돌진
   ppyeo: {
@@ -173,7 +173,7 @@ export const CHARACTERS = {
     hair: 0x14100e, hairStyle: 'slick', brows: 'thin', eyes: 'narrow', mouth: 'grin',
     hold: { L: 'helmet', R: 'bottle' },
     prop: { height: 1.2, torsoW: 0.74, torsoD: 0.72, armR: 0.7, armLen: 1.32, legR: 0.72, legLen: 1.2, headS: 0.94, headY: 1.16, neck: 1.4, muscle: 0.1 },
-    hp: 125, powerMul: 1.15, speedMul: 1.4, style: 'bone', gaugeMul: 1.0, hidden: true, sfx: 'bone',
+    hp: 125, powerMul: 1.15, speedMul: 1.25, style: 'bone', guardMax: 90, guardRegen: 1.1, weaveCd: 1.2, gaugeMul: 1.0, hidden: true, sfx: 'bone',
   },
   // 오승현: 가장 작고 하얀 피부. 빵을 들고 계속 먹는다. 소심하지만 갑자기 때린다
   ohsh: {
@@ -183,7 +183,7 @@ export const CHARACTERS = {
     hair: 0x14131a, hairStyle: 'bobsharp', brows: 'thin', eyes: 'big', mouth: 'grit',
     hold: { L: 'bread', R: 'croissant' }, oversize: 1,
     prop: { height: 0.72, torsoW: 0.9, torsoD: 0.88, armR: 0.95, armLen: 0.82, legR: 0.84, legLen: 0.78, headS: 1.14, headY: 1.0, neck: 0.7, muscle: 0.15 },
-    hp: 105, powerMul: 0.9, speedMul: 1.7, style: 'bread', gaugeMul: 1.25, hidden: true, sfx: 'nyang', sleeveColor: 0xfdf6ec,
+    hp: 105, powerMul: 0.9, speedMul: 1.35, style: 'bread', guardMax: 70, guardRegen: 1.4, weaveCd: 1.0, gaugeMul: 1.25, hidden: true, sfx: 'nyang', sleeveColor: 0xfdf6ec,
   },
   // 정주원: 뚱뚱한 보통 체격, 헤드폰. 삼각김밥을 계속 먹는다
   jungjuwon: {
@@ -194,7 +194,7 @@ export const CHARACTERS = {
     accessory: 'headphones', belly: 1,
     hold: { L: 'onigiri', R: 'coffee' },
     prop: { height: 1.0, torsoW: 1.34, torsoD: 1.34, armR: 1.14, armLen: 1.0, legR: 1.12, legLen: 0.94, headS: 1.04, headY: 1.0, neck: 0.85, muscle: 0.15 },
-    hp: 195, powerMul: 1.3, speedMul: 0.85, style: 'snack', gaugeMul: 0.9, hidden: true,
+    hp: 195, powerMul: 1.3, speedMul: 0.92, style: 'snack', guardMax: 125, guardRegen: 0.85, weaveCd: 1.55, gaugeMul: 0.9, hidden: true,
   },
   // 고코몽: 약간 작은 체격, 하늘색 긴 티. 감정이 없다
   gokomong: {
@@ -203,7 +203,7 @@ export const CHARACTERS = {
     gloves: 0xecc6a4, noGloves: true, shoes: 0x2b3440, shoesTrim: 0x8fd6f2,
     hair: 0x1a1a20, hairStyle: 'bob', brows: 'thin', eyes: 'narrow', mouth: 'grit',
     prop: { height: 0.94, torsoW: 0.98, torsoD: 0.94, armR: 0.94, armLen: 1.04, legR: 0.96, legLen: 0.96, headS: 1.02, headY: 1.0, neck: 0.95, muscle: 0.45 },
-    hp: 150, powerMul: 1.05, speedMul: 1.0, style: 'istp', gaugeMul: 0.95, hidden: true,
+    hp: 150, powerMul: 1.05, speedMul: 1.0, style: 'istp', guardMax: 100, guardRegen: 1.0, weaveCd: 1.3, gaugeMul: 0.95, hidden: true,
   },
 };
 export const CHARACTER_ORDER = ['ippo', 'mashiba', 'miyata', 'sendo'];

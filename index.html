@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta name="build-id" content="1789536930">
+<meta name="build-id" content="1789537226">
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -533,7 +533,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   }
 }
 </script>
-<script>window.__BUILD_ID = "1789536930";</script>
+<script>window.__BUILD_ID = "1789537226";</script>
 </head>
 <body>
   <canvas id="gl" tabindex="0"></canvas>
@@ -543,13 +543,13 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
     <div class="top" id="hud-fighters"></div>
     <div class="hits" id="hits"></div>
 
-    <div class="skills"><div id="skill-u"></div><div id="skill-i"></div></div>
+    <div class="skills"><div id="skill-space"></div><div id="skill-u"></div><div id="skill-i"></div></div>
     <div id="guard-badge" class="hidden">GUARD</div>
     <div class="gauge-wrap" id="gauge-wrap">
       <div class="gauge-label"><span id="gauge-name">DEMPSEY</span><span id="gauge-max">MAX SPEED!!</span></div>
       <div class="bar gauge"><div class="fill" id="gauge-fill"></div></div>
       <div class="stam-row" id="stam-row">
-        <span class="stam-lbl">STAMINA</span>
+        <span class="stam-lbl">GUARD</span>
         <div class="bar stam big"><div class="fill" id="stam-fill"></div></div>
       </div>
     </div>
@@ -559,9 +559,9 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
       <div><b>기 게이지</b> 때릴수록 찬다 → MAX 에서 L</div>
       <div><b>J / K</b> 펀치 &nbsp; <b>U</b> 반격기 (아머 · 적중 시 스턴) &nbsp; <b>I</b> 고유기</div>
       <div><b>L</b> 필살기 (MAX 중 · 슈퍼아머 · 차지 ×3)</div>
-      <div><b>SPACE</b> 위빙 훅 (숙여 흘리며 올려친다 · 맞으면 크게 밀려남 · 가드로 막힘)</div>
+      <div><b>SPACE</b> 위빙 훅 (숙여 흘리며 올려친다 · 맞으면 크게 밀려남 · 가드로 막힘 · 쿨타임)</div>
       <div><b>콤비네이션</b> J K J K = 붕붕 어퍼 &nbsp; J J K / K K J = 원투 훅 (교대로 누르면 훅이 나간다)</div>
-      <div><b>스태미나</b> 가드·펀치가 소모한다. 바닥나면 가드가 깨져 잠시 못 올린다</div>
+      <div><b>가드 게이지</b> 가드·펀치가 소모한다. 바닥나면 가드가 깨져 잠시 못 올린다 (캐릭터마다 다름)</div>
       <div><b>SHIFT</b> 가드 (필살기 포함 전부 방어) &nbsp; <b>R</b> 다음 경기 (종료 후) &nbsp; <b>B</b> 배경음 &nbsp; <b>V</b> 음성 &nbsp; <b>Q</b> 화질</div>
       <div><b>마우스</b> 좌클릭 = 펀치 · 휠클릭 = U</div>
       <div><b>로프</b> 로프 쪽으로 계속 밀면 힘을 모았다 튕겨 나감 (속도·파워 ↑)</div>
@@ -646,7 +646,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
             <button id="btn-join" class="btn green">참가</button>
           </div>
         </div>
-        <div class="hint">J/K 펀치 · SPACE 위빙훅 · U 반격기 · I 고유기 · L 필살 · SHIFT 가드(스태미나)</div>
+        <div class="hint">J/K 펀치 · SPACE 위빙훅 · U 반격기 · I 고유기 · L 필살 · SHIFT 가드(가드 게이지)</div>
         <button id="btn-fs-menu" class="fs-link">전체화면</button>
       </div>
 
@@ -2131,7 +2131,7 @@ const CHARACTERS = {
     gloves: 0xc8241f, hair: 0x0f0c0d, shoes: 0xc92626, shoesTrim: 0xffffff,
     hairStyle: 'spiky', brows: 'thick', eyes: 'round', mouth: 'grit',
     prop: { height: 0.95, torsoW: 1.14, torsoD: 1.12, armR: 1.18, armLen: 0.96, legR: 1.12, legLen: 0.95, headS: 1.02, headY: 1.0, neck: 0.9, muscle: 1 },
-    hp: 140, powerMul: 1.05, speedMul: 1.05, style: 'infighter',
+    hp: 140, powerMul: 1.05, speedMul: 1.05, style: 'infighter', guardMax: 110, guardRegen: 1.0, weaveCd: 1.2,
   },
   mashiba: {
     name: 'MASHIBA', gender: 'm', skin: 0xf1c8a6, trunks: 0x1d1226, trunksTrim: 0x9b4de0, trunksText: 'MASHIBA',
@@ -2140,7 +2140,7 @@ const CHARACTERS = {
     hairStyle: 'longblack', brows: 'thin', eyes: 'narrow', mouth: 'grin',
     // 원작은 마르되 근육 윤곽이 뚜렷하다 — 복근/대흉근 디테일이 나오도록 상향
     prop: { height: 1.13, torsoW: 0.86, torsoD: 0.82, armR: 0.82, armLen: 1.24, legR: 0.84, legLen: 1.12, headS: 0.96, headY: 1.18, neck: 1.35, muscle: 0.75 },
-    hp: 150, powerMul: 0.9, speedMul: 1.35, style: 'hitman',
+    hp: 150, powerMul: 0.9, speedMul: 1.22, style: 'hitman', guardMax: 85, guardRegen: 1.15, weaveCd: 1.1,
   },
   // 아웃복서: 늘씬하고 빠름, 갈색 머리, 남색/흰 트렁크
   miyata: {
@@ -2149,7 +2149,7 @@ const CHARACTERS = {
     gloves: 0xcf2a22, hair: 0x0c0909, shoes: 0x1b2a6b, shoesTrim: 0xffffff,
     hairStyle: 'bowl', brows: 'thin', eyes: 'round', mouth: 'grit',
     prop: { height: 1.02, torsoW: 0.92, torsoD: 0.9, armR: 0.9, armLen: 1.08, legR: 0.9, legLen: 1.04, headS: 0.98, headY: 1.05, neck: 1.1, muscle: 0.6 },
-    hp: 115, powerMul: 0.8, speedMul: 2.0, style: 'outboxer',
+    hp: 115, powerMul: 0.8, speedMul: 1.45, style: 'outboxer', guardMax: 80, guardRegen: 1.35, weaveCd: 0.95,
   },
   // 나니와의 호랑이: 야성적인 갈색 스파이크 헤어, 검정/주황 트렁크, 강력한 스매시
   sendo: {
@@ -2158,7 +2158,7 @@ const CHARACTERS = {
     gloves: 0xd3391c, hair: 0x0f0c0e, shoes: 0x141414, shoesTrim: 0xff7a00,
     hairStyle: 'mane', brows: 'thick', eyes: 'narrow', mouth: 'grin',
     prop: { height: 1.06, torsoW: 1.22, torsoD: 1.15, armR: 1.22, armLen: 1.08, legR: 1.15, legLen: 1.04, headS: 1.03, headY: 1.0, neck: 1.0, muscle: 1 },
-    hp: 220, powerMul: 1.75, speedMul: 0.55, style: 'power',
+    hp: 220, powerMul: 1.75, speedMul: 0.82, style: 'power', guardMax: 135, guardRegen: 0.8, weaveCd: 1.7,
   },
   // ---- 히든 캐릭터 ----
   // 채채더킴: 작은 키, 단발머리 + 큰 눈. 냥냥펀치(빠르고 가벼움), 필살 = 릴스 (상대를 붙잡아 같이 춤)
@@ -2169,7 +2169,7 @@ const CHARACTERS = {
     hair: 0x2a1a16, hairStyle: 'bob', brows: 'thin', eyes: 'big', mouth: 'grin',
     accessory: 'sunglasses', skirt: 0x17171e, hold: { L: 'book', R: 'book' },
     prop: { height: 0.82, torsoW: 0.88, torsoD: 0.86, armR: 0.86, armLen: 0.88, legR: 0.9, legLen: 0.86, headS: 1.08, headY: 1.0, neck: 0.8, muscle: 0.3 },
-    hp: 120, powerMul: 0.8, speedMul: 1.8, style: 'idol', gaugeMul: 1.15, hidden: true, sfx: 'nyang',
+    hp: 120, powerMul: 0.8, speedMul: 1.38, style: 'idol', guardMax: 75, guardRegen: 1.35, weaveCd: 1.0, gaugeMul: 1.15, hidden: true, sfx: 'nyang',
   },
   // 쩡효: 중간 키, 긴 생머리 + 흰 피부. 덤벨 펀치(무겁다), 필살 = 바벨 내려찍기
   jjeonghyo: {
@@ -2180,7 +2180,7 @@ const CHARACTERS = {
     hair: 0x241b18, hairStyle: 'long', brows: 'thin', eyes: 'narrow', mouth: 'grit',
     hold: { L: 'dumbbell', R: 'dumbbell' },
     prop: { height: 1.0, torsoW: 1.06, torsoD: 1.0, armR: 1.12, armLen: 1.0, legR: 1.12, legLen: 0.98, headS: 0.98, headY: 1.0, neck: 1.0, muscle: 1 },
-    hp: 185, powerMul: 1.45, speedMul: 0.8, style: 'gym', gaugeMul: 0.8, hidden: true, sfx: 'clang',
+    hp: 185, powerMul: 1.45, speedMul: 0.90, style: 'gym', guardMax: 130, guardRegen: 0.85, weaveCd: 1.6, gaugeMul: 0.8, hidden: true, sfx: 'clang',
   },
   // 뼈석원: 큰 키, 구릿빛 피부에 마른 몸. 뼈펀치(리치 최장), 필살 = 오토바이 돌진
   ppyeo: {
@@ -2191,7 +2191,7 @@ const CHARACTERS = {
     hair: 0x14100e, hairStyle: 'slick', brows: 'thin', eyes: 'narrow', mouth: 'grin',
     hold: { L: 'helmet', R: 'bottle' },
     prop: { height: 1.2, torsoW: 0.74, torsoD: 0.72, armR: 0.7, armLen: 1.32, legR: 0.72, legLen: 1.2, headS: 0.94, headY: 1.16, neck: 1.4, muscle: 0.1 },
-    hp: 125, powerMul: 1.15, speedMul: 1.4, style: 'bone', gaugeMul: 1.0, hidden: true, sfx: 'bone',
+    hp: 125, powerMul: 1.15, speedMul: 1.25, style: 'bone', guardMax: 90, guardRegen: 1.1, weaveCd: 1.2, gaugeMul: 1.0, hidden: true, sfx: 'bone',
   },
   // 오승현: 가장 작고 하얀 피부. 빵을 들고 계속 먹는다. 소심하지만 갑자기 때린다
   ohsh: {
@@ -2201,7 +2201,7 @@ const CHARACTERS = {
     hair: 0x14131a, hairStyle: 'bobsharp', brows: 'thin', eyes: 'big', mouth: 'grit',
     hold: { L: 'bread', R: 'croissant' }, oversize: 1,
     prop: { height: 0.72, torsoW: 0.9, torsoD: 0.88, armR: 0.95, armLen: 0.82, legR: 0.84, legLen: 0.78, headS: 1.14, headY: 1.0, neck: 0.7, muscle: 0.15 },
-    hp: 105, powerMul: 0.9, speedMul: 1.7, style: 'bread', gaugeMul: 1.25, hidden: true, sfx: 'nyang', sleeveColor: 0xfdf6ec,
+    hp: 105, powerMul: 0.9, speedMul: 1.35, style: 'bread', guardMax: 70, guardRegen: 1.4, weaveCd: 1.0, gaugeMul: 1.25, hidden: true, sfx: 'nyang', sleeveColor: 0xfdf6ec,
   },
   // 정주원: 뚱뚱한 보통 체격, 헤드폰. 삼각김밥을 계속 먹는다
   jungjuwon: {
@@ -2212,7 +2212,7 @@ const CHARACTERS = {
     accessory: 'headphones', belly: 1,
     hold: { L: 'onigiri', R: 'coffee' },
     prop: { height: 1.0, torsoW: 1.34, torsoD: 1.34, armR: 1.14, armLen: 1.0, legR: 1.12, legLen: 0.94, headS: 1.04, headY: 1.0, neck: 0.85, muscle: 0.15 },
-    hp: 195, powerMul: 1.3, speedMul: 0.85, style: 'snack', gaugeMul: 0.9, hidden: true,
+    hp: 195, powerMul: 1.3, speedMul: 0.92, style: 'snack', guardMax: 125, guardRegen: 0.85, weaveCd: 1.55, gaugeMul: 0.9, hidden: true,
   },
   // 고코몽: 약간 작은 체격, 하늘색 긴 티. 감정이 없다
   gokomong: {
@@ -2221,7 +2221,7 @@ const CHARACTERS = {
     gloves: 0xecc6a4, noGloves: true, shoes: 0x2b3440, shoesTrim: 0x8fd6f2,
     hair: 0x1a1a20, hairStyle: 'bob', brows: 'thin', eyes: 'narrow', mouth: 'grit',
     prop: { height: 0.94, torsoW: 0.98, torsoD: 0.94, armR: 0.94, armLen: 1.04, legR: 0.96, legLen: 0.96, headS: 1.02, headY: 1.0, neck: 0.95, muscle: 0.45 },
-    hp: 150, powerMul: 1.05, speedMul: 1.0, style: 'istp', gaugeMul: 0.95, hidden: true,
+    hp: 150, powerMul: 1.05, speedMul: 1.0, style: 'istp', guardMax: 100, guardRegen: 1.0, weaveCd: 1.3, gaugeMul: 0.95, hidden: true,
   },
 };
 const CHARACTER_ORDER = ['ippo', 'mashiba', 'miyata', 'sendo'];
@@ -5379,9 +5379,9 @@ class Fighter {
     this.finisher = null;
     this.cd = { U: 0, I: 0, S: 0 };    // 고유기 / 위빙훅 쿨다운
     this.weave = null;                  // 위빙 훅 { t, dur, hit }
-    // 가드 스태미나: 막는 동안 줄고, 다 떨어지면 가드가 깨져 한동안 못 올린다.
+    // 가드 게이지: 막는 동안 줄고, 다 떨어지면 가드가 깨져 한동안 못 올린다.
     // 무한 가드를 막아 '언제 막고 언제 뺄지'를 고르게 만드는 자원.
-    this.stamMax = 100; this.stam = 100;
+    this.stamMax = this.def.guardMax || 100; this.stam = this.stamMax;
     this.stamIdle = 0;                  // 가드를 뗀 뒤 회복이 시작되기까지의 유예
     this.guardBroken = 0;               // > 0 이면 가드 잠김
     this.armor = 0;                     // U 반격기 슈퍼아머 남은 시간
@@ -5584,7 +5584,7 @@ class Fighter {
     if (opts.roll) this.punch.roll = true;
     if (opts.rollFinish) { this.punch.rollFinish = true; this.punch.staggerT = opts.staggerT || 0; }
     if (opts.staggerT && !opts.kind) this.punch.staggerT = opts.staggerT;
-    // 펀치도 스태미나를 쓴다. 막누르면 바닥나서 가드를 못 올리게 되므로, 난타에 대가가 생긴다.
+    // 펀치도 가드 게이지를 쓴다. 막누르면 바닥나서 가드를 못 올리게 되므로, 난타에 대가가 생긴다.
     // (가드 전용 자원이면 '때리는 쪽'은 아무 위험이 없어 긴장감이 한쪽으로만 생긴다)
     this.stam = Math.max(0, this.stam - (type === 'hook' ? 5 : type === 'special' ? 7 : 3));
     this.stamIdle = 0;
@@ -5737,7 +5737,7 @@ class Fighter {
       this.react.headY = sgn * 0.8;
       return { dmg: 0, downed: true, ko: true };
     }
-    // 지친 상대의 주먹은 힘이 실리지 않는다 — 스태미나를 다 쓴 난타는 실질 위력이 떨어진다.
+    // 지친 상대의 주먹은 힘이 실리지 않는다 — 가드 게이지를 다 쓴 난타는 실질 위력이 떨어진다.
     // P 는 const 이고 넉백·경직 판정에도 쓰이므로 건드리지 않고, 데미지에만 계수로 곱한다.
     const tired = (ev.attacker && ev.attacker.stam < 20 && !ev.finisher)
       ? 0.55 + 0.45 * (ev.attacker.stam / 20) : 1;
@@ -5822,7 +5822,7 @@ class Fighter {
       this.stagger = Math.max(this.stagger, 1.5); this.staggerKind = 'normal'; this.staggerImmune = 1.2;
       this.punch = null; this.queue.length = 0; this.hitCount = 0;
       this.react.headX = -0.65; this.react.waistX = -0.45; this.react.headY = 0.5;
-      this.stam = Math.max(0, this.stam - 12);    // 맞으면 스태미나도 깎인다
+      this.stam = Math.max(0, this.stam - 12);    // 맞으면 가드 게이지도 깎인다
       if (this.hp <= 0) this._die();
       return { dmg: dmgW, weave: true, staggered: true, ko: this.ko, heavy: true };
     }
@@ -6068,7 +6068,7 @@ class Fighter {
     if (this.comboTimer <= 0) this.combo = 0;
     this.cd.U = Math.max(0, this.cd.U - dt); this.cd.I = Math.max(0, this.cd.I - dt);
     this.cd.S = Math.max(0, this.cd.S - dt);
-    // 가드 스태미나. 막는 동안 줄고, 손을 내리면 잠깐 뒤부터 빠르게 찬다.
+    // 가드 게이지. 막는 동안 줄고, 손을 내리면 잠깐 뒤부터 빠르게 찬다.
     if (this.guard) {
       this.stam = Math.max(0, this.stam - 11 * dt);
       this.stamIdle = 0;
@@ -6080,7 +6080,7 @@ class Fighter {
       }
     } else {
       this.stamIdle += dt;
-      if (this.stamIdle > 0.30) this.stam = Math.min(this.stamMax, this.stam + 34 * dt);
+      if (this.stamIdle > 0.30) this.stam = Math.min(this.stamMax, this.stam + 34 * (this.def.guardRegen || 1) * dt);
     }
     if (this.guardBroken > 0) this.guardBroken -= dt;
     if (this.armor > 0) this.armor -= dt;
@@ -6100,8 +6100,8 @@ class Fighter {
     // SHIFT 를 뗐는데도 후속타까지 계속 자동으로 막혔다.
     // 단 block 은 AI 가 가드하는 수단이기도 하므로(AIBrain.doBlock) AI 에게는 남겨 둔다.
     const wantGuard = this.isAI ? (shift || this.block > 0) : shift;
-    // 스태미나가 바닥나 가드가 깨졌으면, 잠김이 풀리고 최소치(25)를 회복할 때까지 못 올린다
-    const stamOk = this.guardBroken <= 0 && this.stam > (this.guard ? 0 : 18);
+    // 가드 게이지가 바닥나 가드가 깨졌으면, 잠김이 풀리고 최소치(최대의 18%)를 회복할 때까지 못 올린다
+    const stamOk = this.guardBroken <= 0 && this.stam > (this.guard ? 0 : this.stamMax * 0.18);
     this.guard = wantGuard && stamOk && !d.active && !this.punch && !guardLocked;
     this.guardT = this.guard ? (wasGuard ? this.guardT + dt : 0) : 99;
     this.guardHold = this.guard ? (this.guardHold || 0) + dt : 0;   // 코치용: 가드 연속 유지 시간
@@ -6110,7 +6110,7 @@ class Fighter {
     // 맞으면 크게 밀리며 넘어진다. 단 상대도 가드로 막을 수 있다.
     if (input.justPressed('Space') && !this.weave && !this.punch && !this.busy && this.cd.S <= 0) {
       this.weave = { t: 0, dur: 0.52, hit: false };
-      this.cd.S = 1.3;
+      this.cd.S = this.def.weaveCd || 1.3;
       this.guard = false;
       this.slip = 0.26; this.slipDir = this.dempsey.sway >= 0 ? 1 : -1;   // 앞머리 0.26초는 상체를 낮춰 흘린다
       this.audio.swoosh(this.slipDir, 0.7, true);
@@ -6828,7 +6828,7 @@ class Fighter {
     this.rattle = L(a.ra, b.ra);
     this.punch = b.ps ? { side: b.ps === 1 ? 'L' : 'R', t: L(a.pp, b.pp), dur: 1 } : null;
     this.targetSlot = b.tg; this.combo = b.cb; this.cd.U = b.cu || 0; this.cd.I = b.ci || 0;
-    // 스태미나는 호스트가 권위를 가진다 — 클라는 보간 없이 받은 값을 그대로 쓴다
+    // 가드 게이지는 호스트가 권위를 가진다 — 클라는 보간 없이 받은 값을 그대로 쓴다
     if (b.sm !== undefined) this.stam = b.sm;
     if (b.gb !== undefined) this.guardBroken = b.gb;
     let i = 0; for (const k in this.pose) { this.pose[k] = L(a.po[i], b.po[i]); i++; }
@@ -7424,6 +7424,7 @@ class HUD {
     this.stamFill = document.getElementById('stam-fill');
     this.gaugeWrap = document.getElementById('gauge-wrap');
     this.hits = document.getElementById('hits');
+    this.skillSpace = document.getElementById('skill-space');
     this.skillU = document.getElementById('skill-u');
     this.skillI = document.getElementById('skill-i');
     this.ko = document.getElementById('ko-overlay');
@@ -7462,7 +7463,7 @@ class HUD {
       c.miniFill.style.width = d.gauge.toFixed(1) + '%';
       c.mini.classList.toggle('max', d.maxSpeed);
       c.charge.textContent = d.maxSpeed ? (d.charge > 0 ? `MAX ×${d.charge}` : 'MAX') : '';
-      // 가드 스태미나 — 바닥나면 가드가 깨져 빨갛게 깜빡인다
+      // 가드 게이지 — 바닥나면 가드가 깨져 빨갛게 깜빡인다
       if (c.stamFill) {
         const sr = Math.max(0, f.stam / f.stamMax);
         c.stamFill.style.width = (sr * 100).toFixed(1) + '%';
@@ -7474,7 +7475,7 @@ class HUD {
     const d = local.dempsey;
     const lbl = document.getElementById('gauge-name');
     if (lbl) lbl.textContent = ({ dempsey: 'DEMPSEY', flicker: 'FLICKER', counter: 'COUNTER', smash: 'SMASH' })[d.style] || 'STANCE';
-    // 가드 스태미나 — 플레이어가 보는 하단 중앙에도 크게 띄운다
+    // 가드 게이지 — 플레이어가 보는 하단 중앙에도 크게 띄운다
     if (this.stamFill && this.stamRow) {
       const sr = Math.max(0, local.stam / local.stamMax);
       this.stamFill.style.width = (sr * 100).toFixed(1) + '%';
@@ -7496,6 +7497,11 @@ class HUD {
       this.skillU.innerHTML = `<b>U</b> ${nm(kit.U)}` + (local.cd.U > 0 ? ` <i>${local.cd.U.toFixed(1)}</i>` : '');
       this.skillI.innerHTML = `<b>I</b> ${nm(kit.I)}` + (local.cd.I > 0 ? ` <i>${local.cd.I.toFixed(1)}</i>` : '');
       this.skillU.classList.toggle('cd', local.cd.U > 0); this.skillI.classList.toggle('cd', local.cd.I > 0);
+      // 위빙 훅도 U/I 와 같은 방식으로 쿨타임을 보여 준다
+      if (this.skillSpace) {
+        this.skillSpace.innerHTML = '<b>SPACE</b> 위빙 훅' + (local.cd.S > 0 ? ` <i>${local.cd.S.toFixed(1)}</i>` : '');
+        this.skillSpace.classList.toggle('cd', local.cd.S > 0);
+      }
     }
     if (local.combo >= 2) {
       this.hits.textContent = `${local.combo} HITS!`;

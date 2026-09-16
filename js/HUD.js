@@ -10,6 +10,7 @@ export class HUD {
     this.stamFill = document.getElementById('stam-fill');
     this.gaugeWrap = document.getElementById('gauge-wrap');
     this.hits = document.getElementById('hits');
+    this.skillSpace = document.getElementById('skill-space');
     this.skillU = document.getElementById('skill-u');
     this.skillI = document.getElementById('skill-i');
     this.ko = document.getElementById('ko-overlay');
@@ -48,7 +49,7 @@ export class HUD {
       c.miniFill.style.width = d.gauge.toFixed(1) + '%';
       c.mini.classList.toggle('max', d.maxSpeed);
       c.charge.textContent = d.maxSpeed ? (d.charge > 0 ? `MAX ×${d.charge}` : 'MAX') : '';
-      // 가드 스태미나 — 바닥나면 가드가 깨져 빨갛게 깜빡인다
+      // 가드 게이지 — 바닥나면 가드가 깨져 빨갛게 깜빡인다
       if (c.stamFill) {
         const sr = Math.max(0, f.stam / f.stamMax);
         c.stamFill.style.width = (sr * 100).toFixed(1) + '%';
@@ -60,7 +61,7 @@ export class HUD {
     const d = local.dempsey;
     const lbl = document.getElementById('gauge-name');
     if (lbl) lbl.textContent = ({ dempsey: 'DEMPSEY', flicker: 'FLICKER', counter: 'COUNTER', smash: 'SMASH' })[d.style] || 'STANCE';
-    // 가드 스태미나 — 플레이어가 보는 하단 중앙에도 크게 띄운다
+    // 가드 게이지 — 플레이어가 보는 하단 중앙에도 크게 띄운다
     if (this.stamFill && this.stamRow) {
       const sr = Math.max(0, local.stam / local.stamMax);
       this.stamFill.style.width = (sr * 100).toFixed(1) + '%';
@@ -82,6 +83,11 @@ export class HUD {
       this.skillU.innerHTML = `<b>U</b> ${nm(kit.U)}` + (local.cd.U > 0 ? ` <i>${local.cd.U.toFixed(1)}</i>` : '');
       this.skillI.innerHTML = `<b>I</b> ${nm(kit.I)}` + (local.cd.I > 0 ? ` <i>${local.cd.I.toFixed(1)}</i>` : '');
       this.skillU.classList.toggle('cd', local.cd.U > 0); this.skillI.classList.toggle('cd', local.cd.I > 0);
+      // 위빙 훅도 U/I 와 같은 방식으로 쿨타임을 보여 준다
+      if (this.skillSpace) {
+        this.skillSpace.innerHTML = '<b>SPACE</b> 위빙 훅' + (local.cd.S > 0 ? ` <i>${local.cd.S.toFixed(1)}</i>` : '');
+        this.skillSpace.classList.toggle('cd', local.cd.S > 0);
+      }
     }
     if (local.combo >= 2) {
       this.hits.textContent = `${local.combo} HITS!`;

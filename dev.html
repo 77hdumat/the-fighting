@@ -34,13 +34,13 @@
     <div class="top" id="hud-fighters"></div>
     <div class="hits" id="hits"></div>
 
-    <div class="skills"><div id="skill-u"></div><div id="skill-i"></div></div>
+    <div class="skills"><div id="skill-space"></div><div id="skill-u"></div><div id="skill-i"></div></div>
     <div id="guard-badge" class="hidden">GUARD</div>
     <div class="gauge-wrap" id="gauge-wrap">
       <div class="gauge-label"><span id="gauge-name">DEMPSEY</span><span id="gauge-max">MAX SPEED!!</span></div>
       <div class="bar gauge"><div class="fill" id="gauge-fill"></div></div>
       <div class="stam-row" id="stam-row">
-        <span class="stam-lbl">STAMINA</span>
+        <span class="stam-lbl">GUARD</span>
         <div class="bar stam big"><div class="fill" id="stam-fill"></div></div>
       </div>
     </div>
@@ -50,9 +50,9 @@
       <div><b>기 게이지</b> 때릴수록 찬다 → MAX 에서 L</div>
       <div><b>J / K</b> 펀치 &nbsp; <b>U</b> 반격기 (아머 · 적중 시 스턴) &nbsp; <b>I</b> 고유기</div>
       <div><b>L</b> 필살기 (MAX 중 · 슈퍼아머 · 차지 ×3)</div>
-      <div><b>SPACE</b> 위빙 훅 (숙여 흘리며 올려친다 · 맞으면 크게 밀려남 · 가드로 막힘)</div>
+      <div><b>SPACE</b> 위빙 훅 (숙여 흘리며 올려친다 · 맞으면 크게 밀려남 · 가드로 막힘 · 쿨타임)</div>
       <div><b>콤비네이션</b> J K J K = 붕붕 어퍼 &nbsp; J J K / K K J = 원투 훅 (교대로 누르면 훅이 나간다)</div>
-      <div><b>스태미나</b> 가드·펀치가 소모한다. 바닥나면 가드가 깨져 잠시 못 올린다</div>
+      <div><b>가드 게이지</b> 가드·펀치가 소모한다. 바닥나면 가드가 깨져 잠시 못 올린다 (캐릭터마다 다름)</div>
       <div><b>SHIFT</b> 가드 (필살기 포함 전부 방어) &nbsp; <b>R</b> 다음 경기 (종료 후) &nbsp; <b>B</b> 배경음 &nbsp; <b>V</b> 음성 &nbsp; <b>Q</b> 화질</div>
       <div><b>마우스</b> 좌클릭 = 펀치 · 휠클릭 = U</div>
       <div><b>로프</b> 로프 쪽으로 계속 밀면 힘을 모았다 튕겨 나감 (속도·파워 ↑)</div>
@@ -137,7 +137,7 @@
             <button id="btn-join" class="btn green">참가</button>
           </div>
         </div>
-        <div class="hint">J/K 펀치 · SPACE 위빙훅 · U 반격기 · I 고유기 · L 필살 · SHIFT 가드(스태미나)</div>
+        <div class="hint">J/K 펀치 · SPACE 위빙훅 · U 반격기 · I 고유기 · L 필살 · SHIFT 가드(가드 게이지)</div>
         <button id="btn-fs-menu" class="fs-link">전체화면</button>
       </div>
 
@@ -214,6 +214,6 @@
       setInterval(function () { checkVersion(false); }, 60000);
     })();
   </script>
-  <script type="module" src="js/main.js?v=1789536930" onerror="__bootFail('모듈 로드 실패 (구버전 캐시)')"></script>
+  <script type="module" src="js/main.js?v=1789537226" onerror="__bootFail('모듈 로드 실패 (구버전 캐시)')"></script>
 </body>
 </html>

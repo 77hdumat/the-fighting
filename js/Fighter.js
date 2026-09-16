@@ -87,9 +87,9 @@ export class Fighter {
     this.finisher = null;
     this.cd = { U: 0, I: 0, S: 0 };    // 고유기 / 위빙훅 쿨다운
     this.weave = null;                  // 위빙 훅 { t, dur, hit }
-    // 가드 스태미나: 막는 동안 줄고, 다 떨어지면 가드가 깨져 한동안 못 올린다.
+    // 가드 게이지: 막는 동안 줄고, 다 떨어지면 가드가 깨져 한동안 못 올린다.
     // 무한 가드를 막아 '언제 막고 언제 뺄지'를 고르게 만드는 자원.
-    this.stamMax = 100; this.stam = 100;
+    this.stamMax = this.def.guardMax || 100; this.stam = this.stamMax;
     this.stamIdle = 0;                  // 가드를 뗀 뒤 회복이 시작되기까지의 유예
     this.guardBroken = 0;               // > 0 이면 가드 잠김
     this.armor = 0;                     // U 반격기 슈퍼아머 남은 시간
@@ -292,7 +292,7 @@ export class Fighter {
     if (opts.roll) this.punch.roll = true;
     if (opts.rollFinish) { this.punch.rollFinish = true; this.punch.staggerT = opts.staggerT || 0; }
     if (opts.staggerT && !opts.kind) this.punch.staggerT = opts.staggerT;
-    // 펀치도 스태미나를 쓴다. 막누르면 바닥나서 가드를 못 올리게 되므로, 난타에 대가가 생긴다.
+    // 펀치도 가드 게이지를 쓴다. 막누르면 바닥나서 가드를 못 올리게 되므로, 난타에 대가가 생긴다.
     // (가드 전용 자원이면 '때리는 쪽'은 아무 위험이 없어 긴장감이 한쪽으로만 생긴다)
     this.stam = Math.max(0, this.stam - (type === 'hook' ? 5 : type === 'special' ? 7 : 3));
     this.stamIdle = 0;
@@ -445,7 +445,7 @@ export class Fighter {
       this.react.headY = sgn * 0.8;
       return { dmg: 0, downed: true, ko: true };
     }
-    // 지친 상대의 주먹은 힘이 실리지 않는다 — 스태미나를 다 쓴 난타는 실질 위력이 떨어진다.
+    // 지친 상대의 주먹은 힘이 실리지 않는다 — 가드 게이지를 다 쓴 난타는 실질 위력이 떨어진다.
     // P 는 const 이고 넉백·경직 판정에도 쓰이므로 건드리지 않고, 데미지에만 계수로 곱한다.
     const tired = (ev.attacker && ev.attacker.stam < 20 && !ev.finisher)
       ? 0.55 + 0.45 * (ev.attacker.stam / 20) : 1;
@@ -530,7 +530,7 @@ export class Fighter {
       this.stagger = Math.max(this.stagger, 1.5); this.staggerKind = 'normal'; this.staggerImmune = 1.2;
       this.punch = null; this.queue.length = 0; this.hitCount = 0;
       this.react.headX = -0.65; this.react.waistX = -0.45; this.react.headY = 0.5;
-      this.stam = Math.max(0, this.stam - 12);    // 맞으면 스태미나도 깎인다
+      this.stam = Math.max(0, this.stam - 12);    // 맞으면 가드 게이지도 깎인다
       if (this.hp <= 0) this._die();
       return { dmg: dmgW, weave: true, staggered: true, ko: this.ko, heavy: true };
     }
@@ -776,7 +776,7 @@ export class Fighter {
     if (this.comboTimer <= 0) this.combo = 0;
     this.cd.U = Math.max(0, this.cd.U - dt); this.cd.I = Math.max(0, this.cd.I - dt);
     this.cd.S = Math.max(0, this.cd.S - dt);
-    // 가드 스태미나. 막는 동안 줄고, 손을 내리면 잠깐 뒤부터 빠르게 찬다.
+    // 가드 게이지. 막는 동안 줄고, 손을 내리면 잠깐 뒤부터 빠르게 찬다.
     if (this.guard) {
       this.stam = Math.max(0, this.stam - 11 * dt);
       this.stamIdle = 0;
@@ -788,7 +788,7 @@ export class Fighter {
       }
     } else {
       this.stamIdle += dt;
-      if (this.stamIdle > 0.30) this.stam = Math.min(this.stamMax, this.stam + 34 * dt);
+      if (this.stamIdle > 0.30) this.stam = Math.min(this.stamMax, this.stam + 34 * (this.def.guardRegen || 1) * dt);
     }
     if (this.guardBroken > 0) this.guardBroken -= dt;
     if (this.armor > 0) this.armor -= dt;
@@ -808,8 +808,8 @@ export class Fighter {
     // SHIFT 를 뗐는데도 후속타까지 계속 자동으로 막혔다.
     // 단 block 은 AI 가 가드하는 수단이기도 하므로(AIBrain.doBlock) AI 에게는 남겨 둔다.
     const wantGuard = this.isAI ? (shift || this.block > 0) : shift;
-    // 스태미나가 바닥나 가드가 깨졌으면, 잠김이 풀리고 최소치(25)를 회복할 때까지 못 올린다
-    const stamOk = this.guardBroken <= 0 && this.stam > (this.guard ? 0 : 18);
+    // 가드 게이지가 바닥나 가드가 깨졌으면, 잠김이 풀리고 최소치(최대의 18%)를 회복할 때까지 못 올린다
+    const stamOk = this.guardBroken <= 0 && this.stam > (this.guard ? 0 : this.stamMax * 0.18);
     this.guard = wantGuard && stamOk && !d.active && !this.punch && !guardLocked;
     this.guardT = this.guard ? (wasGuard ? this.guardT + dt : 0) : 99;
     this.guardHold = this.guard ? (this.guardHold || 0) + dt : 0;   // 코치용: 가드 연속 유지 시간
@@ -818,7 +818,7 @@ export class Fighter {
     // 맞으면 크게 밀리며 넘어진다. 단 상대도 가드로 막을 수 있다.
     if (input.justPressed('Space') && !this.weave && !this.punch && !this.busy && this.cd.S <= 0) {
       this.weave = { t: 0, dur: 0.52, hit: false };
-      this.cd.S = 1.3;
+      this.cd.S = this.def.weaveCd || 1.3;
       this.guard = false;
       this.slip = 0.26; this.slipDir = this.dempsey.sway >= 0 ? 1 : -1;   // 앞머리 0.26초는 상체를 낮춰 흘린다
       this.audio.swoosh(this.slipDir, 0.7, true);
@@ -1536,7 +1536,7 @@ export class Fighter {
     this.rattle = L(a.ra, b.ra);
     this.punch = b.ps ? { side: b.ps === 1 ? 'L' : 'R', t: L(a.pp, b.pp), dur: 1 } : null;
     this.targetSlot = b.tg; this.combo = b.cb; this.cd.U = b.cu || 0; this.cd.I = b.ci || 0;
-    // 스태미나는 호스트가 권위를 가진다 — 클라는 보간 없이 받은 값을 그대로 쓴다
+    // 가드 게이지는 호스트가 권위를 가진다 — 클라는 보간 없이 받은 값을 그대로 쓴다
     if (b.sm !== undefined) this.stam = b.sm;
     if (b.gb !== undefined) this.guardBroken = b.gb;
     let i = 0; for (const k in this.pose) { this.pose[k] = L(a.po[i], b.po[i]); i++; }
