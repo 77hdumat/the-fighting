@@ -360,3 +360,52 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
 #render-settings summary { cursor: pointer; }
 #render-settings label, #render-settings output { display: block; margin: 6px 0; }
 #render-settings select, #render-settings button { color: #fff; background: #263348; border: 1px solid #657087; border-radius: 4px; padding: 6px; margin: 3px; font: inherit; }
+
+
+/* ---------- 캐릭터 선택: 초상 카드 (철권식) ---------- */
+/* 설명은 카드 안에 넣지 않는다. 카드 폭이 좁아 줄바꿈이 지저분해지므로
+   카드는 초상 + 이름 + 능력치만 담고, 설명은 그리드 아래 .char-detail 한 곳에 모은다. */
+.charsel .card .por {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  margin-bottom: 6px;
+  border-radius: 8px;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 50% 18%, rgba(255,255,255,.55), rgba(255,255,255,0) 62%),
+    linear-gradient(180deg, #e9ecf5 0%, #cdd3e4 100%);
+  box-shadow: inset 0 0 0 2px rgba(0,0,0,.14);
+}
+.charsel .card .por img {
+  display: block;
+  width: 100%; height: 100%;
+  object-fit: contain;
+  object-position: center bottom;
+  filter: drop-shadow(0 3px 4px rgba(0,0,0,.28));
+}
+.charsel .card.sel .por { box-shadow: inset 0 0 0 3px rgba(0,0,0,.45); }
+.charsel .card .st { display: none; }   /* 설명은 상세 패널로 이동 */
+
+.char-detail {
+  margin: 8px auto 0;
+  max-width: min(980px, 94vw);
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  padding: 8px 12px;
+  background: rgba(20,20,30,.72);
+  border: 2px solid rgba(255,211,77,.55);
+  border-radius: 8px;
+  font-family: "Noto Sans JP", "Apple SD Gothic Neo", sans-serif;
+  color: #e9e9f2;
+  line-height: 1.5;
+}
+.char-detail b { font-family: Bangers, Impact, sans-serif; letter-spacing: 2px; font-size: 20px; color: #ffd34d; }
+.char-detail .ty { font-size: 12px; font-weight: 900; color: #9fd8ff; white-space: nowrap; }
+.char-detail .tx { font-size: 13px; color: #d8d8e4; flex: 1 1 260px; min-width: 0; }
+
+@media (max-height: 520px) {
+  .charsel .card .por { aspect-ratio: 1 / 1; margin-bottom: 3px; }
+  .char-detail { padding: 5px 9px; gap: 7px; }
+  .char-detail b { font-size: 15px; }
+  .char-detail .ty, .char-detail .tx { font-size: 11px; }
+}

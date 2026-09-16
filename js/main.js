@@ -23,6 +23,7 @@ import { CoachBubble, CoachBrain } from './Coach.js';
 import { Coaches } from './Coaches.js';
 import { Intro } from './Intro.js';
 import { CHARACTERS, CHARACTER_ORDER, HIDDEN_ORDER } from './Rig.js';
+import { buildPortraits } from './Portraits.js';
 import { KITS, SPECIALS } from './Specials.js';
 import { TouchControls, isTouchDevice } from './Touch.js';
 import { Music } from './Music.js';
@@ -290,14 +291,23 @@ class Game {
     const DESC = this.charDesc;
     container.innerHTML = '';
     const keys = CHARACTER_ORDER.concat(this.hiddenShown ? HIDDEN_ORDER : []);
+    // 초상은 실제 리그에서 렌더해 만든다 (캐시되므로 두 번째 호출부터는 즉시 반환)
+    const portraits = buildPortraits(keys);
     for (const key of keys) {
       const c = CHARACTERS[key], dsc = DESC[key];
       const card = document.createElement('div');
       card.className = 'card' + (key === this.myChar ? ' sel' : '') + (c.hidden ? ' hidden-char' : '');
       card.dataset.key = key;
       const bar = (v) => `<i style="width:${v * 20}%"></i>`;
-      card.innerHTML = `<div class="nm">${c.name}</div><div class="st">${dsc.style}<br>${dsc.st}</div><div class="bars"><span>HP</span>${bar(dsc.hp)}<span>PWR</span>${bar(dsc.pw)}<span>SPD</span>${bar(dsc.sp)}</div>`;
+      // 설명은 카드 안에 넣지 않는다 — 카드가 좁아 줄바꿈이 지저분해진다.
+      // 카드는 초상 + 이름 + 능력치만, 설명은 아래 상세 패널에서 한 번에 보여 준다.
+      const por = portraits[key];
+      card.innerHTML =
+        `<div class="por">${por ? `<img src="${por}" alt="${c.name}">` : ''}</div>` +
+        `<div class="nm">${c.name}</div>` +
+        `<div class="bars"><span>HP</span>${bar(dsc.hp)}<span>PWR</span>${bar(dsc.pw)}<span>SPD</span>${bar(dsc.sp)}</div>`;
       card.addEventListener('click', () => this.pickChar(key));
+      card.addEventListener('pointerenter', () => this.showCharDetail(container, key));
       container.appendChild(card);
     }
     // 기존 캐릭터 오른쪽 끝: 히든 버튼
@@ -314,6 +324,20 @@ class Game {
       if (this.hiddenShown) { try { this.audio.init(); this.audio.chargeUp(3); } catch (e) {} }
     });
     container.appendChild(btn);
+    this.showCharDetail(container, this.myChar);
+  }
+
+  /** 카드 그리드 아래 설명 패널. 카드 안에서 줄바꿈되던 긴 설명을 여기 한 줄로 모은다. */
+  showCharDetail(container, key) {
+    const dsc = this.charDesc[key], c = CHARACTERS[key];
+    if (!dsc || !c) return;
+    let el = container.nextElementSibling;
+    if (!el || !el.classList.contains('char-detail')) {
+      el = document.createElement('div');
+      el.className = 'char-detail';
+      container.parentNode.insertBefore(el, container.nextSibling);
+    }
+    el.innerHTML = `<b>${c.name}</b><span class="ty">${dsc.style}</span><span class="tx">${dsc.st}</span>`;
   }
 
   /** 경기 종료 후 캐릭터 재선택 패널 */

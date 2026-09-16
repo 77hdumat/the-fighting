@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta name="build-id" content="1789528518">
+<meta name="build-id" content="1789528878">
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -378,6 +378,55 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
 #render-settings label, #render-settings output { display: block; margin: 6px 0; }
 #render-settings select, #render-settings button { color: #fff; background: #263348; border: 1px solid #657087; border-radius: 4px; padding: 6px; margin: 3px; font: inherit; }
 
+
+/* ---------- 캐릭터 선택: 초상 카드 (철권식) ---------- */
+/* 설명은 카드 안에 넣지 않는다. 카드 폭이 좁아 줄바꿈이 지저분해지므로
+   카드는 초상 + 이름 + 능력치만 담고, 설명은 그리드 아래 .char-detail 한 곳에 모은다. */
+.charsel .card .por {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  margin-bottom: 6px;
+  border-radius: 8px;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 50% 18%, rgba(255,255,255,.55), rgba(255,255,255,0) 62%),
+    linear-gradient(180deg, #e9ecf5 0%, #cdd3e4 100%);
+  box-shadow: inset 0 0 0 2px rgba(0,0,0,.14);
+}
+.charsel .card .por img {
+  display: block;
+  width: 100%; height: 100%;
+  object-fit: contain;
+  object-position: center bottom;
+  filter: drop-shadow(0 3px 4px rgba(0,0,0,.28));
+}
+.charsel .card.sel .por { box-shadow: inset 0 0 0 3px rgba(0,0,0,.45); }
+.charsel .card .st { display: none; }   /* 설명은 상세 패널로 이동 */
+
+.char-detail {
+  margin: 8px auto 0;
+  max-width: min(980px, 94vw);
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  padding: 8px 12px;
+  background: rgba(20,20,30,.72);
+  border: 2px solid rgba(255,211,77,.55);
+  border-radius: 8px;
+  font-family: "Noto Sans JP", "Apple SD Gothic Neo", sans-serif;
+  color: #e9e9f2;
+  line-height: 1.5;
+}
+.char-detail b { font-family: Bangers, Impact, sans-serif; letter-spacing: 2px; font-size: 20px; color: #ffd34d; }
+.char-detail .ty { font-size: 12px; font-weight: 900; color: #9fd8ff; white-space: nowrap; }
+.char-detail .tx { font-size: 13px; color: #d8d8e4; flex: 1 1 260px; min-width: 0; }
+
+@media (max-height: 520px) {
+  .charsel .card .por { aspect-ratio: 1 / 1; margin-bottom: 3px; }
+  .char-detail { padding: 5px 9px; gap: 7px; }
+  .char-detail b { font-size: 15px; }
+  .char-detail .ty, .char-detail .tx { font-size: 11px; }
+}
+
 </style>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script type="importmap">
@@ -391,7 +440,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   }
 }
 </script>
-<script>window.__BUILD_ID = "1789528518";</script>
+<script>window.__BUILD_ID = "1789528878";</script>
 </head>
 <body>
   <canvas id="gl" tabindex="0"></canvas>
@@ -2864,6 +2913,92 @@ uniform float uSpecEdge; uniform float uHairBand;
   return rig;
 }
 return { CHARACTERS, CHARACTER_ORDER, HIDDEN_ORDER, COACH_DEFS, POSE_KEYS, defaultPose, copyPose, lerpPose, applyPose, FIGHTER_SCALE, buildBoxer };
+})();
+// ===== Portraits.js =====
+__M.Portraits = (() => {
+// Portraits.js — 캐릭터 선택용 초상 이미지를 '실제 리그'에서 그려 만든다.
+// 외부 일러스트를 쓰지 않으므로 인게임 외형과 항상 일치하고, 캐릭터를 고쳐도 따로 손댈 게 없다.
+// 오프스크린 렌더러를 하나 만들어 전원 렌더한 뒤 즉시 정리한다 (WebGL 컨텍스트를 물고 있지 않는다).
+const { CHARACTERS, buildBoxer, defaultPose, applyPose } = __M.Rig;
+
+const cache = new Map();
+
+/** 링 조명 근사 — 인게임과 같은 셀 셰이딩 결과가 나오도록 맞춘다 */
+function makeScene() {
+  const scene = new THREE.Scene();
+  const spot = new THREE.SpotLight(0xfff3e2, 240, 0, Math.PI * 0.32, 0.45, 2);
+  spot.position.set(0.9, 5.2, 2.4);
+  scene.add(spot, spot.target);
+  const fillA = new THREE.DirectionalLight(0xbcd0ff, 0.6); fillA.position.set(-3, 2, -2.5);
+  const fillB = new THREE.DirectionalLight(0xffd9b0, 0.85); fillB.position.set(2.5, 1.6, 3);
+  scene.add(fillA, fillB);
+  return scene;
+}
+
+/**
+ * 주어진 키들의 초상을 만들어 { key: dataURL } 로 돌려준다.
+ * 이미 만든 것은 캐시에서 재사용하므로 여러 번 불러도 안전하다.
+ */
+function buildPortraits(keys, { w = 240, h = 300 } = {}) {
+  const todo = keys.filter((k) => !cache.has(k) && CHARACTERS[k]);
+  if (todo.length) {
+    let renderer = null;
+    try {
+      renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
+      renderer.setPixelRatio(Math.min(2, globalThis.devicePixelRatio || 1));
+      renderer.setSize(w, h, false);
+      renderer.setClearAlpha(0);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 0.95;
+
+      const scene = makeScene();
+      const camera = new THREE.PerspectiveCamera(30, w / h, 0.1, 100);
+
+      for (const key of todo) {
+        const def = CHARACTERS[key];
+        const rig = buildBoxer(def);
+        const pose = defaultPose();
+        // 기본 포즈는 글러브를 얼굴 앞까지 올린 가드 자세라 초상에서 얼굴이 가려진다.
+        // 팔꿈치를 펴고 어깨를 내려 가슴 높이 가드로 바꾼다 — 얼굴이 보이면서도 복서다운 자세.
+        pose.shLX = -0.30; pose.shRX = -0.26;
+        pose.elL = -1.50;  pose.elR = -1.55;
+        pose.shLZ = 0.34;  pose.shRZ = -0.34;
+        pose.headX = 0.02;                    // 턱을 살짝 들어 정면을 본다
+        pose.headY = 0.02;
+        pose.waistX = 0.06;
+        applyPose(rig, pose);
+        rig.root.rotation.y = 0.32;           // 살짝 비스듬히 (철권식 3/4 뷰)
+        scene.add(rig.root);
+
+        // 머리~가슴 사이를 조준한다. 가슴만 보면 머리가 프레임 위로 잘린다.
+        // 캐릭터마다 키가 달라 절대 좌표를 쓰면 안 되고, 본 위치에서 계산해야 한다.
+        const head = rig.headMesh.getWorldPosition(new THREE.Vector3());
+        const chest = rig.chest.getWorldPosition(new THREE.Vector3());
+        const target = head.clone().lerp(chest, 0.45);
+        camera.position.set(target.x + 0.34, target.y + 0.10, target.z + 1.58);
+        camera.lookAt(target);
+        camera.updateProjectionMatrix();
+        scene.add(camera);
+
+        renderer.render(scene, camera);
+        cache.set(key, renderer.domElement.toDataURL('image/png'));
+
+        scene.remove(rig.root);
+        rig.root.traverse((o) => { if (o.isMesh && o.geometry && o.geometry.dispose) o.geometry.dispose(); });
+      }
+    } catch (e) {
+      // WebGL 컨텍스트를 더 못 만드는 환경이면 초상 없이 기존 카드로 표시된다
+      for (const k of todo) cache.set(k, null);
+    } finally {
+      if (renderer) { renderer.dispose(); renderer.forceContextLoss && renderer.forceContextLoss(); }
+    }
+  }
+  const out = {};
+  for (const k of keys) out[k] = cache.get(k) || null;
+  return out;
+}
+return { buildPortraits };
 })();
 // ===== PhotorealPostFX.js =====
 __M.PhotorealPostFX = (() => {
@@ -7952,6 +8087,7 @@ const { CoachBubble, CoachBrain } = __M.Coach;
 const { Coaches } = __M.Coaches;
 const { Intro } = __M.Intro;
 const { CHARACTERS, CHARACTER_ORDER, HIDDEN_ORDER } = __M.Rig;
+const { buildPortraits } = __M.Portraits;
 const { KITS, SPECIALS } = __M.Specials;
 const { TouchControls, isTouchDevice } = __M.Touch;
 const { Music } = __M.Music;
@@ -8219,14 +8355,23 @@ class Game {
     const DESC = this.charDesc;
     container.innerHTML = '';
     const keys = CHARACTER_ORDER.concat(this.hiddenShown ? HIDDEN_ORDER : []);
+    // 초상은 실제 리그에서 렌더해 만든다 (캐시되므로 두 번째 호출부터는 즉시 반환)
+    const portraits = buildPortraits(keys);
     for (const key of keys) {
       const c = CHARACTERS[key], dsc = DESC[key];
       const card = document.createElement('div');
       card.className = 'card' + (key === this.myChar ? ' sel' : '') + (c.hidden ? ' hidden-char' : '');
       card.dataset.key = key;
       const bar = (v) => `<i style="width:${v * 20}%"></i>`;
-      card.innerHTML = `<div class="nm">${c.name}</div><div class="st">${dsc.style}<br>${dsc.st}</div><div class="bars"><span>HP</span>${bar(dsc.hp)}<span>PWR</span>${bar(dsc.pw)}<span>SPD</span>${bar(dsc.sp)}</div>`;
+      // 설명은 카드 안에 넣지 않는다 — 카드가 좁아 줄바꿈이 지저분해진다.
+      // 카드는 초상 + 이름 + 능력치만, 설명은 아래 상세 패널에서 한 번에 보여 준다.
+      const por = portraits[key];
+      card.innerHTML =
+        `<div class="por">${por ? `<img src="${por}" alt="${c.name}">` : ''}</div>` +
+        `<div class="nm">${c.name}</div>` +
+        `<div class="bars"><span>HP</span>${bar(dsc.hp)}<span>PWR</span>${bar(dsc.pw)}<span>SPD</span>${bar(dsc.sp)}</div>`;
       card.addEventListener('click', () => this.pickChar(key));
+      card.addEventListener('pointerenter', () => this.showCharDetail(container, key));
       container.appendChild(card);
     }
     // 기존 캐릭터 오른쪽 끝: 히든 버튼
@@ -8243,6 +8388,20 @@ class Game {
       if (this.hiddenShown) { try { this.audio.init(); this.audio.chargeUp(3); } catch (e) {} }
     });
     container.appendChild(btn);
+    this.showCharDetail(container, this.myChar);
+  }
+
+  /** 카드 그리드 아래 설명 패널. 카드 안에서 줄바꿈되던 긴 설명을 여기 한 줄로 모은다. */
+  showCharDetail(container, key) {
+    const dsc = this.charDesc[key], c = CHARACTERS[key];
+    if (!dsc || !c) return;
+    let el = container.nextElementSibling;
+    if (!el || !el.classList.contains('char-detail')) {
+      el = document.createElement('div');
+      el.className = 'char-detail';
+      container.parentNode.insertBefore(el, container.nextSibling);
+    }
+    el.innerHTML = `<b>${c.name}</b><span class="ty">${dsc.style}</span><span class="tx">${dsc.st}</span>`;
   }
 
   /** 경기 종료 후 캐릭터 재선택 패널 */
