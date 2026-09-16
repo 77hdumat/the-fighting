@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta name="build-id" content="1789496742">
+<meta name="build-id" content="1789528181">
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -391,7 +391,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   }
 }
 </script>
-<script>window.__BUILD_ID = "1789496742";</script>
+<script>window.__BUILD_ID = "1789528181";</script>
 </head>
 <body>
   <canvas id="gl" tabindex="0"></canvas>
@@ -5120,6 +5120,20 @@ class Fighter {
     return true;
   }
 
+  /**
+   * 입력이 아닌 '자동' 이동(추적·대시·돌격)을 장외로 넘어가지 않게 막는다.
+   * 낙사는 밀려나서 당하는 것이지, 상대를 쫓다가 스스로 걸어 나가서 당하는 게 아니다.
+   * 플레이어 입력과 넉백(knock)은 그대로 둔다.
+   */
+  _advance(dir, dist) {
+    const nx = this.pos.x + dir.x * dist, nz = this.pos.z + dir.z * dist;
+    if (ARENA.kind === 'cliff') {
+      const edge = ARENA.radius(nx, nz) - 0.4;        // 발 크기만큼 여유
+      if (Math.hypot(nx, nz) > edge) return;          // 그 방향으로는 더 못 간다
+    }
+    this.pos.x = nx; this.pos.z = nz;
+  }
+
   /** 버튼을 누른 즉시 팔 동작을 그려 준다. 판정은 호스트가 하고, 서버 포즈가 오면 예측은 버린다 */
   predictPunch(side, type = 'straight') {
     if (this.ko || this.downT > 0 || this.stagger > 0 || this.ultVictimT > 0) return;
@@ -5395,8 +5409,13 @@ class Fighter {
       if (this.hp <= 0) this._die();
       return { dmg, armored: true, staggered: false, ko: this.ko };
     }
-    // ---- 필살기 / U 반격기 슈퍼아머: 끊기지 않고 스턴도 안 걸린다 ----
-    if (this.finisher || this.armor > 0) {
+    // ---- 필살기 시전 중: 완전 무적 ----
+    // 예전엔 아머로 묶여 50% 피해를 받아, 필살기 연출 중에 그대로 얻어맞았다.
+    if (this.finisher || this.ultT > 0 || this.rollT > 0) {
+      return { dmg: 0, armored: true, staggered: false, ko: this.ko, ignore: true };
+    }
+    // ---- U 반격기 아머: 끊기지 않고 스턴도 안 걸리되 피해는 절반 받는다 ----
+    if (this.armor > 0) {
       dmg *= 0.5;
       this.hp = Math.max(0, this.hp - dmg);
       this.react.headX = -0.08;
@@ -5408,7 +5427,9 @@ class Fighter {
       // 가드로 받아낼 때마다 U 반격기 쿨타임 0.2초 감소
       this.cd.U = Math.max(0, this.cd.U - 0.2);
       // 가드 관통 미세 데미지 (칩): 원래 데미지의 4% (필살기는 8%), 최소 0.3
-      dmg = Math.max(0.3, dmg * (ev.finisher ? 0.08 : 0.04));
+      // 가드 관통 칩 데미지. 10대를 막으면 10 정도 깎이도록 잡는다
+      // (예전엔 4%/최소 0.3 이라 10대를 막아도 3 밖에 안 줄어 '안 아픈' 느낌이었다)
+      dmg = Math.max(1, dmg * (ev.finisher ? 0.22 : 0.13));
       this.hp = Math.max(0, this.hp - dmg);
       if (this.hp <= 0) this._die();
       const heavy = ev.dempsey || ev.heavy || ev.finisher || ev.counter || counter || P >= 0.75;
@@ -5664,7 +5685,14 @@ class Fighter {
     // ---- 입력 ----
     const shift = input.isDown('ShiftLeft');
     const wasGuard = this.guard;
-    this.guard = (shift || this.block > 0) && !d.active && !this.punch && !this.busy;
+    // 경직(stagger)은 가드를 풀지 않는다.
+    // 예전엔 !this.busy 를 썼는데 busy 에 stagger 가 포함돼, 필살기 첫 대에 경직되면
+    // SHIFT 를 누르고 있어도 가드가 풀려 나머지가 전부 들어갔다.
+    // (연출형 필살기도 tg.guard 를 보고 막히므로 같은 이유로 안 막혔다)
+    // 경직 중엔 공격이 막히는 것으로 충분하다 — 방어까지 막을 이유는 없다.
+    const guardLocked = this.ko || this.fallT > 0 || !!this.finisher || this.airY > 0.01
+      || this.downT > 0 || this.danceT > 0 || this.ultT > 0 || this.ultVictimT > 0;
+    this.guard = (shift || this.block > 0) && !d.active && !this.punch && !guardLocked;
     this.guardT = this.guard ? (wasGuard ? this.guardT + dt : 0) : 99;
     this.guardHold = this.guard ? (this.guardHold || 0) + dt : 0;   // 코치용: 가드 연속 유지 시간
     const jDown = input.isDown('KeyJ'), kDown = input.isDown('KeyK');
@@ -5674,7 +5702,7 @@ class Fighter {
       // ---- 뎀프시롤 필살: 상대를 자동 추적하며 좌우 끝마다 훅 난타. 마지막 0.3초에 피니시 훅 ----
       this.rollT -= dt;
       this.armor = Math.max(this.armor, 0.1);
-      if (tgt && dist > 0.9) this.pos.addScaledVector(this.forward, 2.2 * dt);
+      if (tgt && dist > 0.9) this._advance(this.forward, 2.2 * dt);
       if (d.hookTrigger && (!this.punch || this.punch.t > this.punch.dur * 0.35)) {
         const last = this.rollT < 0.35 && !this.rollFinal;
         if (last) { this.rollFinal = true; this.startPunch(d.hookTrigger, 'hook', 0.3, 1.9 * this.def.powerMul, { heavy: true, rollFinish: true, staggerT: 1.2 }); }
@@ -5699,9 +5727,38 @@ class Fighter {
     const p = copyPose(this.base, this.pose);
     const t = this.time;
     const bob = d.active ? 0 : 1;
-    p.hipsY += Math.sin(t * 3.4) * 0.018 * bob;
     p.shLX += Math.sin(t * 3.4) * 0.05 * bob; p.shRX += Math.cos(t * 3.4 + 1) * 0.05 * bob;
     p.waistZ += Math.sin(t * 1.7) * 0.04 * bob;
+
+    // ---- 제자리 바운스: 복서는 가만히 서 있지 않는다. 무릎으로 통통 튀며 숨을 고른다 ----
+    // 이동·펀치·필살 중에는 각자의 모션이 있으므로 섞지 않는다.
+    // 상대를 향해 미세하게 움직이는 동안에도 복서는 통통 튄다 → on/off 가 아니라 보행량에 따라 섞는다
+    // (walkAmt 가 0.45 를 넘어 실제로 달리기 시작하면 보행 모션에 자리를 내준다)
+    const idleTarget = bob && !this.punch && !this.busy ? Math.max(0, 1 - this.walkAmt * 2.2) : 0;
+    this._idleAmt = (this._idleAmt || 0) + (idleTarget - (this._idleAmt || 0)) * Math.min(1, dt * 6);
+    const ia = this._idleAmt;
+    if (ia > 0.01) {
+      // |sin| 은 주기가 절반이라 실제 바운스는 초당 HOP*2 회가 된다 → 1.9회/초
+      const HOP = 0.95;
+      const ph = t * HOP * Math.PI * 2;
+      const up = Math.abs(Math.sin(ph));                // 0 = 착지, 1 = 최고점
+      const squash = 1 - up;                            // 착지 순간 무릎이 접힌다
+      p.hipsY += (up * 0.048 - 0.010) * ia;
+      p.thighLX += -squash * 0.20 * ia; p.shinL += squash * 0.34 * ia;
+      p.thighRX += -squash * 0.20 * ia; p.shinR += squash * 0.34 * ia;
+      // 좌우로 살짝 무게를 옮기며 스텝 (한 박자 느리게)
+      const sway = Math.sin(t * HOP * Math.PI);
+      p.hipsX += sway * 0.022 * ia;
+      p.waistZ += sway * 0.05 * ia;
+      // 상체·머리는 반 박자 늦게 따라온다 (관성)
+      const lag = Math.abs(Math.sin(ph - 0.7));
+      p.chestZ += sway * 0.035 * ia;
+      p.headOffY += (lag * 0.012 - 0.004) * ia;
+      p.headX += -lag * 0.05 * ia;
+      // 글러브도 같이 들썩 (가드 자세 유지)
+      p.shLX += -lag * 0.10 * ia; p.shRX += -lag * 0.10 * ia;
+      p.elL += lag * 0.07 * ia; p.elR += lag * 0.07 * ia;
+    }
     if (this.walkAmt > 0.01 && !d.active) {
       // ---- 보행/달리기: 다리 교차 + 무릎 굽힘 + 골반 상하/좌우 + 상체 약간 앞으로 + 어깨 반동 ----
       const a = this.walkAmt, ph = this.walkPhase;
@@ -5805,7 +5862,7 @@ class Fighter {
         const info = applyPunchToPose(p, f.punch);
         const lunge = info.strike;
         if (!spec) { p.chestY += -sgn * 0.6 * lunge; p.waistY += -sgn * 0.5 * lunge; p.waistX += 0.25 * lunge; p.hipsZ += 0.3 * lunge; p.hipsY -= 0.12 * lunge; }
-        if (info.p < 0.5 && dist > 0.95) this.pos.addScaledVector(this.forward, (f.dash || 4.5) * dt);
+        if (info.p < 0.5 && dist > 0.95) this._advance(this.forward, (f.dash || 4.5) * dt);
         if (!f.hit && info.p > 0.3 && info.p < 0.66) {
           this._applyNow(p);
           hitEvent = tryHit(f.side, 0.42, (tg, h) => { f.hit = true; return { attacker: this, target: tg, side: f.side, type: 'hook', power: f.power, pos: h.point.clone(), zone: h.zone, dir: this.forward.clone(), maxSpeed: true, finisher: true, charge: f.charge, dempsey: false, launch: f.launch, kind: f.kind }; });
@@ -5826,7 +5883,7 @@ class Fighter {
         } else if (info.p < 0.7 && dist > reach * 0.8) {
           // 도움닫기: 거리가 멀수록 크게 파고든다 (경직된 상대는 더 바싹 따라붙는다)
           const chase = tgt.stagger > 0 || tgt.downT > 0 ? 2.2 : 1.6;
-          this.pos.addScaledVector(this.forward, Math.min(stepSpd * chase, (dist - reach) * 18 * chase) * dt);
+          this._advance(this.forward, Math.min(stepSpd * chase, (dist - reach) * 18 * chase) * dt);
         }
       }
       if (pu.t >= pu.dur) { this.punch = null; this.events.push({ type: 'punchEnd', hit: !!pu.hit }); }
@@ -5843,9 +5900,10 @@ class Fighter {
       this.fallT -= dt;
       const u = 2.4 - this.fallT;                              // 총 2.4초 낙하
       // 발이 허공을 딛고 → 중심을 잃고 뒤로 기울며 → 가속 추락
-      const tip = Math.min(1, u / 0.35);
+      // 가장자리에서 머뭇거리면 '나갔는데 안 떨어진다'로 보인다 → 즉시 떨어지게
+      const tip = Math.min(1, u / 0.12);
       this.fallVy = (this.fallVy || 0) + 19 * dt;
-      this.fallY += this.fallVy * dt * (0.25 + 0.75 * tip);
+      this.fallY += this.fallVy * dt * (0.7 + 0.3 * tip);
       if (!this._fallDir) { this._fallDir = this.forward.clone().multiplyScalar(-1); this.fallSpin = (Math.random() - 0.5) * 2.2; }
       this.pos.addScaledVector(this._fallDir, (1.4 - u * 0.4) * dt);   // 밀려난 방향으로 관성
       this.rig.root.rotation.x = tip * (0.5 + Math.sin(u * 2.2) * 0.35) + u * 0.5;
@@ -5921,7 +5979,7 @@ class Fighter {
         p.hipsY += Math.abs(Math.sin(t * 32)) * 0.05;
         this.rushT = (this.rushT || 0) + dt;
         if (u > 0.35 && u < 2.7) {
-          this.pos.addScaledVector(this.forward, 7.2 * dt);
+          this._advance(this.forward, 7.2 * dt);
           const tickDmg = (this.rushPower || 16) * 0.075;   // 0.1초 간격 도트 (≈23히트, 총량은 다른 필살기와 동일)
           for (const o of fighters) {
             if (o === this || o.ko || this.sameTeam(o)) continue;
