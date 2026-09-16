@@ -1374,6 +1374,7 @@ class Game {
         if (e.type === 'punchEnd') { const cb = this.coachBrains[f.slot]; if (cb) cb.onPunchEnd(e.hit); continue; }
         if (e.type === 'comboArt') {
           // 콤비네이션 성립 — 기술명을 띄우고 살짝 힘을 준다
+          if (this.mode === 'host') this.pendingEvents.push({ t: 'cmb', s: f.slot, n: e.name, c: e.cry });
           this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.28, e.name + '!!', 'groggy');
           this.audio.riser(0.22, 0.22);
           if (f.slot === this.localSlot) this.camCtl.fovPunch = -6;
@@ -1381,6 +1382,7 @@ class Game {
           continue;
         }
         if (e.type === 'guardBreak') {
+          if (this.mode === 'host') this.pendingEvents.push({ t: 'gbk', s: f.slot });
           this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.32, '가드 브레이크!!', 'groggy');
           this.audio.guardHeavy ? this.audio.guardHeavy(1.1) : this.audio.block();
           if (f.slot === this.localSlot) { this.camCtl.shakeAmp = Math.max(this.camCtl.shakeAmp, 0.12); this.fx.hurtFlash(0.7); }
@@ -1531,6 +1533,18 @@ class Game {
       } else if (e.t === 'fin' && e.s === this.localSlot) this.finisherWindFx();
       else if (e.t === 'coach') { this.coaches.shout(e.s); if (e.s === this.localSlot) this.coach.show(e.key); }
       else if (e.t === 'rope') { const f = this.fighters[e.s]; if (f) this.ropeFx(f, e.k); }
+      else if (e.t === 'cmb') {
+        // 콤비네이션 — 게스트도 기술명·기합을 똑같이 본다
+        this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.28, e.n + '!!', 'groggy');
+        this.audio.riser(0.22, 0.22);
+        if (e.s === this.localSlot) this.camCtl.fovPunch = -6;
+        if (e.c) this.subs.show(e.c, { duration: 1.0, mid: true, speaker: e.s === this.localSlot ? 'player' : 'opp' });
+      }
+      else if (e.t === 'gbk') {
+        this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.32, '가드 브레이크!!', 'groggy');
+        this.audio.guardHeavy ? this.audio.guardHeavy(1.1) : this.audio.block();
+        if (e.s === this.localSlot) { this.camCtl.shakeAmp = Math.max(this.camCtl.shakeAmp, 0.12); this.fx.hurtFlash(0.7); }
+      }
       else if (e.t === 'ult') {
         // 연출형 필살: 게스트도 3D 소품(유물/랙/오토바이/폰·링라이트/카페)을 똑같이 본다
         const a = this.fighters[e.s], b = this.fighters[e.b];
@@ -1610,8 +1624,8 @@ class Game {
   predictInput(input) {
     const f = this.localFighter; if (!f || f.benched || f.falling || f.ko) return;
     // 호스트가 거부할 입력(쿨다운·경직·게이지 부족 등)은 예측도 하지 않는다
-    if (input.justPressed('KeyJ')) { if (f.canPredict('J')) f.predictPunch('L', 'straight'); }
-    else if (input.justPressed('KeyK')) { if (f.canPredict('K')) f.predictPunch('R', 'straight'); }
+    if (input.justPressed('KeyJ')) { if (f.canPredict('J')) { const k = f.predictComboKind('J'); f.predictPunch(k.side, k.type); } }
+    else if (input.justPressed('KeyK')) { if (f.canPredict('K')) { const k = f.predictComboKind('K'); f.predictPunch(k.side, k.type); } }
     else if (input.justPressed('KeyU')) { if (f.canPredict('U')) f.predictPunch('R', 'special'); }
     else if (input.justPressed('KeyI')) { if (f.canPredict('I')) f.predictPunch('L', 'special'); }
     else if (input.justPressed('KeyL')) { if (f.canPredict('L')) f.predictPunch('R', 'hook'); }

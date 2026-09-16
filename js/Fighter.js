@@ -14,16 +14,16 @@ let ARENA = { kind: 'ring', radius: () => RING_LIMIT };
 // 입력을 순서대로 맞추면 마지막 타가 특수 마무리로 바뀐다.
 // 교대로 누르는 동안엔 스트레이트가 아니라 훅이 나가서 '붕붕' 휘두르는 그림이 된다.
 const COMBOS = [
-  { seq: 'JKJK', name: '붕붕 어퍼', cry: 'アッパーッ！！', stam: 26,
+  { seq: 'JKJK', name: '붕붕 어퍼', cry: 'アッパーッ！！', stam: 18,
     fire: (f, side) => f.startPunch(side, 'special', 0.44, 2.0 * f.def.powerMul,
       { heavy: true, launch: 0.95, staggerT: 1.35, comboFinish: 'upper' }) },
-  { seq: 'KJKJ', name: '붕붕 어퍼', cry: 'アッパーッ！！', stam: 26,
+  { seq: 'KJKJ', name: '붕붕 어퍼', cry: 'アッパーッ！！', stam: 18,
     fire: (f, side) => f.startPunch(side, 'special', 0.44, 2.0 * f.def.powerMul,
       { heavy: true, launch: 0.95, staggerT: 1.35, comboFinish: 'upper' }) },
-  { seq: 'JJK', name: '원투 훅', cry: 'ワンツー…フック！', stam: 17,
+  { seq: 'JJK', name: '원투 훅', cry: 'ワンツー…フック！', stam: 12,
     fire: (f, side) => f.startPunch(side, 'hook', 0.30, 1.4 * f.def.powerMul,
       { heavy: true, staggerT: 0.85, comboFinish: 'hook' }) },
-  { seq: 'KKJ', name: '원투 훅', cry: 'ワンツー…フック！', stam: 17,
+  { seq: 'KKJ', name: '원투 훅', cry: 'ワンツー…フック！', stam: 12,
     fire: (f, side) => f.startPunch(side, 'hook', 0.30, 1.4 * f.def.powerMul,
       { heavy: true, staggerT: 0.85, comboFinish: 'hook' }) },
 ];
@@ -185,6 +185,24 @@ export class Fighter {
     this.pos.x = nx; this.pos.z = nz;
   }
 
+  /**
+   * 클라 예측용 — 호스트와 같은 규칙으로 이번 입력이 어떤 펀치가 될지 고른다.
+   * 클라는 스냅샷으로 구동되어 update() 의 콤비네이션 판정을 돌리지 않으므로,
+   * 예측이 항상 스트레이트면 콤보가 '안 먹은 것처럼' 보인다.
+   */
+  predictComboKind(press) {
+    if (this.time - this.seqT > 0.6) this.inputSeq.length = 0;
+    this.seqT = this.time;
+    this.inputSeq.push(press);
+    if (this.inputSeq.length > 6) this.inputSeq.shift();
+    const side = press === 'J' ? 'L' : 'R';
+    const cb = matchCombo(this.inputSeq);
+    if (cb && this.stam >= cb.stam) { this.inputSeq.length = 0; return { side, type: 'special' }; }
+    const n = this.inputSeq.length;
+    const alt = n >= 2 && this.inputSeq[n - 1] !== this.inputSeq[n - 2];
+    return { side, type: alt ? 'hook' : 'straight' };
+  }
+
   /** 버튼을 누른 즉시 팔 동작을 그려 준다. 판정은 호스트가 하고, 서버 포즈가 오면 예측은 버린다 */
   predictPunch(side, type = 'straight') {
     if (this.ko || this.downT > 0 || this.stagger > 0 || this.ultVictimT > 0) return;
@@ -276,7 +294,7 @@ export class Fighter {
     if (opts.staggerT && !opts.kind) this.punch.staggerT = opts.staggerT;
     // 펀치도 스태미나를 쓴다. 막누르면 바닥나서 가드를 못 올리게 되므로, 난타에 대가가 생긴다.
     // (가드 전용 자원이면 '때리는 쪽'은 아무 위험이 없어 긴장감이 한쪽으로만 생긴다)
-    this.stam = Math.max(0, this.stam - (type === 'hook' ? 7 : type === 'special' ? 10 : 4.5));
+    this.stam = Math.max(0, this.stam - (type === 'hook' ? 5 : type === 'special' ? 7 : 3));
     this.stamIdle = 0;
     if (!opts.noTell) this.tell[side] = 1;
     this.audio.swoosh(side === 'L' ? -1 : 1, power, type === 'hook');
@@ -496,7 +514,7 @@ export class Fighter {
       this.react.headX = -0.1 - 0.15 * P; this.react.waistX = -0.08 - 0.1 * P;
       this.knock.copy(ev.dir).multiplyScalar((0.9 + 1.5 * P) * (ev.finisher ? 2.0 : 1));   // 가드는 밀리되 과하지 않게
       // 한 대 막을 때마다 크게 깎인다 — 센 공격일수록 더. 무한히 버틸 수 없다.
-      this.stam = Math.max(0, this.stam - (7 + 13 * P) * (ev.finisher ? 2.2 : 1));
+      this.stam = Math.max(0, this.stam - (4 + 7 * P) * (ev.finisher ? 2.2 : 1));
       this.stamIdle = 0;
       this.block = Math.max(this.block, 0.3);
       this.blockShock = Math.max(this.blockShock, heavy ? 1 : 0.4);
@@ -512,7 +530,7 @@ export class Fighter {
       this.stagger = Math.max(this.stagger, 1.5); this.staggerKind = 'normal'; this.staggerImmune = 1.2;
       this.punch = null; this.queue.length = 0; this.hitCount = 0;
       this.react.headX = -0.65; this.react.waistX = -0.45; this.react.headY = 0.5;
-      this.stam = Math.max(0, this.stam - 18);    // 맞으면 스태미나도 깎인다
+      this.stam = Math.max(0, this.stam - 12);    // 맞으면 스태미나도 깎인다
       if (this.hp <= 0) this._die();
       return { dmg: dmgW, weave: true, staggered: true, ko: this.ko, heavy: true };
     }
@@ -760,17 +778,17 @@ export class Fighter {
     this.cd.S = Math.max(0, this.cd.S - dt);
     // 가드 스태미나. 막는 동안 줄고, 손을 내리면 잠깐 뒤부터 빠르게 찬다.
     if (this.guard) {
-      this.stam = Math.max(0, this.stam - 16 * dt);
+      this.stam = Math.max(0, this.stam - 11 * dt);
       this.stamIdle = 0;
       if (this.stam <= 0 && this.guardBroken <= 0) {
-        this.guardBroken = 1.6;                 // 가드 깨짐 — 그동안 못 올린다
+        this.guardBroken = 1.2;                 // 가드 깨짐 — 그동안 못 올린다
         this.guard = false;
         this.audio.guardHeavy ? this.audio.guardHeavy(1) : this.audio.block();
         this.events.push({ type: 'guardBreak' });
       }
     } else {
       this.stamIdle += dt;
-      if (this.stamIdle > 0.45) this.stam = Math.min(this.stamMax, this.stam + 26 * dt);
+      if (this.stamIdle > 0.30) this.stam = Math.min(this.stamMax, this.stam + 34 * dt);
     }
     if (this.guardBroken > 0) this.guardBroken -= dt;
     if (this.armor > 0) this.armor -= dt;
@@ -791,7 +809,7 @@ export class Fighter {
     // 단 block 은 AI 가 가드하는 수단이기도 하므로(AIBrain.doBlock) AI 에게는 남겨 둔다.
     const wantGuard = this.isAI ? (shift || this.block > 0) : shift;
     // 스태미나가 바닥나 가드가 깨졌으면, 잠김이 풀리고 최소치(25)를 회복할 때까지 못 올린다
-    const stamOk = this.guardBroken <= 0 && this.stam > (this.guard ? 0 : 25);
+    const stamOk = this.guardBroken <= 0 && this.stam > (this.guard ? 0 : 18);
     this.guard = wantGuard && stamOk && !d.active && !this.punch && !guardLocked;
     this.guardT = this.guard ? (wasGuard ? this.guardT + dt : 0) : 99;
     this.guardHold = this.guard ? (this.guardHold || 0) + dt : 0;   // 코치용: 가드 연속 유지 시간
@@ -1487,7 +1505,8 @@ export class Fighter {
       st: +Math.max(0, this.stagger).toFixed(2), sk: this.staggerKind === 'groggy' ? 2 : this.staggerKind === 'liver' ? 1 : 0, dI: +d.intensity.toFixed(3), sw: +d.sway.toFixed(3), sv: +d.swayVel.toFixed(2),
       bl: +d.blend.toFixed(2), ga: +d.gauge.toFixed(1), ch: d.charge, ra: +this.rattle.toFixed(2),
       ps: this.punch ? (this.punch.side === 'L' ? 1 : 2) : 0, pp: +this.punchProgress.toFixed(2),
-      tg: this.target ? this.target.slot : -1, cb: this.combo, cu: +this.cd.U.toFixed(1), ci: +this.cd.I.toFixed(1), po,
+      tg: this.target ? this.target.slot : -1, cb: this.combo, cu: +this.cd.U.toFixed(1), ci: +this.cd.I.toFixed(1),
+      sm: +this.stam.toFixed(1), gb: +Math.max(0, this.guardBroken).toFixed(2), po,
     };
   }
 
@@ -1517,6 +1536,9 @@ export class Fighter {
     this.rattle = L(a.ra, b.ra);
     this.punch = b.ps ? { side: b.ps === 1 ? 'L' : 'R', t: L(a.pp, b.pp), dur: 1 } : null;
     this.targetSlot = b.tg; this.combo = b.cb; this.cd.U = b.cu || 0; this.cd.I = b.ci || 0;
+    // 스태미나는 호스트가 권위를 가진다 — 클라는 보간 없이 받은 값을 그대로 쓴다
+    if (b.sm !== undefined) this.stam = b.sm;
+    if (b.gb !== undefined) this.guardBroken = b.gb;
     let i = 0; for (const k in this.pose) { this.pose[k] = L(a.po[i], b.po[i]); i++; }
     this._applyNow(this.pose);
   }

@@ -6,6 +6,8 @@ export class HUD {
     this._specials = { SPECIALS };
     this.top = document.getElementById('hud-fighters');
     this.gauge = document.getElementById('gauge-fill');
+    this.stamRow = document.getElementById('stam-row');
+    this.stamFill = document.getElementById('stam-fill');
     this.gaugeWrap = document.getElementById('gauge-wrap');
     this.hits = document.getElementById('hits');
     this.skillU = document.getElementById('skill-u');
@@ -58,6 +60,14 @@ export class HUD {
     const d = local.dempsey;
     const lbl = document.getElementById('gauge-name');
     if (lbl) lbl.textContent = ({ dempsey: 'DEMPSEY', flicker: 'FLICKER', counter: 'COUNTER', smash: 'SMASH' })[d.style] || 'STANCE';
+    // 가드 스태미나 — 플레이어가 보는 하단 중앙에도 크게 띄운다
+    if (this.stamFill && this.stamRow) {
+      const sr = Math.max(0, local.stam / local.stamMax);
+      this.stamFill.style.width = (sr * 100).toFixed(1) + '%';
+      this.stamRow.classList.toggle('low', sr < 0.3);
+      this.stamRow.classList.toggle('broken', local.guardBroken > 0);
+      this.stamRow.classList.toggle('guarding', !!local.guard);
+    }
     this.gauge.style.width = d.gauge.toFixed(1) + '%';
     this.gaugeWrap.classList.toggle('max', d.maxSpeed);
     const gm = document.getElementById('gauge-max');

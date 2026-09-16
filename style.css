@@ -481,3 +481,24 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
 .fcard .bar.stam.broken .fill { background: linear-gradient(90deg, #ff3b3b, #ff9a9a); }
 .fcard .bar.stam.broken { animation: stamBreak .28s steps(2) infinite; }
 @keyframes stamBreak { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+
+
+/* ---------- 하단 중앙 스태미나 ---------- */
+.stam-row { display: flex; align-items: center; gap: 7px; margin-top: 5px; }
+.stam-lbl {
+  font-family: Bangers, Impact, sans-serif; letter-spacing: 2px; font-size: 13px;
+  color: #9fe6b4; text-shadow: 1px 1px 0 #000; white-space: nowrap;
+}
+.bar.stam.big { flex: 1; height: 12px; box-shadow: 0 0 0 2px #000; }
+.bar.stam.big .fill { width: 100%; background: linear-gradient(90deg, #4fc97a, #b9f5cf); transition: width .07s linear; }
+.stam-row.guarding .bar.stam.big { box-shadow: 0 0 0 2px #000, 0 0 12px rgba(120,230,160,.7); }
+.stam-row.low .stam-lbl { color: #ffc05a; }
+.stam-row.low .bar.stam.big .fill { background: linear-gradient(90deg, #ff9f2e, #ffd79a); }
+.stam-row.broken .stam-lbl { color: #ff6b6b; }
+.stam-row.broken .bar.stam.big .fill { background: linear-gradient(90deg, #ff3b3b, #ff9a9a); }
+.stam-row.broken { animation: stamBreak .26s steps(2) infinite; }
+@media (max-height: 520px) {
+  .stam-row { margin-top: 3px; gap: 5px; }
+  .stam-lbl { font-size: 11px; letter-spacing: 1px; }
+  .bar.stam.big { height: 9px; }
+}
