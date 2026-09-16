@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta name="build-id" content="1789529258">
+<meta name="build-id" content="1789530390">
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -503,7 +503,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   }
 }
 </script>
-<script>window.__BUILD_ID = "1789529258";</script>
+<script>window.__BUILD_ID = "1789530390";</script>
 </head>
 <body>
   <canvas id="gl" tabindex="0"></canvas>
@@ -5581,7 +5581,7 @@ class Fighter {
       const tg = this.target;
       if (!tg || tg.ko || tg.downT > 0) return false;
       // 가드 중이면 연출형 필살도 막힌다 (가드는 모든 공격을 막는다는 규칙 유지)
-      if (tg.guard || tg.block > 0) {
+      if (tg.guard) {
         const chip = Math.max(1.5, (34 + 7 * charge) * this.def.powerMul * 0.08);
         tg.hp = Math.max(0, tg.hp - chip);
         tg.block = Math.max(tg.block, 0.5); tg.blockShock = 1; tg.blockGhost = 0.5;
@@ -5983,7 +5983,12 @@ class Fighter {
     // 경직 중엔 공격이 막히는 것으로 충분하다 — 방어까지 막을 이유는 없다.
     const guardLocked = this.ko || this.fallT > 0 || !!this.finisher || this.airY > 0.01
       || this.downT > 0 || this.danceT > 0 || this.ultT > 0 || this.ultVictimT > 0;
-    this.guard = (shift || this.block > 0) && !d.active && !this.punch && !guardLocked;
+    // 사람은 SHIFT 를 떼는 즉시 가드가 풀린다.
+    // block 타이머를 가드 조건에 넣어 두면, 한 대 막을 때마다 0.3초씩 갱신돼서
+    // SHIFT 를 뗐는데도 후속타까지 계속 자동으로 막혔다.
+    // 단 block 은 AI 가 가드하는 수단이기도 하므로(AIBrain.doBlock) AI 에게는 남겨 둔다.
+    const wantGuard = this.isAI ? (shift || this.block > 0) : shift;
+    this.guard = wantGuard && !d.active && !this.punch && !guardLocked;
     this.guardT = this.guard ? (wasGuard ? this.guardT + dt : 0) : 99;
     this.guardHold = this.guard ? (this.guardHold || 0) + dt : 0;   // 코치용: 가드 연속 유지 시간
     // ---- 밀치기 (Space) ----
@@ -6321,7 +6326,7 @@ class Fighter {
             if (!caught && o.pos.distanceTo(this.pos) > 0.95) continue;
             // 닿는 즉시 첫 타격, 이후 0.1초마다 도트. 기절/다운 중이어도 데미지는 그대로 들어간다
             if (!caught) { this.rushHits.set(o.slot, -1); o.audio.stagger(); }
-            const guarding = o.guard || o.block > 0;
+            const guarding = o.guard;
             if (guarding) {
               // 가드 중이면 밀리지도 않고 칩 데미지만 (0.1초 도트 × 12%)
               o.block = Math.max(o.block, 0.35); o.blockShock = Math.max(o.blockShock, 0.7);
