@@ -567,6 +567,55 @@ export class AudioManager {
     }
   }
 
+  /** 카드 호버 — "뿅" 하는 아주 짧은 물방울 소리. 자주 울리므로 짧고 작게. */
+  hover() {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    const f = 1150 * (0.96 + Math.random() * 0.1);      // 매번 살짝 달라 단조롭지 않게
+    o.frequency.setValueAtTime(f * 0.72, t);
+    o.frequency.exponentialRampToValueAtTime(f, t + 0.035);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.13, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.075);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 4200;
+    o.connect(g); g.connect(lp); lp.connect(this.master);
+    o.start(t); o.stop(t + 0.1);
+  }
+
+  /** 캐릭터 선택 — "삐비빅" 3연음. 삼각파라 밝되 사각파처럼 딱딱하진 않다. */
+  select() {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 6000; lp.Q.value = 0.7;
+    lp.connect(this.master);
+    [[988, 0], [1319, 0.055], [1976, 0.11]].forEach(([freq, delay], i) => {
+      const t0 = t + delay, dur = i === 2 ? 0.20 : 0.065;
+      const o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(freq, t0);
+      if (i === 2) o.frequency.exponentialRampToValueAtTime(freq * 1.03, t0 + dur);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(i === 2 ? 0.26 : 0.19, t0 + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(g); g.connect(lp);
+      o.start(t0); o.stop(t0 + dur + 0.02);
+    });
+    // 유리 반짝임에 맞춘 얇은 고역 반짝 (짧은 노이즈 하이패스)
+    const src = this._noiseSrc();
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 5200;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.0001, t + 0.10);
+    ng.gain.exponentialRampToValueAtTime(0.10, t + 0.14);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.40);
+    src.connect(hp); hp.connect(ng); ng.connect(this.master);
+    src.start(t + 0.10); src.stop(t + 0.45);
+  }
+
   /** 카운트다운 비프 */
   // 카운트다운은 합성 사각파 그대로 둔다 (샘플로 바꿔봤지만 기존 쪽이 더 낫다는 판단)
   beep(high = false) {

@@ -307,7 +307,15 @@ class Game {
         `<div class="nm">${c.name}</div>` +
         `<div class="bars"><span>HP</span>${bar(dsc.hp)}<span>PWR</span>${bar(dsc.pw)}<span>SPD</span>${bar(dsc.sp)}</div>`;
       card.addEventListener('click', () => this.pickChar(key));
-      card.addEventListener('pointerenter', () => this.showCharDetail(container, key));
+      card.addEventListener('pointerenter', () => {
+        this.showCharDetail(container, key);
+        // 같은 카드 위에서 마우스가 흔들려도 다시 울리지 않게 키가 바뀔 때만
+        if (this._hoverKey !== key) {
+          this._hoverKey = key;
+          try { this.audio.init(); this.audio.hover(); } catch (e) {}
+        }
+      });
+      card.addEventListener('pointerleave', () => { if (this._hoverKey === key) this._hoverKey = null; });
       container.appendChild(card);
     }
     // 기존 캐릭터 오른쪽 끝: 히든 버튼
@@ -518,6 +526,14 @@ class Game {
     this.myChar = key;
     try { localStorage.setItem('dr-char', key); } catch (e) {}
     document.querySelectorAll('.charsel .card').forEach((el) => el.classList.toggle('sel', el.dataset.key === key));
+    // 선택 피드백: "삐비빅" + 유리 스치는 반짝임 (애니메이션은 클래스를 다시 붙여야 재생된다)
+    try { this.audio.init(); this.audio.select(); } catch (e) {}
+    document.querySelectorAll(`.charsel .card[data-key="${key}"]`).forEach((el) => {
+      el.classList.remove('flash');
+      void el.offsetWidth;
+      el.classList.add('flash');
+      setTimeout(() => el.classList.remove('flash'), 900);
+    });
     if (this.net.role === 'host') { this.chars[0] = key; if (this.roster) { this.roster[0].char = key; this.renderRoster(this.roster); this.broadcastLobby(); } }
     else if (this.net.role === 'client') this.net.send({ t: 'pick', char: key });
   }

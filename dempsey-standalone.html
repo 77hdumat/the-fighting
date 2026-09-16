@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta name="build-id" content="1789529075">
+<meta name="build-id" content="1789529258">
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -427,6 +427,69 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   .char-detail .ty, .char-detail .tx { font-size: 11px; }
 }
 
+
+/* ---------- 캐릭터 선택 피드백: 유리 반짝임 + 선택 강조 ---------- */
+/* 초상 위를 빗겨 지나가는 하이라이트. 선택 순간 .flash 로 1회, 선택 상태에선 천천히 반복. */
+.charsel .card .por::after {
+  content: '';
+  position: absolute; inset: -30% -70%;
+  background: linear-gradient(115deg,
+    rgba(255,255,255,0) 38%,
+    rgba(255,255,255,.55) 46%,
+    rgba(255,255,255,.95) 50%,
+    rgba(255,255,255,.55) 54%,
+    rgba(255,255,255,0) 62%);
+  transform: translateX(-120%);
+  pointer-events: none;
+  opacity: 0;
+}
+.charsel .card.flash .por::after { animation: glassSweep .62s cubic-bezier(.22,.61,.36,1) 1; }
+.charsel .card.sel .por::after { animation: glassSweep 2.8s ease-in-out infinite; animation-delay: .7s; }
+@keyframes glassSweep {
+  0%   { transform: translateX(-120%); opacity: 0; }
+  12%  { opacity: 1; }
+  60%  { opacity: 1; }
+  100% { transform: translateX(120%); opacity: 0; }
+}
+
+/* 선택 순간 카드가 한 번 '탁' 튀어오른다 */
+.charsel .card.flash { animation: cardPop .42s cubic-bezier(.2,1.6,.4,1) 1; }
+@keyframes cardPop {
+  0%   { transform: translateY(-6px) scale(1); }
+  40%  { transform: translateY(-14px) scale(1.06); }
+  100% { transform: translateY(-6px) scale(1); }
+}
+
+/* 선택된 카드는 테두리가 은은하게 맥동해서 한눈에 보인다 */
+.charsel .card.sel {
+  box-shadow: 0 8px 0 rgba(0,0,0,.18), 0 0 0 3px var(--c), 0 0 20px color-mix(in srgb, var(--c) 60%, transparent);
+  animation: selPulse 1.7s ease-in-out infinite;
+}
+@keyframes selPulse {
+  0%, 100% { box-shadow: 0 8px 0 rgba(0,0,0,.18), 0 0 0 3px var(--c), 0 0 14px color-mix(in srgb, var(--c) 45%, transparent); }
+  50%      { box-shadow: 0 8px 0 rgba(0,0,0,.18), 0 0 0 3px var(--c), 0 0 30px color-mix(in srgb, var(--c) 85%, transparent); }
+}
+
+/* 선택 표식 — 초상 우상단 체크 배지 */
+.charsel .card .por::before {
+  content: '✓';
+  position: absolute; top: 6px; right: 6px; z-index: 2;
+  width: 26px; height: 26px; border-radius: 50%;
+  display: grid; place-items: center;
+  font: 900 15px/1 "Noto Sans JP", sans-serif;
+  color: #fff; background: var(--c);
+  box-shadow: 0 2px 0 rgba(0,0,0,.35);
+  transform: scale(0); opacity: 0;
+  transition: transform .22s cubic-bezier(.2,1.7,.4,1), opacity .22s;
+  pointer-events: none;
+}
+.charsel .card.sel .por::before { transform: scale(1); opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .charsel .card.flash, .charsel .card.sel,
+  .charsel .card.flash .por::after, .charsel .card.sel .por::after { animation: none; }
+}
+
 </style>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script type="importmap">
@@ -440,7 +503,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   }
 }
 </script>
-<script>window.__BUILD_ID = "1789529075";</script>
+<script>window.__BUILD_ID = "1789529258";</script>
 </head>
 <body>
   <canvas id="gl" tabindex="0"></canvas>
@@ -4037,6 +4100,55 @@ class AudioManager {
       o.connect(g); g.connect(lp);
       o.start(t0); o.stop(t0 + dur + 0.02);
     }
+  }
+
+  /** 카드 호버 — "뿅" 하는 아주 짧은 물방울 소리. 자주 울리므로 짧고 작게. */
+  hover() {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    const f = 1150 * (0.96 + Math.random() * 0.1);      // 매번 살짝 달라 단조롭지 않게
+    o.frequency.setValueAtTime(f * 0.72, t);
+    o.frequency.exponentialRampToValueAtTime(f, t + 0.035);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.13, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.075);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 4200;
+    o.connect(g); g.connect(lp); lp.connect(this.master);
+    o.start(t); o.stop(t + 0.1);
+  }
+
+  /** 캐릭터 선택 — "삐비빅" 3연음. 삼각파라 밝되 사각파처럼 딱딱하진 않다. */
+  select() {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 6000; lp.Q.value = 0.7;
+    lp.connect(this.master);
+    [[988, 0], [1319, 0.055], [1976, 0.11]].forEach(([freq, delay], i) => {
+      const t0 = t + delay, dur = i === 2 ? 0.20 : 0.065;
+      const o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(freq, t0);
+      if (i === 2) o.frequency.exponentialRampToValueAtTime(freq * 1.03, t0 + dur);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(i === 2 ? 0.26 : 0.19, t0 + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(g); g.connect(lp);
+      o.start(t0); o.stop(t0 + dur + 0.02);
+    });
+    // 유리 반짝임에 맞춘 얇은 고역 반짝 (짧은 노이즈 하이패스)
+    const src = this._noiseSrc();
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 5200;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.0001, t + 0.10);
+    ng.gain.exponentialRampToValueAtTime(0.10, t + 0.14);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.40);
+    src.connect(hp); hp.connect(ng); ng.connect(this.master);
+    src.start(t + 0.10); src.stop(t + 0.45);
   }
 
   /** 카운트다운 비프 */
@@ -8398,7 +8510,15 @@ class Game {
         `<div class="nm">${c.name}</div>` +
         `<div class="bars"><span>HP</span>${bar(dsc.hp)}<span>PWR</span>${bar(dsc.pw)}<span>SPD</span>${bar(dsc.sp)}</div>`;
       card.addEventListener('click', () => this.pickChar(key));
-      card.addEventListener('pointerenter', () => this.showCharDetail(container, key));
+      card.addEventListener('pointerenter', () => {
+        this.showCharDetail(container, key);
+        // 같은 카드 위에서 마우스가 흔들려도 다시 울리지 않게 키가 바뀔 때만
+        if (this._hoverKey !== key) {
+          this._hoverKey = key;
+          try { this.audio.init(); this.audio.hover(); } catch (e) {}
+        }
+      });
+      card.addEventListener('pointerleave', () => { if (this._hoverKey === key) this._hoverKey = null; });
       container.appendChild(card);
     }
     // 기존 캐릭터 오른쪽 끝: 히든 버튼
@@ -8609,6 +8729,14 @@ class Game {
     this.myChar = key;
     try { localStorage.setItem('dr-char', key); } catch (e) {}
     document.querySelectorAll('.charsel .card').forEach((el) => el.classList.toggle('sel', el.dataset.key === key));
+    // 선택 피드백: "삐비빅" + 유리 스치는 반짝임 (애니메이션은 클래스를 다시 붙여야 재생된다)
+    try { this.audio.init(); this.audio.select(); } catch (e) {}
+    document.querySelectorAll(`.charsel .card[data-key="${key}"]`).forEach((el) => {
+      el.classList.remove('flash');
+      void el.offsetWidth;
+      el.classList.add('flash');
+      setTimeout(() => el.classList.remove('flash'), 900);
+    });
     if (this.net.role === 'host') { this.chars[0] = key; if (this.roster) { this.roster[0].char = key; this.renderRoster(this.roster); this.broadcastLobby(); } }
     else if (this.net.role === 'client') this.net.send({ t: 'pick', char: key });
   }

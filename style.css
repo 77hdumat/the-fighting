@@ -409,3 +409,66 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   .char-detail b { font-size: 15px; }
   .char-detail .ty, .char-detail .tx { font-size: 11px; }
 }
+
+
+/* ---------- 캐릭터 선택 피드백: 유리 반짝임 + 선택 강조 ---------- */
+/* 초상 위를 빗겨 지나가는 하이라이트. 선택 순간 .flash 로 1회, 선택 상태에선 천천히 반복. */
+.charsel .card .por::after {
+  content: '';
+  position: absolute; inset: -30% -70%;
+  background: linear-gradient(115deg,
+    rgba(255,255,255,0) 38%,
+    rgba(255,255,255,.55) 46%,
+    rgba(255,255,255,.95) 50%,
+    rgba(255,255,255,.55) 54%,
+    rgba(255,255,255,0) 62%);
+  transform: translateX(-120%);
+  pointer-events: none;
+  opacity: 0;
+}
+.charsel .card.flash .por::after { animation: glassSweep .62s cubic-bezier(.22,.61,.36,1) 1; }
+.charsel .card.sel .por::after { animation: glassSweep 2.8s ease-in-out infinite; animation-delay: .7s; }
+@keyframes glassSweep {
+  0%   { transform: translateX(-120%); opacity: 0; }
+  12%  { opacity: 1; }
+  60%  { opacity: 1; }
+  100% { transform: translateX(120%); opacity: 0; }
+}
+
+/* 선택 순간 카드가 한 번 '탁' 튀어오른다 */
+.charsel .card.flash { animation: cardPop .42s cubic-bezier(.2,1.6,.4,1) 1; }
+@keyframes cardPop {
+  0%   { transform: translateY(-6px) scale(1); }
+  40%  { transform: translateY(-14px) scale(1.06); }
+  100% { transform: translateY(-6px) scale(1); }
+}
+
+/* 선택된 카드는 테두리가 은은하게 맥동해서 한눈에 보인다 */
+.charsel .card.sel {
+  box-shadow: 0 8px 0 rgba(0,0,0,.18), 0 0 0 3px var(--c), 0 0 20px color-mix(in srgb, var(--c) 60%, transparent);
+  animation: selPulse 1.7s ease-in-out infinite;
+}
+@keyframes selPulse {
+  0%, 100% { box-shadow: 0 8px 0 rgba(0,0,0,.18), 0 0 0 3px var(--c), 0 0 14px color-mix(in srgb, var(--c) 45%, transparent); }
+  50%      { box-shadow: 0 8px 0 rgba(0,0,0,.18), 0 0 0 3px var(--c), 0 0 30px color-mix(in srgb, var(--c) 85%, transparent); }
+}
+
+/* 선택 표식 — 초상 우상단 체크 배지 */
+.charsel .card .por::before {
+  content: '✓';
+  position: absolute; top: 6px; right: 6px; z-index: 2;
+  width: 26px; height: 26px; border-radius: 50%;
+  display: grid; place-items: center;
+  font: 900 15px/1 "Noto Sans JP", sans-serif;
+  color: #fff; background: var(--c);
+  box-shadow: 0 2px 0 rgba(0,0,0,.35);
+  transform: scale(0); opacity: 0;
+  transition: transform .22s cubic-bezier(.2,1.7,.4,1), opacity .22s;
+  pointer-events: none;
+}
+.charsel .card.sel .por::before { transform: scale(1); opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .charsel .card.flash, .charsel .card.sel,
+  .charsel .card.flash .por::after, .charsel .card.sel .por::after { animation: none; }
+}
