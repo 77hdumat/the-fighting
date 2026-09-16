@@ -60,7 +60,8 @@ export class Fighter {
     this.queue = [];
     this.bufferedHook = null;
     this.finisher = null;
-    this.cd = { U: 0, I: 0 };          // 고유기 쿨다운
+    this.cd = { U: 0, I: 0, S: 0 };    // 고유기 / 밀치기 쿨다운
+    this.shove = null;                  // 밀치기 동작 { t, dur, hit }
     this.armor = 0;                     // U 반격기 슈퍼아머 남은 시간
     this.prevPos = new THREE.Vector3(); this.vel = new THREE.Vector3(); this.walkPhase = 0; this.walkAmt = 0;
     this.ropeCharge = 0; this.ropeAxis = null; this.ropeDir = 0; this.ropeCool = 0; this.boostT = 0; this.dash = new THREE.Vector3();
@@ -101,7 +102,7 @@ export class Fighter {
 
   get dempseyActive() { return this.dempsey.active; }
   get stanceStyle() { return this.dempsey.style; }
-  get busy() { return this.ko || this.fallT > 0 || this.stagger > 0 || !!this.finisher || this.airY > 0.01 || this.downT > 0 || this.danceT > 0 || this.ultT > 0 || this.ultVictimT > 0; }
+  get busy() { return this.ko || this.fallT > 0 || this.stagger > 0 || !!this.finisher || !!this.shove || this.airY > 0.01 || this.downT > 0 || this.danceT > 0 || this.ultT > 0 || this.ultVictimT > 0; }
   get rolling() { return this.rollT > 0; }
   get alive() { return !this.ko; }
   get isCounterWindow() { return !!this.punch && this.punch.t / this.punch.dur < 0.55; }
@@ -460,6 +461,19 @@ export class Fighter {
       return { dmg, blocked: true, staggered: false, ko: this.ko, heavy };
     }
 
+    // ---- 밀치기 피격: 데미지는 적지만 크게 밀려나며 넘어진다 (가드로는 막힌다 — 위 분기에서 처리) ----
+    if (ev.shove) {
+      const dmgS = 2;
+      this.hp = Math.max(0, this.hp - dmgS);
+      this.knock.copy(ev.dir).setLength(13);
+      this.downT = this.downDur;
+      this.stagger = 0; this.punch = null; this.queue.length = 0; this.finisher = null;
+      this.dempsey.stop(); this.airY = 0; this.airV = 0;
+      this.react.waistX = -0.5; this.react.headX = -0.4;
+      if (this.hp <= 0) this._die();
+      return { dmg: dmgS, shove: true, down: true, staggered: false, ko: this.ko };
+    }
+
     const body = ev.zone === 'body';
     dmg *= body ? 0.9 : 1.15;
     this.hp = Math.max(0, this.hp - dmg);
@@ -685,8 +699,9 @@ export class Fighter {
       const fwdV = this.vel.dot(this.forward), sideV = this.vel.dot(this.side);
       const moving = spd > 0.25 && !this.ko;
       this.walkAmt += ((moving ? Math.min(1, spd / 2.2) : 0) - this.walkAmt) * Math.min(1, dt * 12);
-      // 보폭 주파수: 느리면 걷기(~4.5 step/s), 빠르면 달리기(~7)
-      const freq = 4.5 + 2.5 * Math.min(1, spd / 3);
+      // 보폭 주파수. 예전 값(4.5~7 rad/s)은 초당 2.1스텝이라 밍기적거렸다.
+      // 6.5~10 rad/s = 초당 2.1~3.2 스텝 → 빠르게 움직일 때 달리는 것으로 읽힌다.
+      const freq = 6.5 + 3.5 * Math.min(1, spd / 2.5);
       this.walkPhase += freq * dt * (fwdV < -0.2 ? -1 : 1) * (moving ? 1 : 0);
       this.walkFwd = fwdV; this.walkSide = sideV;
     }
@@ -699,6 +714,7 @@ export class Fighter {
     if (this.combo) this.comboTimer -= dt;
     if (this.comboTimer <= 0) this.combo = 0;
     this.cd.U = Math.max(0, this.cd.U - dt); this.cd.I = Math.max(0, this.cd.I - dt);
+    this.cd.S = Math.max(0, this.cd.S - dt);
     if (this.armor > 0) this.armor -= dt;
 
     // ---- 입력 ----
@@ -714,6 +730,15 @@ export class Fighter {
     this.guard = (shift || this.block > 0) && !d.active && !this.punch && !guardLocked;
     this.guardT = this.guard ? (wasGuard ? this.guardT + dt : 0) : 99;
     this.guardHold = this.guard ? (this.guardHold || 0) + dt : 0;   // 코치용: 가드 연속 유지 시간
+    // ---- 밀치기 (Space) ----
+    // 막고만 있으면 아무것도 못 하니, 가드 중에도 눌러서 상대를 밀어낼 수 있게 한다.
+    // 맞으면 크게 밀리며 넘어진다. 단 상대도 가드로 막을 수 있다.
+    if (input.justPressed('Space') && !this.shove && !this.punch && !this.busy && this.cd.S <= 0) {
+      this.shove = { t: 0, dur: 0.42, hit: false };
+      this.cd.S = 1.2;
+      this.guard = false;
+      this.audio.swoosh(0, 0.55, false);
+    }
     const jDown = input.isDown('KeyJ'), kDown = input.isDown('KeyK');
     const jPress = input.justPressed('KeyJ'), kPress = input.justPressed('KeyK');
     const finPress = input.justPressed('KeyL');   // 필살기는 L 로만 (J+K 동시 입력 트리거 제거)
@@ -782,21 +807,29 @@ export class Fighter {
       // ---- 보행/달리기: 다리 교차 + 무릎 굽힘 + 골반 상하/좌우 + 상체 약간 앞으로 + 어깨 반동 ----
       const a = this.walkAmt, ph = this.walkPhase;
       const sw = Math.sin(ph), sw2 = Math.sin(ph * 2);
-      const run = Math.min(1, Math.abs(this.walkFwd || 0) / 2.5);
-      const stride = 0.45 + 0.35 * run;
+      const run = Math.min(1, Math.abs(this.walkFwd || 0) / 2.2);
+      // 보폭. 예전 0.45~0.80 은 발을 끄는 느낌이었고, 1.35 까지 올리니 다리가 과하게 찢어졌다.
+      // 0.50~0.95 rad (±29°~±54°) 가 달리는 것으로 읽히면서 자연스러운 선
+      const stride = 0.50 + 0.45 * run;
       p.thighLX += sw * stride * a;  p.thighRX += -sw * stride * a;
-      // 뒤로 가는 다리는 무릎을 접는다
-      p.shinL += Math.max(0, -sw) * (0.7 + 0.5 * run) * a;  p.shinR += Math.max(0, sw) * (0.7 + 0.5 * run) * a;
+      // 무릎: 뒤로 뻗은 다리를 확 접어 올린다 (달리기의 핵심). 위상을 살짝 앞당겨 차올리는 느낌
+      const tuckL = Math.max(0, -Math.sin(ph - 0.45)), tuckR = Math.max(0, Math.sin(ph - 0.45));
+      p.shinL += tuckL * (0.80 + 0.80 * run) * a;  p.shinR += tuckR * (0.80 + 0.80 * run) * a;
       // 옆걸음: 다리를 벌렸다 모은다
       const side = Math.max(-1, Math.min(1, (this.walkSide || 0) / 2));
       p.thighLZ += side * sw * 0.25 * a; p.thighRZ += side * sw * 0.25 * a;
-      p.hipsY += (Math.abs(sw2) * 0.035 + 0.02 * run) * a;
-      p.hipsX += -side * 0.03 * a + Math.sin(ph) * 0.02 * a;
-      p.hipsRotY += sw * 0.12 * a;
-      p.waistY += -sw * 0.1 * a;                    // 어깨 반동
-      p.waistX += 0.12 * run * a;                   // 달리면 상체 앞으로
-      p.shLX += sw * 0.12 * a; p.shRX += -sw * 0.12 * a;
+      // 상하 반동을 키우고, 달릴수록 무게중심이 살짝 낮아진다
+      p.hipsY += (Math.abs(sw2) * 0.055 + 0.03 * run) * a - 0.035 * run * a;
+      p.hipsX += -side * 0.03 * a + Math.sin(ph) * 0.028 * a;
+      p.hipsRotY += sw * 0.20 * a;                  // 골반 회전도 크게
+      p.waistY += -sw * 0.18 * a;                   // 상체는 반대로 비튼다
+      p.waistX += 0.22 * run * a;                   // 달리면 상체를 확실히 앞으로
+      p.chestZ += sw * 0.05 * run * a;
+      // 팔 반동 (가드는 유지하되 어깨가 확실히 움직인다)
+      p.shLX += sw * 0.24 * a; p.shRX += -sw * 0.24 * a;
+      p.elL += Math.max(0, sw) * 0.22 * run * a; p.elR += Math.max(0, -sw) * 0.22 * run * a;
       p.headY += -sw * 0.05 * a;
+      p.headX += -0.10 * run * a;
     }
     if (this.ropeCharge > 0) {
       // 로프에 등을 기대고 힘을 모은다: 상체 뒤로, 무릎 굽힘, 팔은 로프를 잡듯 벌림
@@ -852,6 +885,32 @@ export class Fighter {
       }
       return null;
     };
+
+    // ---- 밀치기 동작 ----
+    if (this.shove) {
+      const s = this.shove;
+      s.t += dt;
+      const u = Math.min(1, s.t / s.dur);
+      // 0~0.3 팔을 당기고, 0.3~0.62 두 손으로 밀어내고, 이후 되돌아온다
+      const push = u < 0.3 ? -(u / 0.3) * 0.35
+        : u < 0.62 ? (-0.35 + ((u - 0.3) / 0.32) * 1.75)
+        : 1.4 * (1 - (u - 0.62) / 0.38);
+      p.shLX += -push * 0.55; p.shRX += -push * 0.55;
+      p.elL += -Math.max(0, push) * 0.65; p.elR += -Math.max(0, push) * 0.65;
+      p.shLZ += 0.18; p.shRZ += -0.18;
+      p.waistX += push * 0.18; p.hipsY += -Math.max(0, push) * 0.02;
+      if (!s.hit && u > 0.3 && u < 0.62) {
+        for (const sd of ['L', 'R']) {
+          if (s.hit) break;
+          hitEvent = tryHit(sd, 0.5, (tg, h) => {
+            s.hit = true;
+            return { attacker: this, target: tg, side: sd, type: 'shove', shove: true, power: 0.7,
+                     pos: h.point.clone(), zone: h.zone, dir: this.forward.clone() };
+          }) || hitEvent;
+        }
+      }
+      if (s.t >= s.dur) this.shove = null;
+    }
 
     // ---- 필살 ----
     if (this.finisher) {
