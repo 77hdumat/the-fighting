@@ -721,6 +721,21 @@ export class AudioManager {
     o.connect(g); g.connect(this.master); o.start(t); o.stop(t + 0.22);
   }
 
+  /** 뿅망치 '뿅' (뚝배기 강화) */
+  squeak(pitch = 1) {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(1300 * pitch, t);
+    o.frequency.exponentialRampToValueAtTime(2400 * pitch, t + 0.035);
+    o.frequency.exponentialRampToValueAtTime(800 * pitch, t + 0.13);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.22, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
+    o.connect(g); g.connect(this.master); o.start(t); o.stop(t + 0.16);
+  }
+
   /** 셔터음 (릴스 촬영) */
   shutter() {
     if (!this.ctx) return;

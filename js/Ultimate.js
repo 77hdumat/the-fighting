@@ -295,13 +295,18 @@ export class UltimateFx {
   }
 
   _buildForge(item, attacker) {
-    // 뼈석원: 강화 망치. 자루(나무) + 쇠머리 + 검은 띠. 피벗은 손 위치, 자루가 위로 뻗고 머리가 끝에
+    // 뼈석원: 초대형 클래식 뿅망치. 흰 막대 + 빨간 원통 머리 + 흰 띠/마개. 피벗은 손 위치, 자루가 위로 뻗고 머리가 끝에
     const g = item.root;
     const h = new THREE.Group();
-    const handle = outlined(new THREE.CylinderGeometry(0.03, 0.035, 0.95, 8), 0x8a5a32, h, new THREE.Vector3(0, 0.45, 0));
-    const head = outlined(new THREE.BoxGeometry(0.36, 0.2, 0.2), 0xb9bcc6, h, new THREE.Vector3(0, 0.95, 0));
-    outlined(new THREE.BoxGeometry(0.38, 0.06, 0.22), 0x18181e, h, new THREE.Vector3(0, 0.95, 0));
-    outlined(new THREE.BoxGeometry(0.06, 0.24, 0.24), 0x18181e, h, new THREE.Vector3(0.17, 0.95, 0));
+    const RED = 0xd3391c, WHITE = 0xffffff;
+    outlined(new THREE.CylinderGeometry(0.055, 0.065, 1.3, 10), WHITE, h, new THREE.Vector3(0, 0.62, 0));            // 흰 막대
+    const head = new THREE.Group(); head.position.y = 1.3; head.rotation.z = Math.PI / 2; h.add(head);                // 머리 (축 = 좌우)
+    outlined(new THREE.CylinderGeometry(0.36, 0.36, 0.98, 18), RED, head);                                              // 빨간 원통
+    outlined(new THREE.CylinderGeometry(0.375, 0.375, 0.14, 18), WHITE, head, new THREE.Vector3(0, 0.0, 0));            // 가운데 흰 띠
+    for (const sy of [-1, 1]) {
+      outlined(new THREE.CylinderGeometry(0.375, 0.375, 0.12, 18), WHITE, head, new THREE.Vector3(0, sy * 0.44, 0));   // 양끝 흰 마개
+      outlined(new THREE.CylinderGeometry(0.2, 0.2, 0.06, 14), RED, head, new THREE.Vector3(0, sy * 0.53, 0));         // 마개 중앙 빨간 점
+    }
     h.scale.setScalar(0.001);
     g.add(h); item.hammer = h;
     // 불꽃 별 (맞을 때마다 튄다)
@@ -322,7 +327,7 @@ export class UltimateFx {
     const hm = it.hammer;
     // 망치: 손 위치(가슴 앞)에서 뒤로 젖혔다가 상대 머리로 내려친다
     const pop = Math.min(1, u / 0.25);
-    hm.scale.setScalar(Math.max(0.001, 0.55 * (1 - Math.pow(1 - pop, 3))));
+    hm.scale.setScalar(Math.max(0.001, 1.0 * (1 - Math.pow(1 - pop, 3))));
     let swing;   // 0 = 뒤로 치켜듦, 1 = 상대 머리에 닿음
     if (u < HIT0) swing = 0.15 * (1 - u / HIT0);
     else if (u < HIT0 + STEP * N) { const ph = ((u - HIT0) % STEP) / STEP; swing = ph < 0.45 ? 1 - ph / 0.45 : (ph - 0.45) / 0.55; swing = swing * swing; }
@@ -337,7 +342,7 @@ export class UltimateFx {
       const reached = Math.min(N, idx + (ph >= 0.97 ? 1 : 0));
       while (it.hits < reached) {
         const k = ++it.hits;
-        this.audio.clang(0.6 + 0.4 * (k / N)); this.audio.impact(0.5 + 0.03 * k, 'hook');
+        if (this.audio.squeak) this.audio.squeak(1 + k * 0.03); this.audio.impact(0.35 + 0.02 * k, 'hook');
         if (this.fx) {
           this.fx.flash = Math.max(this.fx.flash || 0, 0.12 + 0.02 * k);
           if (this.cam) {
@@ -364,7 +369,7 @@ export class UltimateFx {
       st.m.rotation.x += dt * 9; st.m.rotation.y += dt * 7;
       if (st.t > 0.45) { st.t = -1; st.m.visible = false; }
     }
-    if (u > it.dur) hm.scale.setScalar(Math.max(0.001, 0.55 * Math.max(0, 1 - (u - it.dur) / 0.4)));
+    if (u > it.dur) hm.scale.setScalar(Math.max(0.001, 1.0 * Math.max(0, 1 - (u - it.dur) / 0.4)));
   }
 
   _buildBike(item, attacker) {
