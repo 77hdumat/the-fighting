@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta name="build-id" content="1789629891">
+<meta name="build-id" content="1789630163">
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -129,7 +129,7 @@ canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block;
 #next-overlay .next-msg { font-size: 13px; color: #ddd; min-height: 18px; }
 #next-overlay button { font-family: Bangers, Impact, sans-serif; letter-spacing: 2px; font-size: 22px; padding: 8px 24px; background: #ffd34d; color: #1a0a0a; border: 3px solid #000; box-shadow: 4px 4px 0 #000; cursor: pointer; }
 #next-overlay button:disabled { opacity: .45; cursor: default; }
-#next-overlay .charsel .card { width: 160px; padding: 8px 10px; }
+#next-overlay .charsel .card { max-width: 104px; }
 #next-overlay .charsel .card .st { display: none; }
 /* 스크롤 컨테이너 안에서 position:absolute 는 내용과 함께 밀려 사라진다.
    sticky + order:-1 로 오버레이 안쪽 우상단에 계속 붙여 둔다 (해상도 무관 동일 동작) */
@@ -172,17 +172,18 @@ canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block;
 #boot .glfail button { font: 700 14px "Noto Sans JP", sans-serif; color: #e60012; background: #fff; border: 0; border-radius: 10px; padding: 9px 14px; cursor: pointer; }
 #start-overlay .section-label { align-self: flex-start; font-family: Bangers, Impact, sans-serif; font-size: 18px; letter-spacing: 4px; color: #8a8aa0; margin: 2px 0 -6px 6px; }
 /* character cards */
-.charsel { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; width: 100%; }
-.charsel .card { --c: #e60012; flex: 1 1 190px; max-width: 220px; background: #f4f4f8; border-radius: 22px; border: 4px solid transparent; padding: 0 0 12px; cursor: pointer; text-align: left; transition: transform .15s cubic-bezier(.2,1.4,.4,1), box-shadow .15s, border-color .15s; overflow: hidden; box-shadow: 0 6px 0 #d9d9e3; }
+/* 철권식 한 줄 그리드: 카드 전부(히든 포함 최대 11개)가 가로 한 줄에 들어간다. 폭은 화면에 맞춰 줄고 초상은 정사각 */
+.charsel { display: flex; gap: 6px; flex-wrap: nowrap; justify-content: center; width: 100%; }
+.charsel .card { --c: #e60012; flex: 1 1 0; min-width: 0; max-width: 118px; background: #f4f4f8; border-radius: 10px; border: 3px solid transparent; padding: 0 0 6px; cursor: pointer; text-align: left; transition: transform .15s cubic-bezier(.2,1.4,.4,1), box-shadow .15s, border-color .15s; overflow: hidden; box-shadow: 0 4px 0 #d9d9e3; }
 .charsel .card:nth-child(1) { --c: #2aa84a; } .charsel .card:nth-child(2) { --c: #6a3fc9; } .charsel .card:nth-child(3) { --c: #1c6fd8; } .charsel .card:nth-child(4) { --c: #f07000; }
-.charsel .card::before { content: ''; display: block; height: 10px; background: var(--c); }
-.charsel .card:hover { transform: translateY(-4px); box-shadow: 0 10px 0 #d9d9e3; }
-.charsel .card.sel { border-color: var(--c); background: #fff; transform: translateY(-6px) scale(1.03); box-shadow: 0 12px 0 var(--c), 0 18px 30px rgba(0,0,0,.18); animation: wobble .6s ease-in-out 1; }
-.charsel .card .nm { font-family: Bangers, Impact, sans-serif; font-size: 30px; letter-spacing: 2px; color: var(--c); padding: 8px 14px 0; }
+.charsel .card::before { content: ''; display: block; height: 5px; background: var(--c); }
+.charsel .card:hover { transform: translateY(-3px); box-shadow: 0 7px 0 #d9d9e3; }
+.charsel .card.sel { border-color: var(--c); background: #fff; transform: translateY(-4px) scale(1.06); box-shadow: 0 7px 0 var(--c), 0 12px 22px rgba(0,0,0,.18); animation: wobble .6s ease-in-out 1; z-index: 1; }
+.charsel .card .nm { font-family: Bangers, Impact, sans-serif; font-size: clamp(9px, 1.3vw, 16px); letter-spacing: 0; color: var(--c); padding: 3px 5px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .charsel .card .st { font-size: 11.5px; color: #55556a; line-height: 1.55; padding: 2px 14px 0; }
 .charsel .card .st b { color: #1c1c2e; }
-.charsel .card .bars { display: grid; grid-template-columns: 30px 1fr; gap: 3px 6px; font-size: 10px; margin-top: 8px; padding: 0 14px; color: #8a8aa0; align-items: center; font-family: Bangers, Impact, sans-serif; letter-spacing: 1px; }
-.charsel .card .bars i { display: block; height: 7px; border-radius: 4px; background: var(--c); box-shadow: inset 0 -2px 0 rgba(0,0,0,.15); }
+.charsel .card .bars { display: grid; grid-template-columns: 22px 1fr; gap: 2px 4px; font-size: 8px; margin-top: 3px; padding: 0 5px; color: #8a8aa0; align-items: center; font-family: Bangers, Impact, sans-serif; letter-spacing: .5px; }
+.charsel .card .bars i { display: block; height: 4px; border-radius: 3px; background: var(--c); box-shadow: inset 0 -1px 0 rgba(0,0,0,.15); }
 /* inputs */
 #start-overlay .menu { display: flex; flex-direction: column; gap: 12px; align-items: center; width: 100%; }
 #start-overlay .fields { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; width: 100%; }
@@ -223,7 +224,7 @@ canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block;
 #next-overlay .next-title { color: #e60012; text-shadow: none; }
 #next-overlay .next-msg { color: #55556a; }
 #next-overlay button { font-family: "Noto Sans JP", sans-serif; font-weight: 900; color: #fff; background: linear-gradient(#ff3b4e, #e60012); border: none; border-radius: 999px; padding: 12px 30px; box-shadow: 0 6px 0 rgba(0,0,0,.28); }
-#next-overlay .charsel .card { flex: 1 1 150px; max-width: 170px; }
+#next-overlay .charsel .card { flex: 1 1 0; max-width: 104px; }
 
 
 /* ---------- 모바일 터치 조작 ---------- */
@@ -280,8 +281,12 @@ body.touch #skip-hint::after { content: ' (탭)'; }
   #next-overlay .next-title { font-size: 17px; letter-spacing: 2px; }
   #next-overlay .next-msg { font-size: 11px; min-height: 0; }
   #next-overlay button { font-size: 16px; padding: 5px 16px; }
-  #next-overlay .charsel { gap: 5px; }
-  #next-overlay .charsel .card { width: 108px; padding: 4px 6px; }
+  #next-overlay .charsel { gap: 4px; }
+  #next-overlay .charsel .card { max-width: 88px; padding: 0 0 3px; }
+  .charsel { gap: 4px; }
+  .charsel .card { border-width: 2px; border-radius: 8px; padding: 0 0 3px; }
+  .charsel .card .nm { font-size: clamp(10px, 1.5vw, 14px); padding: 2px 4px 0; }
+  .charsel .card .bars { display: none; }   /* 모바일 가로: 높이가 부족해 능력치 바는 상세 패널에만 */
 }
 #start-overlay, #next-overlay { touch-action: pan-y; }
 
@@ -321,16 +326,16 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
 .btn i { display: none; }
 
 /* ---------- 히든 캐릭터 ---------- */
-.charsel .card.hidden-btn { --c: #6b21a8; flex: 0 0 96px; max-width: 96px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; background: linear-gradient(160deg, #241338, #120a1e); color: #e9d5ff; border-color: #6b21a8; cursor: pointer; }
-.charsel .card.hidden-btn .q { font-family: Bangers, Impact, sans-serif; font-size: 44px; line-height: 1; color: #d8b4fe; text-shadow: 0 0 14px #a855f7; }
-.charsel .card.hidden-btn .lbl { font-size: 12px; font-weight: 900; letter-spacing: 1px; }
+.charsel .card.hidden-btn { --c: #6b21a8; flex: .75 1 0; min-width: 0; max-width: 90px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: linear-gradient(160deg, #241338, #120a1e); color: #e9d5ff; border-color: #6b21a8; cursor: pointer; }
+.charsel .card.hidden-btn .q { font-family: Bangers, Impact, sans-serif; font-size: clamp(20px, 3.4vw, 36px); line-height: 1; color: #d8b4fe; text-shadow: 0 0 14px #a855f7; }
+.charsel .card.hidden-btn .lbl { font-size: clamp(8px, 1.1vw, 11px); font-weight: 900; letter-spacing: .5px; white-space: nowrap; }
 .charsel .card.hidden-btn.open { --c: #9ca3af; background: linear-gradient(160deg, #23232b, #131318); color: #d1d5db; border-color: #4b5563; }
 .charsel .card.hidden-btn:hover { filter: brightness(1.15); }
 .charsel .card.hidden-char { --c: #a855f7; box-shadow: 0 0 0 2px #a855f7 inset, 0 10px 24px rgba(168,85,247,.35); animation: hiddenIn .3s cubic-bezier(.2,1.4,.4,1) both; }
 .charsel .card.hidden-char .nm::after { content: ' ★'; color: #d8b4fe; }
 @keyframes hiddenIn { from { transform: scale(.8) translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
-#next-overlay .charsel .card.hidden-btn { flex: 0 0 74px; max-width: 74px; }
-#next-overlay .charsel .card.hidden-btn .q { font-size: 30px; }
+#next-overlay .charsel .card.hidden-btn { flex: .75 1 0; max-width: 74px; }
+#next-overlay .charsel .card.hidden-btn .q { font-size: clamp(18px, 3vw, 28px); }
 #skip-hint.voted { color: #ffd34d; border-color: #ffd34d; }
 
 #lobby .code .code-hint { display: block; font-size: 11px; font-weight: 700; color: #6b6b7a; letter-spacing: 0; margin-top: 2px; font-family: "Noto Sans JP", sans-serif; }
@@ -392,8 +397,8 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   position: relative;
   width: 100%;
   aspect-ratio: 1 / 1;
-  margin-bottom: 6px;
-  border-radius: 8px;
+  margin-bottom: 2px;
+  border-radius: 0;
   overflow: hidden;
   background:
     radial-gradient(ellipse at 50% 18%, rgba(255,255,255,.55), rgba(255,255,255,0) 62%),
@@ -407,7 +412,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   object-position: center bottom;
   filter: drop-shadow(0 3px 4px rgba(0,0,0,.28));
 }
-.charsel .card.sel .por { box-shadow: inset 0 0 0 3px rgba(0,0,0,.45); }
+.charsel .card.sel .por { box-shadow: inset 0 0 0 2px rgba(0,0,0,.45); }
 .charsel .card .st { display: none; }   /* 설명은 상세 패널로 이동 */
 
 .char-detail {
@@ -539,7 +544,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   }
 }
 </script>
-<script>window.__BUILD_ID = "1789629891";</script>
+<script>window.__BUILD_ID = "1789630163";</script>
 </head>
 <body>
   <canvas id="gl" tabindex="0"></canvas>
