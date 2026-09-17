@@ -8,6 +8,28 @@ const path = require('node:path');const fs = require('node:fs');
  page.on('response',r=>{if(r.status()>=400)failedResources.push({url:r.url(),status:r.status()});});
  const phase=process.argv[2]||'after',out=path.resolve('artifacts/character-rework');fs.mkdirSync(out,{recursive:true});
  await page.addInitScript(()=>{let seed=123456;Math.random=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};});
+ if(phase==='effects'){
+  await page.goto('http://127.0.0.1:8791/index.html');await page.waitForFunction(()=>window.game);
+  await page.locator('#btn-solo').click();await page.keyboard.press('Space');await page.waitForFunction(()=>game.started&&game.phase==='fight');
+  await page.evaluate(()=>{game.paused=true;window.__drawnWords=[];const ctx=game.fx.ctx,original=ctx.fillText.bind(ctx);ctx.fillText=(text,...args)=>{__drawnWords.push(text);return original(text,...args);};});
+  const checks=[];
+  for(const kind of ['hit','counter','finisher','guard','mobile']){
+   if(kind==='mobile')await page.setViewportSize({width:390,height:844});
+   const check=await page.evaluate(kind=>{
+    const g=game,attacker=g.localSlot,target=g.fighters.findIndex((f,i)=>i!==attacker),p=g.fighters[target].headPos;
+    g.fx.impacts.length=0;g.fx.flash=0;g.sparks.update(1);__drawnWords.length=0;
+    const res=kind==='guard'?{blocked:true,heavy:true}:{};
+    g.hitFx({a:attacker,b:target,pos:[p.x,p.y,p.z],dir:[0,-1],side:'L',type:'hook',zone:'head',power:1,counter:kind==='counter',finisher:kind==='finisher',charge:1,res});
+    const im=g.fx.impacts[0];g.sparks.update(.06);g.post.render();
+    g.fx.update(.06,{intensity:0,hitStop:0,velX:0,velY:0,focusX:im.x,focusY:im.y});
+    const rgb=new Set();let particles=0;for(let i=0;i<g.sparks.life.length;i++)if(g.sparks.life[i]>0){particles++;rgb.add(Array.from(g.sparks.col.slice(i*3,i*3+3)).map(v=>v.toFixed(2)).join(','));}
+    return {kind,particles,colors:rgb.size,word:im.word,drawn:__drawnWords.includes(im.word),age:im.age,textureLoaded:g.fx.impactImage.naturalWidth===256};
+   },kind);checks.push(check);await page.screenshot({path:path.join(out,`restored-${kind}.png`)});
+   check.expired=await page.evaluate(()=>{const g=game;g.fx.update(.5,{intensity:0,hitStop:0,velX:0,velY:0});g.sparks.update(1);return g.fx.impacts.length===0&&g.sparks.life.every(t=>t<=0);});
+  }
+  const result={errors,failedResources,checks};fs.writeFileSync(path.join(out,'restored-effects-qa.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));await browser.close();
+  if(errors.length||checks.some(c=>!c.drawn||!c.expired||!c.textureLoaded||c.particles<20||c.colors<2))process.exitCode=1;return;
+ }
  if(phase==='before')await page.route(/\/js\/(Rig|AfterImageEffect|Trails|HitSparks|main|FxOverlay|Fighter)\.js(?:\?.*)?$/,route=>{const name=new URL(route.request().url()).pathname.split('/').pop();const saved=path.join(out,name);if(fs.existsSync(saved))route.fulfill({contentType:'text/javascript',body:fs.readFileSync(saved,'utf8')});else route.continue();});
  await page.goto('http://127.0.0.1:8791/rigview.html');await page.waitForFunction(()=>window.__ready);
  const poses=['front','side','guard','punch','hook'];

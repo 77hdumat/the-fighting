@@ -1,7 +1,7 @@
 // HitSparks.js — 타격 지점 3D 파티클 (땀방울/스파크). additive Points, 중력, 수명 페이드
 import * as THREE from 'three';
 
-const MAX = 160;
+const MAX = 400;
 export class HitSparks {
   constructor(scene) {
     const geo = new THREE.BufferGeometry();
@@ -33,7 +33,7 @@ export class HitSparks {
       fragmentShader: /* glsl */`
         uniform sampler2D map; varying vec3 vC; varying float vA;
         void main() { vec4 t = texture2D(map, gl_PointCoord); gl_FragColor = vec4(vC * t.rgb, t.a * vA); }`,
-      transparent: true, depthWrite: false, blending: THREE.NormalBlending, toneMapped: false,
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
     });
     this.points = new THREE.Points(geo, this.mat);
     this.points.frustumCulled = false;
@@ -58,13 +58,13 @@ export class HitSparks {
    * @param pos   월드 위치
    * @param dir   튀는 주 방향 (타격 방향)
    * @param n     개수
-   * @param color THREE.Color
+   * @param color THREE.Color 또는 입자별로 선택할 팔레트 배열
    * @param speed 초기 속도 배율
    */
   burst(pos, dir, n = 20, color = new THREE.Color(1, 1, 1), speed = 1, size = 0.5) {
     if(n>=6){const f=this.flashes[this.flashHead++%this.flashes.length];f.life=.10;f.sprite.visible=true;f.sprite.position.copy(pos).addScaledVector(dir,.025);f.sprite.scale.set(.20+Math.min(size,.6)*.15,.10+Math.min(size,.6)*.08,1);f.sprite.material.opacity=.70;}
-    n=Math.min(14,n);
-    const colors = null;   // 배열이면 입자마다 랜덤 색 (만화 색종이 스파크)
+    n=Math.min(80,n);
+    const colors = Array.isArray(color) && color.length ? color : null;
     for (let k = 0; k < n; k++) {
       if (colors) color = colors[Math.floor(Math.random() * colors.length)];
       const i = this.head; this.head = (this.head + 1) % MAX;
@@ -76,10 +76,10 @@ export class HitSparks {
       this.vel[o] = (dir.x * 0.8 + rx * 1.4) * sp;
       this.vel[o + 1] = (0.6 + ry * 1.6) * sp;
       this.vel[o + 2] = (dir.z * 0.8 + rz * 1.4) * sp;
-      const c = new THREE.Color(0xffffff);
+      const c = color;
       this.col[o] = c.r; this.col[o + 1] = c.g; this.col[o + 2] = c.b;
-      this.maxLife[i] = this.life[i] = 0.08 + Math.random() * 0.10;
-      this.baseSize[i] = this.size[i] = Math.min(.16, size*.3) * (.6 + Math.random()*.4);
+      this.maxLife[i] = this.life[i] = .25 + Math.random() * .35;
+      this.baseSize[i] = this.size[i] = size * (.6 + Math.random()*.8);
     }
   }
 

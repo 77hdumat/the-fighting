@@ -52,7 +52,7 @@ export class FxOverlay {
       wordRot: (Math.random() - 0.5) * 0.5, maxSpeed,
     });
     if (this.impacts.length > 6) this.impacts.shift();
-    this.flash = Math.max(this.flash, .025 + .035 * Math.min(1, power));
+    this.flash = Math.max(this.flash, .3 + .5 * Math.min(1, power));
     this.flashRGB = pal.flash;
   }
 
@@ -174,22 +174,62 @@ export class FxOverlay {
       ctx.restore();
     }
 
-    // Compact contact flash. Depth-correct white contact sprite is rendered by HitSparks;
-    // this screen layer keeps only a brief, low-opacity accent without a huge ring or text.
+    // 플래시는 의성어와 컬러 폭발 뒤에 깔아 잉크와 색이 씻겨 나가지 않게 한다.
+    if (this.flash > 0.01) {
+      ctx.fillStyle = `rgba(${this.flashRGB},${Math.min(.5, this.flash)})`;
+      ctx.fillRect(0, 0, w, h);
+      this.flash *= Math.exp(-dt * 16);
+    }
+
+    // ---- 만화 폭발 / 확장 링 / 일본어 의성어 ----
+    // 화면 크기에 맞춰 연출을 줄이며, 접점의 흰 섬광은 3D 깊이 검사를 유지한다.
+    const impactScale = Math.min(1, Math.min(w, h) / 800);
     for (let i = this.impacts.length - 1; i >= 0; i--) {
       const im = this.impacts[i]; im.age += dt;
-      const duration = .12;
+      const duration = .42;
       if (im.age >= duration) { this.impacts.splice(i, 1); continue; }
-      const k = im.age / duration;
-      const radius = Math.min(w,h) * (.018 + .012 * Math.min(1.5,im.power));
-      ctx.save();ctx.translate(im.x, im.y);ctx.rotate(im.wordRot * .4);
-      ctx.globalAlpha = .22 * Math.pow(1-k,2);
-      if (this.impactImage.complete && this.impactImage.naturalWidth) {
-        ctx.drawImage(this.impactImage, -radius, -radius*.50, radius*2, radius);
-      } else {
-        ctx.fillStyle = '#fff';ctx.beginPath();ctx.ellipse(0,0,radius*.4,radius*.10,0,0,Math.PI*2);ctx.fill();
+      const k = im.age / duration, e = 1 - Math.pow(1-k, 3), P = im.power, pal = im.pal;
+      ctx.save();ctx.translate(im.x, im.y);ctx.scale(impactScale, impactScale);
+      if (k < .55) {
+        const kk = k / .55, ee = 1 - Math.pow(1-kk, 2.2);
+        const core = (36 + 52*P) * (.55 + .75*ee);
+        ctx.globalAlpha = 1-kk;ctx.beginPath();
+        for (let j=0;j<im.star.length;j++) {
+          const a = im.rot + j/im.star.length*Math.PI*2;
+          const r = core * (j%2 ? im.star[j]*.65 : 1);
+          if(j===0)ctx.moveTo(Math.cos(a)*r,Math.sin(a)*r);else ctx.lineTo(Math.cos(a)*r,Math.sin(a)*r);
+        }
+        ctx.closePath();ctx.lineJoin='miter';ctx.lineWidth=6;ctx.strokeStyle='#14101c';
+        ctx.fillStyle=`rgb(${pal.spikes==='rainbow'?'255,240,90':pal.spikes[0]})`;ctx.stroke();ctx.fill();
+        if(this.impactImage.complete&&this.impactImage.naturalWidth)ctx.drawImage(this.impactImage,-core,-core*.5,core*2,core);
+        ctx.globalAlpha=1;
+      }
+      const rad = 30 + (220 + 200*P)*e;
+      for(let j=0;j<2;j++) {
+        ctx.lineWidth=Math.max(.5,(j?6:18+10*P)*(1-k));ctx.strokeStyle=`rgba(${pal.ring[j]},${(1-k)*.9})`;
+        ctx.beginPath();ctx.arc(0,0,rad*(j?.72:1),0,Math.PI*2);ctx.stroke();
+      }
+      ctx.globalAlpha=1-k;
+      for(let j=0;j<14;j++) {
+        const a=im.rot+j/14*Math.PI*2, L=(130+260*P)*e*(.6+.4*Math.abs(Math.sin(j*2.7))), wd=(24+14*P)*(1-k);
+        ctx.fillStyle=pal.spikes==='rainbow'?`hsl(${Math.round(j/14*360+k*120)},100%,62%)`:`rgb(${pal.spikes[j%pal.spikes.length]})`;
+        ctx.strokeStyle='rgba(0,0,0,.85)';ctx.lineWidth=3;ctx.beginPath();
+        ctx.moveTo(Math.cos(a)*20,Math.sin(a)*20);
+        ctx.lineTo(Math.cos(a+.06)*(20+wd),Math.sin(a+.06)*(20+wd));
+        ctx.lineTo(Math.cos(a)*(20+L),Math.sin(a)*(20+L));
+        ctx.lineTo(Math.cos(a-.06)*(20+wd),Math.sin(a-.06)*(20+wd));
+        ctx.closePath();ctx.stroke();ctx.fill();
       }
       ctx.restore();
+      if(im.age<.4) {
+        const pop=k<.2?1.6-3*k:1, size=(60+60*P)*pop*impactScale;
+        ctx.save();ctx.font=`900 ${size}px "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif`;
+        const half=Math.min(w/2,ctx.measureText(im.word).width*.55+12);
+        ctx.translate(Math.max(half,Math.min(w-half,im.x+60*impactScale)),Math.max(size,Math.min(h-size*.3,im.y-50*impactScale)));
+        ctx.rotate(im.wordRot);ctx.textAlign='center';ctx.lineJoin='round';ctx.lineWidth=12*impactScale;
+        ctx.strokeStyle=`rgba(0,0,0,${1-k*.8})`;ctx.strokeText(im.word,0,0);
+        ctx.fillStyle=`rgba(${pal.word},${1-k*.8})`;ctx.fillText(im.word,0,0);ctx.restore();
+      }
     }
 
     // ---- 텍스트 팝업 ----
@@ -220,11 +260,5 @@ export class FxOverlay {
       ctx.restore();
     }
 
-    // ---- 화이트 플래시 ----
-    if (this.flash > 0.01) {
-      ctx.fillStyle = `rgba(${this.flashRGB},${Math.min(.12, this.flash)})`;
-      ctx.fillRect(0, 0, w, h);
-      this.flash *= Math.exp(-dt * 30);
-    }
   }
 }
