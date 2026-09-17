@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta name="build-id" content="1789624702">
+<meta name="build-id" content="1789624765">
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -539,7 +539,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   }
 }
 </script>
-<script>window.__BUILD_ID = "1789624702";</script>
+<script>window.__BUILD_ID = "1789624765";</script>
 </head>
 <body>
   <canvas id="gl" tabindex="0"></canvas>
@@ -1326,7 +1326,7 @@ const SPECIALS = {
     name: 'だるパンチ', ko: '귀찮아 펀치 2연', burst: true, cd: 4 },
   // ---- 히든: 뼈석원 (하이바 / 녹차) ----
   helmetBash: {
-    name: 'ヘルメットバッシュ', ko: '하이바 박치기', side: 'L', dur: 0.4, power: 1.5, cd: 6.5, heavy: true, staggerT: 1.5, step: 5.2, launch: 0.35,
+    name: 'ヘルメットバッシュ', ko: '하이바 박치기', side: 'L', dur: 0.4, power: 1.8, cd: 5.5, heavy: true, staggerT: 1.7, step: 5.6, launch: 0.45,
     wind: { x: -0.2, y: 0.55, z: 0.5, el: -2.2 }, strike: { x: -2.2, y: 0.05, z: 0.15, el: -0.4 },
     body(p, w, s, sgn) {
       p.waistX += -0.3 * w + 0.7 * s; p.headX += -0.4 * w + 0.55 * s; p.chestX += 0.35 * s;
@@ -1334,7 +1334,7 @@ const SPECIALS = {
     },
   },
   teaThrow: {
-    name: '緑茶スロー', ko: '녹차 투척', side: 'R', dur: 0.34, power: 0.95, cd: 4.5, heavy: false, quick: true, step: 1.4, staggerT: 0.9, hitRadius: 1.6,
+    name: '緑茶スロー', ko: '녹차 투척', side: 'R', dur: 0.34, power: 1.15, cd: 3.8, heavy: false, quick: true, step: 1.6, staggerT: 1.0, hitRadius: 1.7,
     wind: { x: 0.5, y: 0.6, z: 0.7, el: -2.35 }, strike: { x: -2.3, y: -0.35, z: 0.3, el: -0.1 },
     body(p, w, s, sgn) { p.waistY += sgn * (0.5 * w - 0.9 * s); p.chestY += sgn * (0.2 * w - 0.4 * s); p.waistX += 0.18 * w - 0.15 * s; p.headX += -0.2 * s; },
   },
@@ -1360,7 +1360,7 @@ const KITS = {
   // 히든
   chaechae:  { stance: 'flicker', finisher: 'reels',   U: 'marketerPunch', I: 'nyangRush', cdU: 5.5 },
   jjeonghyo: { stance: 'smash',   finisher: 'barbell', U: 'dumbbellPress', I: 'deadlift',  cdU: 6.5 },
-  ppyeo:     { stance: 'counter', finisher: 'bike',    U: 'helmetBash',    I: 'teaThrow',  cdU: 5 },
+  ppyeo:     { stance: 'counter', finisher: 'bike',    U: 'helmetBash',    I: 'teaThrow',  cdU: 4.5 },
   ohsh:      { stance: 'counter', finisher: 'snackRain', U: 'suddenSmack',  I: 'breadThrow', cdU: 4.5 },
   jungjuwon: { stance: 'smash',   finisher: 'cafeRush',  U: 'onigiriThrow', I: 'bellyBump', cdU: 4.5 },
   gokomong:  { stance: 'counter', finisher: 'coldCut', U: 'babyKick',      I: 'lazyJab',   cdU: 6 },
@@ -2711,7 +2711,7 @@ const CHARACTERS = {
     hair: 0x14100e, hairStyle: 'slick', brows: 'thin', eyes: 'narrow', mouth: 'grin',
     hold: { L: 'helmet', R: 'bottle' },
     prop: { height: 1.2, torsoW: 0.74, torsoD: 0.72, armR: 0.7, armLen: 1.32, legR: 0.72, legLen: 1.2, headS: 0.94, headY: 1.16, neck: 1.4, muscle: 0.1 },
-    hp: 125, powerMul: 1.15, speedMul: 1.25, style: 'bone', guardMax: 90, guardRegen: 1.1, weaveCd: 1.2, gaugeMul: 1.0, hidden: true, sfx: 'bone',
+    hp: 150, powerMul: 1.4, speedMul: 1.3, style: 'bone', guardMax: 105, guardRegen: 1.2, weaveCd: 1.1, gaugeMul: 1.1, hidden: true, sfx: 'bone',
   },
   // 오승현: 가장 작고 하얀 피부. 빵을 들고 계속 먹는다. 소심하지만 갑자기 때린다
   ohsh: {
@@ -5843,7 +5843,7 @@ const FINISHERS = {
   // 히든 필살기
   reels:        { side: 'L', wind: 0.35, dur: 0.4, powerBase: 1.2, powerCharge: 0.2, kind: 'reels', dash: 3.4 },        // 붙잡아 릴스 댄스
   barbell:      { side: 'R', wind: 0.62, dur: 0.6, powerBase: 2.2, powerCharge: 0.4, kind: 'barbell', launch: 1.2 },     // 바벨 내려찍기
-  bike:         { side: 'R', wind: 0.5, dur: 0.52, powerBase: 2.3, powerCharge: 0.35, kind: 'bike', launch: 0.6, dash: 9.5 }, // 오토바이 돌진
+  bike:         { side: 'R', wind: 0.5, dur: 0.52, powerBase: 2.7, powerCharge: 0.4, kind: 'bike', launch: 0.7, dash: 10 }, // 오토바이 돌진
 };
 
 class Fighter {
@@ -9225,7 +9225,7 @@ class Game {
       ohsh: { style: '히든 · 빵 러버', st: '<b>기본</b> 빵 들고 타격(가볍고 빠름) · <b>U</b> 갑자기 때리기(기습·스턴) · <b>I</b> 빵 던지기 · <b>L</b> <b>간식 폭격</b>(소금빵·호두과자 46개 낙하)<br><i>가장 작고 약하지만 가장 빨리 기가 참</i>', pw: 1, sp: 5, hp: 1 },
       jungjuwon: { style: '히든 · 헤드폰 먹방', st: '<b>기본</b> 묵직한 타격 · <b>U</b> 삼각김밥 던지기 · <b>I</b> 배치기(띄움) · <b>L</b> <b>카페 돌격</b>(카페 생성 후 질주, 부딪히는 전원 스턴+데미지)<br><i>체력 두 번째로 높음</i>', pw: 4, sp: 2, hp: 5 },
       gokomong: { style: '히든 · ISTP 무감정', st: '<b>기본</b> 귀찮아 펀치(낭창) · <b>U</b> 집가서 아기봐야돼 킥(발 판정·띄움) · <b>I</b> 귀찮아 2연 · <b>L</b> <b>칼차단</b>(푸념을 끊고 도리도리 → 상처받아 기절)<br><i>무난한 올라운더</i>', pw: 3, sp: 3, hp: 3 },
-      ppyeo: { style: '히든 · 오토바이 라이더', st: '<b>기본</b> 뼈펀치(리치 최장) · <b>U</b> 뼈 찌르기 · <b>I</b> 회전 팔꿈치 · <b>L</b> <b>오토바이 돌진</b>(소음공해·날려버림)<br><i>몸이 얇아 맷집 약함</i>', pw: 3, sp: 4, hp: 2 },
+      ppyeo: { style: '히든 · 오토바이 라이더', st: '<b>기본</b> 뼈펀치(리치 최장) · <b>U</b> 뼈 찌르기 · <b>I</b> 회전 팔꿈치 · <b>L</b> <b>오토바이 돌진</b>(소음공해·날려버림)<br><i>리치·화력·속도 모두 상위. 얇은 몸에 비해 맷집도 붙었다</i>', pw: 4, sp: 4, hp: 3 },
     };
     this.charDesc = DESC;
     this.buildCharSel($('charsel'));

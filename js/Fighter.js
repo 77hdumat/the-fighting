@@ -54,7 +54,7 @@ const FINISHERS = {
   // 히든 필살기
   reels:        { side: 'L', wind: 0.35, dur: 0.4, powerBase: 1.2, powerCharge: 0.2, kind: 'reels', dash: 3.4 },        // 붙잡아 릴스 댄스
   barbell:      { side: 'R', wind: 0.62, dur: 0.6, powerBase: 2.2, powerCharge: 0.4, kind: 'barbell', launch: 1.2 },     // 바벨 내려찍기
-  bike:         { side: 'R', wind: 0.5, dur: 0.52, powerBase: 2.3, powerCharge: 0.35, kind: 'bike', launch: 0.6, dash: 9.5 }, // 오토바이 돌진
+  bike:         { side: 'R', wind: 0.5, dur: 0.52, powerBase: 2.7, powerCharge: 0.4, kind: 'bike', launch: 0.7, dash: 10 }, // 오토바이 돌진
 };
 
 export class Fighter {

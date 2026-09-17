@@ -179,7 +179,7 @@ export const CHARACTERS = {
     hair: 0x14100e, hairStyle: 'slick', brows: 'thin', eyes: 'narrow', mouth: 'grin',
     hold: { L: 'helmet', R: 'bottle' },
     prop: { height: 1.2, torsoW: 0.74, torsoD: 0.72, armR: 0.7, armLen: 1.32, legR: 0.72, legLen: 1.2, headS: 0.94, headY: 1.16, neck: 1.4, muscle: 0.1 },
-    hp: 125, powerMul: 1.15, speedMul: 1.25, style: 'bone', guardMax: 90, guardRegen: 1.1, weaveCd: 1.2, gaugeMul: 1.0, hidden: true, sfx: 'bone',
+    hp: 150, powerMul: 1.4, speedMul: 1.3, style: 'bone', guardMax: 105, guardRegen: 1.2, weaveCd: 1.1, gaugeMul: 1.1, hidden: true, sfx: 'bone',
   },
   // 오승현: 가장 작고 하얀 피부. 빵을 들고 계속 먹는다. 소심하지만 갑자기 때린다
   ohsh: {

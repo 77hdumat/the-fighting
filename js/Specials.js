@@ -132,7 +132,7 @@ export const SPECIALS = {
     name: 'だるパンチ', ko: '귀찮아 펀치 2연', burst: true, cd: 4 },
   // ---- 히든: 뼈석원 (하이바 / 녹차) ----
   helmetBash: {
-    name: 'ヘルメットバッシュ', ko: '하이바 박치기', side: 'L', dur: 0.4, power: 1.5, cd: 6.5, heavy: true, staggerT: 1.5, step: 5.2, launch: 0.35,
+    name: 'ヘルメットバッシュ', ko: '하이바 박치기', side: 'L', dur: 0.4, power: 1.8, cd: 5.5, heavy: true, staggerT: 1.7, step: 5.6, launch: 0.45,
     wind: { x: -0.2, y: 0.55, z: 0.5, el: -2.2 }, strike: { x: -2.2, y: 0.05, z: 0.15, el: -0.4 },
     body(p, w, s, sgn) {
       p.waistX += -0.3 * w + 0.7 * s; p.headX += -0.4 * w + 0.55 * s; p.chestX += 0.35 * s;
@@ -140,7 +140,7 @@ export const SPECIALS = {
     },
   },
   teaThrow: {
-    name: '緑茶スロー', ko: '녹차 투척', side: 'R', dur: 0.34, power: 0.95, cd: 4.5, heavy: false, quick: true, step: 1.4, staggerT: 0.9, hitRadius: 1.6,
+    name: '緑茶スロー', ko: '녹차 투척', side: 'R', dur: 0.34, power: 1.15, cd: 3.8, heavy: false, quick: true, step: 1.6, staggerT: 1.0, hitRadius: 1.7,
     wind: { x: 0.5, y: 0.6, z: 0.7, el: -2.35 }, strike: { x: -2.3, y: -0.35, z: 0.3, el: -0.1 },
     body(p, w, s, sgn) { p.waistY += sgn * (0.5 * w - 0.9 * s); p.chestY += sgn * (0.2 * w - 0.4 * s); p.waistX += 0.18 * w - 0.15 * s; p.headX += -0.2 * s; },
   },
@@ -166,7 +166,7 @@ export const KITS = {
   // 히든
   chaechae:  { stance: 'flicker', finisher: 'reels',   U: 'marketerPunch', I: 'nyangRush', cdU: 5.5 },
   jjeonghyo: { stance: 'smash',   finisher: 'barbell', U: 'dumbbellPress', I: 'deadlift',  cdU: 6.5 },
-  ppyeo:     { stance: 'counter', finisher: 'bike',    U: 'helmetBash',    I: 'teaThrow',  cdU: 5 },
+  ppyeo:     { stance: 'counter', finisher: 'bike',    U: 'helmetBash',    I: 'teaThrow',  cdU: 4.5 },
   ohsh:      { stance: 'counter', finisher: 'snackRain', U: 'suddenSmack',  I: 'breadThrow', cdU: 4.5 },
   jungjuwon: { stance: 'smash',   finisher: 'cafeRush',  U: 'onigiriThrow', I: 'bellyBump', cdU: 4.5 },
   gokomong:  { stance: 'counter', finisher: 'coldCut', U: 'babyKick',      I: 'lazyJab',   cdU: 6 },
