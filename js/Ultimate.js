@@ -300,7 +300,7 @@ export class UltimateFx {
     const h = new THREE.Group();
     const RED = 0xd3391c, WHITE = 0xffffff;
     outlined(new THREE.CylinderGeometry(0.055, 0.065, 1.3, 10), WHITE, h, new THREE.Vector3(0, 0.62, 0));            // 흰 막대
-    const head = new THREE.Group(); head.position.y = 1.3; head.rotation.z = Math.PI / 2; h.add(head);                // 머리 (축 = 좌우)
+    const head = new THREE.Group(); head.position.y = 1.3; head.rotation.x = Math.PI / 2; h.add(head);                // 머리 (축 = 앞뒤 → 내려찍을 때 평평한 앞면이 닿는다)
     outlined(new THREE.CylinderGeometry(0.36, 0.36, 0.98, 18), RED, head);                                              // 빨간 원통
     outlined(new THREE.CylinderGeometry(0.375, 0.375, 0.14, 18), WHITE, head, new THREE.Vector3(0, 0.0, 0));            // 가운데 흰 띠
     for (const sy of [-1, 1]) {
@@ -337,8 +337,8 @@ export class UltimateFx {
     const fwdDist = Math.max(0.3, dHead.dot(aim)), upDist = dHead.y;
     const bottomAngle = Math.atan2(fwdDist, upDist);                 // 수직에서 상대 쪽으로 기운 각
     const HAMMER_LEN = 1.66;                                          // 자루 1.3 + 머리 반지름
-    const need = Math.hypot(fwdDist, upDist) / HAMMER_LEN;
-    const sc = Math.max(0.62, Math.min(1.0, need + 0.08));            // 멀면 크게, 가까우면 조금 작게 (그래도 초대형)
+    const need = (Math.hypot(fwdDist, upDist) - 0.3) / HAMMER_LEN;   // 머리 앞면(중심에서 0.49·sc 앞)이 뚝배기에 닿는 길이
+    const sc = Math.max(0.62, Math.min(1.0, need + 0.06));            // 멀면 크게, 가까우면 조금 작게 (그래도 초대형)
     hm.scale.setScalar(Math.max(0.001, sc * (1 - Math.pow(1 - pop, 3))));
     hm.position.copy(pivot);
     hm.rotation.set(0, yaw, 0);
