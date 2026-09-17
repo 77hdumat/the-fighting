@@ -36,7 +36,7 @@ const _camR = new THREE.Vector3();
 const _sep = new THREE.Vector3();
 const SPAWNS = [[0, 2.4], [0, -2.4], [2.4, 0], [-2.4, 0]];
 const AUDIO_FWD = ['whoosh', 'swoosh', 'impact', 'bassHit', 'riser', 'maxSpeedHit', 'stagger', 'ko', 'block', 'chargeUp', 'finisherWind', 'finisherHit', 'counter', 'cheer', 'engine', 'clang', 'nyang', 'shutter'];
-const SNAP_HZ = 30;
+const SNAP_HZ = 45;   // 호스트→게스트 스냅샷 주기. 재생 지연은 (주기 + 지터) 이므로 올릴수록 게스트 응답성이 좋아진다 (대역폭 ∝ 주기)
 // 만화 색종이 스파크 팔레트 (배열이면 입자마다 랜덤)
 const HIT_CONFETTI = [new THREE.Color(1, 0.92, 0.25), new THREE.Color(1, 0.55, 0.15), new THREE.Color(1, 1, 1), new THREE.Color(1, 0.3, 0.35)];
 const RAINBOW = [new THREE.Color(1, 0.25, 0.3), new THREE.Color(1, 0.6, 0.1), new THREE.Color(1, 0.95, 0.2), new THREE.Color(0.3, 1, 0.5), new THREE.Color(0.25, 0.75, 1), new THREE.Color(0.75, 0.35, 1), new THREE.Color(1, 1, 1)];
@@ -684,7 +684,7 @@ class Game {
         const q = m.q | 0, last = this.inSeq[slot] | 0;
         if (q && q <= last && last - q < 100000) return;
         this.inSeq[slot] = q;
-        this.netInputs[slot].setNet(m.d[0], m.d[1], m.d[2]);
+        this.netInputs[slot].setNet(m.d[0], m.d[1], m.d[2], m.d[3]);
       }
       else if (m.t === 'chat' && typeof m.text === 'string') { const text = m.text.slice(0, 120); this.addChat(slot, text); this.net.broadcast({ t: 'chat', from: slot, text }); }
       else if (m.t === 'skip') { this.voteSkip(slot); }
@@ -1402,6 +1402,7 @@ class Game {
     } else if (this.mode === 'client') {
       this.sendInput();
       this.predictInput(input);
+      this.input.onChange = this._flushInput || (this._flushInput = () => this.flushInput());
       this.pingT = (this.pingT || 0) + rawDt;
       if (this.pingT > 1) { this.pingT = 0; this.net.send({ t: 'ping', t0: performance.now() }); }
       this.clientInterpolate(rawDt);
@@ -1588,20 +1589,23 @@ class Game {
     if (m.q) { if (m.q <= this.snapSeq && this.snapSeq - m.q < 100000) return; this.snapSeq = m.q; }
     else if (this.snaps.length && (m.ts || 0) * 1000 <= this.snaps[this.snaps.length - 1].ts) return;
     const now = performance.now();
-    // 도착 간격의 흔들림(지터)을 추적해 재생 지연을 필요한 만큼만 잡는다
+    const ts = (m.ts || 0) * 1000;
+    // 네트워크 지터 = (도착 간격 − 호스트 송신 간격). 호스트가 프레임 사정으로 불규칙하게 보내는 건 지터가 아니다
     if (this._lastRecv) {
-      const gap = now - this._lastRecv;
-      const nominal = 1000 / SNAP_HZ;
-      const dev = Math.abs(gap - nominal);
+      const dev = Math.abs((now - this._lastRecv) - (ts - this._lastRecvTs));
       this.jitter = this.jitter === undefined ? dev : this.jitter * 0.88 + dev * 0.12;
     }
-    this._lastRecv = now;
-    this.snaps.push({ recv: now, ts: (m.ts || 0) * 1000, d: m });
+    this._lastRecv = now; this._lastRecvTs = ts;
+    this.snaps.push({ recv: now, ts, d: m });
     if (this.snaps.length > 10) this.snaps.shift();
     for (const e of m.ev) {
       if (e.t === 'hit') this.hitFx(e);
       else if (e.t === 'a') {
         if (e.n === 'whoosh' && e.s !== this.localSlot) continue;
+        // 내 기본 펀치 소리는 예측 시점에 이미 냈다 → 호스트가 보낸 같은 소리는 한 번 건너뛴다
+        const lf = e.s === this.localSlot ? this.localFighter : null;
+        if (lf && e.n === 'swoosh' && lf._predSwoosh) { lf._predSwoosh = false; continue; }   // (기합도 예측 시 오디오 프록시가 이미 냈다)
+        if (lf && e.n === 'nyang' && lf._predNyang) { lf._predNyang = false; continue; }
         this.audio[e.n] && this.audio[e.n](...e.a);
         if (e.n === 'swoosh') { const f = this.fighters[e.s]; this.voice.grunt(e.s, f ? f.defKey : 'ippo', e.a[1] || 0.5); }
       }
@@ -1670,10 +1674,9 @@ class Game {
     const latest = this.snaps[n - 1];
     if (n === 1) { const s0 = latest.d.f; this.fighters.forEach((f, i) => f.applySnapshot(s0[i], s0[i], 1)); return; }
 
-    // 재생 지연: 스냅샷 간격 2개 + RTT 절반 (최소 70ms, 최대 220ms)
+    // 재생 지연: 스냅샷 간격 1개 + 지터 여유. RTT 는 지터가 아니므로 더하지 않는다 (회선이 깨끗하면 ~30ms)
     const interval = 1000 / SNAP_HZ;
-    // 회선이 깨끗하면 지연을 최소로 (= 게스트가 더 빨리 본다). 지터가 크면 그만큼만 더 버퍼링
-    const delay = Math.min(200, Math.max(38, interval * 1.15 + (this.jitter || 6) * 2.2 + (this.rtt || 40) * 0.25));
+    const delay = Math.min(160, Math.max(24, interval + 4 + (this.jitter || 4) * 2));
     if (this.playT === undefined || this.playT === null) this.playT = latest.ts - delay;
 
     // 버퍼 두께에 따라 재생 속도 미세 조정 (±12%) — 튀지 않게 천천히 따라붙는다
@@ -1707,10 +1710,20 @@ class Game {
     const d = this.localInput.pack();
     const nowMs = performance.now();
     const last = this._lastSent;
-    const changed = !last || last[0] !== d[0] || last[1] !== d[1] || last[2] !== d[2];
+    const changed = !last || last[0] !== d[0] || last[1] !== d[1] || last[2] !== d[2] || last[3] !== d[3];
     if (!changed && nowMs - this._lastSentT < 50) return;
     this._lastSent = d; this._lastSentT = nowMs;
     this.net.send({ t: 'in', q: ++this.outSeq, d });
+  }
+
+  /**
+   * 키 이벤트가 온 그 순간 입력을 보낸다 (다음 rAF 프레임까지 평균 8ms, 저사양 폰에선 30ms+ 를 기다리지 않는다).
+   * 이동 벡터는 마지막 프레임 것을 그대로 쓴다. 같은 프레임의 update 는 바뀐 게 없으면 다시 보내지 않는다.
+   */
+  flushInput() {
+    if (this.mode !== 'client' || this.phase !== 'fight' || !this.started || this.over) return;
+    this.localInput.fromInput(this.input, this.move);
+    this.sendInput();
   }
 
   /** 버튼 입력을 받은 그 프레임에 내 캐릭터 동작을 먼저 그려 준다 (호스트 확인 전) */

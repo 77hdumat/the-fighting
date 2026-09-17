@@ -157,7 +157,7 @@ export const CHARACTERS = {
     hair: 0x2a1a16, hairStyle: 'bob', brows: 'thin', eyes: 'big', mouth: 'grin',
     accessory: 'sunglasses', skirt: 0x17171e, hold: { L: 'book', R: 'book' },
     prop: { height: 0.82, torsoW: 0.88, torsoD: 0.86, armR: 0.86, armLen: 0.88, legR: 0.9, legLen: 0.86, headS: 1.08, headY: 1.0, neck: 0.8, muscle: 0.3 },
-    hp: 120, powerMul: 0.8, speedMul: 1.38, style: 'idol', guardMax: 75, guardRegen: 1.35, weaveCd: 1.0, gaugeMul: 1.15, hidden: true, sfx: 'nyang',
+    hp: 120, powerMul: 0.8, speedMul: 1.38, atkMul: 1.7, style: 'idol', guardMax: 75, guardRegen: 1.35, weaveCd: 1.0, gaugeMul: 1.15, hidden: true, sfx: 'nyang',
   },
   // 쩡효: 중간 키, 긴 생머리 + 흰 피부. 덤벨 펀치(무겁다), 필살 = 바벨 내려찍기
   jjeonghyo: {
@@ -189,7 +189,7 @@ export const CHARACTERS = {
     hair: 0x14131a, hairStyle: 'bobsharp', brows: 'thin', eyes: 'big', mouth: 'grit',
     hold: { L: 'bread', R: 'croissant' }, oversize: 1,
     prop: { height: 0.72, torsoW: 0.9, torsoD: 0.88, armR: 0.95, armLen: 0.82, legR: 0.84, legLen: 0.78, headS: 1.14, headY: 1.0, neck: 0.7, muscle: 0.15 },
-    hp: 105, powerMul: 0.9, speedMul: 1.35, style: 'bread', guardMax: 70, guardRegen: 1.4, weaveCd: 1.0, gaugeMul: 1.25, hidden: true, sfx: 'nyang', sleeveColor: 0xfdf6ec,
+    hp: 105, powerMul: 0.9, speedMul: 1.35, atkMul: 1.7, style: 'bread', guardMax: 70, guardRegen: 1.4, weaveCd: 1.0, gaugeMul: 1.25, hidden: true, sfx: 'nyang', sleeveColor: 0xfdf6ec,
   },
   // 정주원: 뚱뚱한 보통 체격, 헤드폰. 삼각김밥을 계속 먹는다
   jungjuwon: {

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta name="build-id" content="1789614239">
+<meta name="build-id" content="1789621140">
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -539,7 +539,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   }
 }
 </script>
-<script>window.__BUILD_ID = "1789614239";</script>
+<script>window.__BUILD_ID = "1789621140";</script>
 </head>
 <body>
   <canvas id="gl" tabindex="0"></canvas>
@@ -2496,7 +2496,7 @@ const CHARACTERS = {
     hair: 0x2a1a16, hairStyle: 'bob', brows: 'thin', eyes: 'big', mouth: 'grin',
     accessory: 'sunglasses', skirt: 0x17171e, hold: { L: 'book', R: 'book' },
     prop: { height: 0.82, torsoW: 0.88, torsoD: 0.86, armR: 0.86, armLen: 0.88, legR: 0.9, legLen: 0.86, headS: 1.08, headY: 1.0, neck: 0.8, muscle: 0.3 },
-    hp: 120, powerMul: 0.8, speedMul: 1.38, style: 'idol', guardMax: 75, guardRegen: 1.35, weaveCd: 1.0, gaugeMul: 1.15, hidden: true, sfx: 'nyang',
+    hp: 120, powerMul: 0.8, speedMul: 1.38, atkMul: 1.7, style: 'idol', guardMax: 75, guardRegen: 1.35, weaveCd: 1.0, gaugeMul: 1.15, hidden: true, sfx: 'nyang',
   },
   // 쩡효: 중간 키, 긴 생머리 + 흰 피부. 덤벨 펀치(무겁다), 필살 = 바벨 내려찍기
   jjeonghyo: {
@@ -2528,7 +2528,7 @@ const CHARACTERS = {
     hair: 0x14131a, hairStyle: 'bobsharp', brows: 'thin', eyes: 'big', mouth: 'grit',
     hold: { L: 'bread', R: 'croissant' }, oversize: 1,
     prop: { height: 0.72, torsoW: 0.9, torsoD: 0.88, armR: 0.95, armLen: 0.82, legR: 0.84, legLen: 0.78, headS: 1.14, headY: 1.0, neck: 0.7, muscle: 0.15 },
-    hp: 105, powerMul: 0.9, speedMul: 1.35, style: 'bread', guardMax: 70, guardRegen: 1.4, weaveCd: 1.0, gaugeMul: 1.25, hidden: true, sfx: 'nyang', sleeveColor: 0xfdf6ec,
+    hp: 105, powerMul: 0.9, speedMul: 1.35, atkMul: 1.7, style: 'bread', guardMax: 70, guardRegen: 1.4, weaveCd: 1.0, gaugeMul: 1.25, hidden: true, sfx: 'nyang', sleeveColor: 0xfdf6ec,
   },
   // 정주원: 뚱뚱한 보통 체격, 헤드폰. 삼각김밥을 계속 먹는다
   jungjuwon: {
@@ -3641,6 +3641,9 @@ __M.InputState = (() => {
 // InputState.js — 로컬 키보드 / 네트워크 / AI 가 공통으로 채우는 입력 상태
 // 비트: 0 W, 1 A, 2 S, 3 D, 4 Space, 5 J, 6 K, 7 L, 8 Shift, 9 U, 10 I
 const BIT = { KeyW: 1, KeyA: 2, KeyS: 4, KeyD: 8, Space: 16, KeyJ: 32, KeyK: 64, KeyL: 128, ShiftLeft: 256, ShiftRight: 256, KeyU: 512, KeyI: 1024 };
+// 네트워크 '눌림 횟수' 카운터: 동작 키마다 4비트(0~15 순환). 비순서 채널에서 '눌림' 패킷이 '뗌' 패킷보다 늦게 와 버려지더라도
+// 카운터가 바뀐 것으로 호스트가 그 탭을 알아챈다 (게스트 J/K 가 가끔 씹히던 원인)
+const PC_KEYS = ['Space', 'KeyJ', 'KeyK', 'KeyL', 'KeyU', 'KeyI'];
 
 class InputState {
   constructor() {
@@ -3650,12 +3653,18 @@ class InputState {
     this.mz = 0;
     this.held = 0;     // 네트워크: 프레임 사이에 눌렸다 풀린 비트 (setNet 참고)
     this.lastNet = 0;
+    this.pc = 0;       // 눌림 횟수 카운터 (PC_KEYS 순서로 4비트씩)
+    this.lastPc = 0;
+    this._pbPrev = 0;  // 이번 프레임에 이미 카운터를 올린 justPressed 비트 (한 프레임에 fromInput 이 두 번 불려도 중복 증가 없음)
   }
   /** 로컬 키보드(Input) 로부터 채움. move 는 월드 벡터 */
   fromInput(input, move) {
-    let b = 0;
+    let b = 0, pb = 0;
     // 한 프레임 안에 눌렀다 뗀 짧은 탭도 놓치지 않도록 justPressed 도 포함
-    for (const k in BIT) if (input.isDown(k) || input.justPressed(k)) b |= BIT[k];
+    for (const k in BIT) { if (input.isDown(k)) b |= BIT[k]; if (input.justPressed(k)) { b |= BIT[k]; pb |= BIT[k]; } }
+    const fresh = pb & ~this._pbPrev;
+    if (fresh) PC_KEYS.forEach((k, i) => { if (fresh & BIT[k]) { const sh = i * 4; this.pc = (this.pc & ~(15 << sh)) | ((((this.pc >> sh) & 15) + 1) & 15) << sh; } });
+    this._pbPrev = pb;
     this.bits = b;
     this.mx = move.x; this.mz = move.z;
   }
@@ -3666,16 +3675,22 @@ class InputState {
    * 사라지곤 했다 (게스트 J 입력이 가끔 씹히는 원인). 호스트 프레임 사이에 새로 눌린 비트는 `held` 에 모아 두고
    * 다음 시뮬 프레임에서 반드시 한 번은 '눌림' 으로 보이게 한다.
    */
-  setNet(bits, mx, mz) {
+  setNet(bits, mx, mz, pc) {
     this.held |= bits & ~this.lastNet;
     this.lastNet = bits;
+    if (pc !== undefined && pc !== this.lastPc) {
+      // 카운터가 바뀐 키는 (그 사이 패킷이 뒤바뀌거나 버려졌어도) 반드시 한 번 '눌림' 으로 보이게 한다
+      // prev 비트도 지워 직전 프레임까지 눌려 있던 키의 재입력(뗌 패킷이 아직 안 온 경우)도 justPressed 로 잡힌다
+      PC_KEYS.forEach((k, i) => { if (((pc >> (i * 4)) & 15) !== ((this.lastPc >> (i * 4)) & 15)) { this.held |= BIT[k]; this.prev &= ~BIT[k]; } });
+      this.lastPc = pc;
+    }
     this.bits = bits; this.mx = mx; this.mz = mz;
   }
   get eff() { return this.bits | (this.held || 0); }
   isDown(code) { const m = BIT[code]; return !!m && (this.eff & m) !== 0; }
   justPressed(code) { const m = BIT[code]; return !!m && (this.eff & m) !== 0 && (this.prev & m) === 0; }
-  endFrame() { this.prev = this.eff; this.held = 0; }
-  pack() { return [this.bits, +this.mx.toFixed(2), +this.mz.toFixed(2)]; }
+  endFrame() { this.prev = this.eff; this.held = 0; this._pbPrev = 0; }
+  pack() { return [this.bits, +this.mx.toFixed(2), +this.mz.toFixed(2), this.pc]; }
 }
 return { BIT, InputState };
 })();
@@ -5747,6 +5762,8 @@ class Fighter {
   canPredict(slotKey) {
     if (this.busy || this.benched || this.fallT > 0 || this.falling) return false;
     if (this.punch && this.punch.t < this.punch.dur * (this.dempsey.active ? 0.42 : 0.55)) return false;
+    const pp = this._predPunch;
+    if (pp && pp.t < pp.dur * (this.dempsey.active ? 0.42 : 0.55)) return false;   // 아직 서버 확인 전인 예측 펀치도 같은 캔슬 창을 따른다
     if (slotKey === 'U' || slotKey === 'I') return this.cd[slotKey] <= 0;
     if (slotKey === 'L') return !!this.dempsey.maxSpeed;
     return true;
@@ -5787,9 +5804,16 @@ class Fighter {
   /** 버튼을 누른 즉시 팔 동작을 그려 준다. 판정은 호스트가 하고, 서버 포즈가 오면 예측은 버린다 */
   predictPunch(side, type = 'straight') {
     if (this.ko || this.downT > 0 || this.stagger > 0 || this.ultVictimT > 0) return;
-    const dur = (type === 'hook' ? 0.32 : type === 'special' ? 0.4 : 0.27) / this.def.speedMul;
+    const sm = this.def.speedMul * (type === 'special' ? 1 : (this.def.atkMul || 1));
+    const dur = (type === 'hook' ? 0.32 : type === 'special' ? 0.4 : 0.27) / sm;
     this._predPunch = createPunch(side, type, dur, 0.5);
     this._predAge = 0;
+    // 기본 펀치는 효과음도 즉시 낸다 (호스트가 보내는 같은 소리는 한 번 건너뛴다 — main.js onSnapshot)
+    if (type !== 'special') {
+      this.audio.swoosh(side === 'L' ? -1 : 1, 0.45 * this.def.powerMul, type === 'hook');
+      this._predSwoosh = true;
+      if (this.def.sfx === 'nyang') { this.audio.nyang(0.9 + Math.random() * 0.3); this._predNyang = true; }
+    }
   }
 
   /** 예측 포즈를 서버 포즈 위에 덮어쓴다 (서버가 실제 펀치를 보내오면 즉시 해제) */
@@ -5798,7 +5822,8 @@ class Fighter {
     const pu = this._predPunch;
     if (pu) {
       this._predAge += dt; pu.t += dt;
-      if (serverPunching || this._predAge > pu.dur * 1.3) this._predPunch = null;
+      if (serverPunching) this._predPunch = null;
+      else if (this._predAge > pu.dur * 1.3) { this._predPunch = null; this._predSwoosh = this._predNyang = false; }   // 호스트가 거부한 펀치 → 다음 소리는 건너뛰지 않는다
       else { applyPunchToPose(this.pose, pu); touched = true; }
     }
     // 가드도 즉시 반영 (서버 플래그가 아직 안 왔을 때만)
@@ -5849,7 +5874,7 @@ class Fighter {
       return false;
     }
     const I = this.dempsey.intensity;
-    const sm = this.def.speedMul;
+    const sm = this.def.speedMul * (this.def.atkMul || 1);   // atkMul: 기본 펀치 전용 공격속도 배수 (이동속도엔 영향 없음)
     const st = this.stanceStyle;
     let dur, power;
     if (type === 'hook' && this.dempsey.active && st === 'dempsey') {
@@ -5862,7 +5887,7 @@ class Fighter {
     } else if (type === 'hook') { dur = 0.32 / sm; power = 0.55 * (1 + Math.min(0.3, this.combo * 0.05)); }
     else if (type === 'flicker') { dur = 0.32 / sm; power = 0.3; }
     else { dur = 0.27 / sm; power = 0.4; }
-    if (durOverride) dur = durOverride / sm;
+    if (durOverride) dur = durOverride / this.def.speedMul;   // 고유기·연출용 지속시간은 공격속도 배수를 타지 않는다
     if (powerOverride) power = powerOverride;
     power *= this.def.powerMul;
     if (this.boostT > 0) power *= 1.3;   // 로프 반동 부스트
@@ -7722,25 +7747,29 @@ class Input {
   constructor() {
     this.down = new Set();
     this.pressed = new Set();
+    this.onChange = null;   // 키 상태가 바뀐 즉시 (rAF 를 기다리지 않고) 호출 — 멀티 게스트가 입력을 바로 보낼 때 씀
     const typing = (e) => e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA');
     window.addEventListener('keydown', (e) => {
       if (typing(e)) return;
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
-      if (!e.repeat && !this.down.has(e.code)) this.pressed.add(e.code);
+      if (e.repeat) return;
+      if (!this.down.has(e.code)) this.pressed.add(e.code);
       this.down.add(e.code);
+      this.notify();
     });
-    window.addEventListener('keyup', (e) => { if (typing(e)) { this.down.clear(); return; } this.down.delete(e.code); });
+    window.addEventListener('keyup', (e) => { if (typing(e)) { this.down.clear(); return; } this.down.delete(e.code); this.notify(); });
     window.addEventListener('blur', () => this.down.clear());
     // 마우스 보조 입력: 좌클릭 = J, 가운데 = U. 키보드 포커스 문제 시 우회용
     const canvas = document.getElementById('gl');
     const mouseMap = { 0: 'KeyJ', 1: 'KeyU' };
-    const press = (code) => { if (!this.down.has(code)) this.pressed.add(code); this.down.add(code); };
+    const press = (code) => { if (!this.down.has(code)) this.pressed.add(code); this.down.add(code); this.notify(); };
     if (canvas) {
       canvas.addEventListener('contextmenu', (e) => e.preventDefault());
       canvas.addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') return; const c = mouseMap[e.button]; if (c) { press(c); e.preventDefault(); } });
-      window.addEventListener('pointerup', (e) => { const c = mouseMap[e.button]; if (c) this.down.delete(c); });
+      window.addEventListener('pointerup', (e) => { const c = mouseMap[e.button]; if (c) { this.down.delete(c); this.notify(); } });
     }
   }
+  notify() { if (this.onChange) this.onChange(); }
   isDown(code) { return this.down.has(code); }
   justPressed(code) { return this.pressed.has(code); }
   endFrame() { this.pressed.clear(); }
@@ -8405,17 +8434,17 @@ class TouchControls {
       }, 50);
       return;
     }
-    const i = this.input; if (!i.down.has(code)) i.pressed.add(code); i.down.add(code);
+    const i = this.input; if (!i.down.has(code)) i.pressed.add(code); i.down.add(code); i.notify();
   }
   _punchOnce() {
     if (this.punchHeld) this.input.down.delete(this.punchHeld);
     this.punchSide = this.punchSide === 'KeyJ' ? 'KeyK' : 'KeyJ';
     this.punchHeld = this.punchSide;
-    const i = this.input; i.pressed.add(this.punchSide); i.down.add(this.punchSide);
+    const i = this.input; i.pressed.add(this.punchSide); i.down.add(this.punchSide); i.notify();
   }
   release(code) {
     if (code === 'PUNCH') { clearInterval(this.punchTimer); this.punchTimer = null; code = this.punchHeld; this.punchHeld = null; if (!code) return; }
-    this.input.down.delete(code);
+    this.input.down.delete(code); this.input.notify();
   }
   releaseAll() { for (const [c] of BUTTONS) this.release(c); this.release('KeyJ'); this.release('KeyK'); this.move.x = this.move.y = 0; this.stickId = null; this.stick.classList.remove('on'); }
 
@@ -8754,7 +8783,7 @@ const _camR = new THREE.Vector3();
 const _sep = new THREE.Vector3();
 const SPAWNS = [[0, 2.4], [0, -2.4], [2.4, 0], [-2.4, 0]];
 const AUDIO_FWD = ['whoosh', 'swoosh', 'impact', 'bassHit', 'riser', 'maxSpeedHit', 'stagger', 'ko', 'block', 'chargeUp', 'finisherWind', 'finisherHit', 'counter', 'cheer', 'engine', 'clang', 'nyang', 'shutter'];
-const SNAP_HZ = 30;
+const SNAP_HZ = 45;   // 호스트→게스트 스냅샷 주기. 재생 지연은 (주기 + 지터) 이므로 올릴수록 게스트 응답성이 좋아진다 (대역폭 ∝ 주기)
 // 만화 색종이 스파크 팔레트 (배열이면 입자마다 랜덤)
 const HIT_CONFETTI = [new THREE.Color(1, 0.92, 0.25), new THREE.Color(1, 0.55, 0.15), new THREE.Color(1, 1, 1), new THREE.Color(1, 0.3, 0.35)];
 const RAINBOW = [new THREE.Color(1, 0.25, 0.3), new THREE.Color(1, 0.6, 0.1), new THREE.Color(1, 0.95, 0.2), new THREE.Color(0.3, 1, 0.5), new THREE.Color(0.25, 0.75, 1), new THREE.Color(0.75, 0.35, 1), new THREE.Color(1, 1, 1)];
@@ -9402,7 +9431,7 @@ class Game {
         const q = m.q | 0, last = this.inSeq[slot] | 0;
         if (q && q <= last && last - q < 100000) return;
         this.inSeq[slot] = q;
-        this.netInputs[slot].setNet(m.d[0], m.d[1], m.d[2]);
+        this.netInputs[slot].setNet(m.d[0], m.d[1], m.d[2], m.d[3]);
       }
       else if (m.t === 'chat' && typeof m.text === 'string') { const text = m.text.slice(0, 120); this.addChat(slot, text); this.net.broadcast({ t: 'chat', from: slot, text }); }
       else if (m.t === 'skip') { this.voteSkip(slot); }
@@ -10120,6 +10149,7 @@ class Game {
     } else if (this.mode === 'client') {
       this.sendInput();
       this.predictInput(input);
+      this.input.onChange = this._flushInput || (this._flushInput = () => this.flushInput());
       this.pingT = (this.pingT || 0) + rawDt;
       if (this.pingT > 1) { this.pingT = 0; this.net.send({ t: 'ping', t0: performance.now() }); }
       this.clientInterpolate(rawDt);
@@ -10306,20 +10336,23 @@ class Game {
     if (m.q) { if (m.q <= this.snapSeq && this.snapSeq - m.q < 100000) return; this.snapSeq = m.q; }
     else if (this.snaps.length && (m.ts || 0) * 1000 <= this.snaps[this.snaps.length - 1].ts) return;
     const now = performance.now();
-    // 도착 간격의 흔들림(지터)을 추적해 재생 지연을 필요한 만큼만 잡는다
+    const ts = (m.ts || 0) * 1000;
+    // 네트워크 지터 = (도착 간격 − 호스트 송신 간격). 호스트가 프레임 사정으로 불규칙하게 보내는 건 지터가 아니다
     if (this._lastRecv) {
-      const gap = now - this._lastRecv;
-      const nominal = 1000 / SNAP_HZ;
-      const dev = Math.abs(gap - nominal);
+      const dev = Math.abs((now - this._lastRecv) - (ts - this._lastRecvTs));
       this.jitter = this.jitter === undefined ? dev : this.jitter * 0.88 + dev * 0.12;
     }
-    this._lastRecv = now;
-    this.snaps.push({ recv: now, ts: (m.ts || 0) * 1000, d: m });
+    this._lastRecv = now; this._lastRecvTs = ts;
+    this.snaps.push({ recv: now, ts, d: m });
     if (this.snaps.length > 10) this.snaps.shift();
     for (const e of m.ev) {
       if (e.t === 'hit') this.hitFx(e);
       else if (e.t === 'a') {
         if (e.n === 'whoosh' && e.s !== this.localSlot) continue;
+        // 내 기본 펀치 소리는 예측 시점에 이미 냈다 → 호스트가 보낸 같은 소리는 한 번 건너뛴다
+        const lf = e.s === this.localSlot ? this.localFighter : null;
+        if (lf && e.n === 'swoosh' && lf._predSwoosh) { lf._predSwoosh = false; continue; }   // (기합도 예측 시 오디오 프록시가 이미 냈다)
+        if (lf && e.n === 'nyang' && lf._predNyang) { lf._predNyang = false; continue; }
         this.audio[e.n] && this.audio[e.n](...e.a);
         if (e.n === 'swoosh') { const f = this.fighters[e.s]; this.voice.grunt(e.s, f ? f.defKey : 'ippo', e.a[1] || 0.5); }
       }
@@ -10388,10 +10421,9 @@ class Game {
     const latest = this.snaps[n - 1];
     if (n === 1) { const s0 = latest.d.f; this.fighters.forEach((f, i) => f.applySnapshot(s0[i], s0[i], 1)); return; }
 
-    // 재생 지연: 스냅샷 간격 2개 + RTT 절반 (최소 70ms, 최대 220ms)
+    // 재생 지연: 스냅샷 간격 1개 + 지터 여유. RTT 는 지터가 아니므로 더하지 않는다 (회선이 깨끗하면 ~30ms)
     const interval = 1000 / SNAP_HZ;
-    // 회선이 깨끗하면 지연을 최소로 (= 게스트가 더 빨리 본다). 지터가 크면 그만큼만 더 버퍼링
-    const delay = Math.min(200, Math.max(38, interval * 1.15 + (this.jitter || 6) * 2.2 + (this.rtt || 40) * 0.25));
+    const delay = Math.min(160, Math.max(24, interval + 4 + (this.jitter || 4) * 2));
     if (this.playT === undefined || this.playT === null) this.playT = latest.ts - delay;
 
     // 버퍼 두께에 따라 재생 속도 미세 조정 (±12%) — 튀지 않게 천천히 따라붙는다
@@ -10425,10 +10457,20 @@ class Game {
     const d = this.localInput.pack();
     const nowMs = performance.now();
     const last = this._lastSent;
-    const changed = !last || last[0] !== d[0] || last[1] !== d[1] || last[2] !== d[2];
+    const changed = !last || last[0] !== d[0] || last[1] !== d[1] || last[2] !== d[2] || last[3] !== d[3];
     if (!changed && nowMs - this._lastSentT < 50) return;
     this._lastSent = d; this._lastSentT = nowMs;
     this.net.send({ t: 'in', q: ++this.outSeq, d });
+  }
+
+  /**
+   * 키 이벤트가 온 그 순간 입력을 보낸다 (다음 rAF 프레임까지 평균 8ms, 저사양 폰에선 30ms+ 를 기다리지 않는다).
+   * 이동 벡터는 마지막 프레임 것을 그대로 쓴다. 같은 프레임의 update 는 바뀐 게 없으면 다시 보내지 않는다.
+   */
+  flushInput() {
+    if (this.mode !== 'client' || this.phase !== 'fight' || !this.started || this.over) return;
+    this.localInput.fromInput(this.input, this.move);
+    this.sendInput();
   }
 
   /** 버튼 입력을 받은 그 프레임에 내 캐릭터 동작을 먼저 그려 준다 (호스트 확인 전) */

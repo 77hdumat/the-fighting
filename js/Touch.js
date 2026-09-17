@@ -55,17 +55,17 @@ export class TouchControls {
       }, 50);
       return;
     }
-    const i = this.input; if (!i.down.has(code)) i.pressed.add(code); i.down.add(code);
+    const i = this.input; if (!i.down.has(code)) i.pressed.add(code); i.down.add(code); i.notify();
   }
   _punchOnce() {
     if (this.punchHeld) this.input.down.delete(this.punchHeld);
     this.punchSide = this.punchSide === 'KeyJ' ? 'KeyK' : 'KeyJ';
     this.punchHeld = this.punchSide;
-    const i = this.input; i.pressed.add(this.punchSide); i.down.add(this.punchSide);
+    const i = this.input; i.pressed.add(this.punchSide); i.down.add(this.punchSide); i.notify();
   }
   release(code) {
     if (code === 'PUNCH') { clearInterval(this.punchTimer); this.punchTimer = null; code = this.punchHeld; this.punchHeld = null; if (!code) return; }
-    this.input.down.delete(code);
+    this.input.down.delete(code); this.input.notify();
   }
   releaseAll() { for (const [c] of BUTTONS) this.release(c); this.release('KeyJ'); this.release('KeyK'); this.move.x = this.move.y = 0; this.stickId = null; this.stick.classList.remove('on'); }
 

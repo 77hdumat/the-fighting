@@ -1,6 +1,9 @@
 // InputState.js — 로컬 키보드 / 네트워크 / AI 가 공통으로 채우는 입력 상태
 // 비트: 0 W, 1 A, 2 S, 3 D, 4 Space, 5 J, 6 K, 7 L, 8 Shift, 9 U, 10 I
 export const BIT = { KeyW: 1, KeyA: 2, KeyS: 4, KeyD: 8, Space: 16, KeyJ: 32, KeyK: 64, KeyL: 128, ShiftLeft: 256, ShiftRight: 256, KeyU: 512, KeyI: 1024 };
+// 네트워크 '눌림 횟수' 카운터: 동작 키마다 4비트(0~15 순환). 비순서 채널에서 '눌림' 패킷이 '뗌' 패킷보다 늦게 와 버려지더라도
+// 카운터가 바뀐 것으로 호스트가 그 탭을 알아챈다 (게스트 J/K 가 가끔 씹히던 원인)
+const PC_KEYS = ['Space', 'KeyJ', 'KeyK', 'KeyL', 'KeyU', 'KeyI'];
 
 export class InputState {
   constructor() {
@@ -10,12 +13,18 @@ export class InputState {
     this.mz = 0;
     this.held = 0;     // 네트워크: 프레임 사이에 눌렸다 풀린 비트 (setNet 참고)
     this.lastNet = 0;
+    this.pc = 0;       // 눌림 횟수 카운터 (PC_KEYS 순서로 4비트씩)
+    this.lastPc = 0;
+    this._pbPrev = 0;  // 이번 프레임에 이미 카운터를 올린 justPressed 비트 (한 프레임에 fromInput 이 두 번 불려도 중복 증가 없음)
   }
   /** 로컬 키보드(Input) 로부터 채움. move 는 월드 벡터 */
   fromInput(input, move) {
-    let b = 0;
+    let b = 0, pb = 0;
     // 한 프레임 안에 눌렀다 뗀 짧은 탭도 놓치지 않도록 justPressed 도 포함
-    for (const k in BIT) if (input.isDown(k) || input.justPressed(k)) b |= BIT[k];
+    for (const k in BIT) { if (input.isDown(k)) b |= BIT[k]; if (input.justPressed(k)) { b |= BIT[k]; pb |= BIT[k]; } }
+    const fresh = pb & ~this._pbPrev;
+    if (fresh) PC_KEYS.forEach((k, i) => { if (fresh & BIT[k]) { const sh = i * 4; this.pc = (this.pc & ~(15 << sh)) | ((((this.pc >> sh) & 15) + 1) & 15) << sh; } });
+    this._pbPrev = pb;
     this.bits = b;
     this.mx = move.x; this.mz = move.z;
   }
@@ -26,14 +35,20 @@ export class InputState {
    * 사라지곤 했다 (게스트 J 입력이 가끔 씹히는 원인). 호스트 프레임 사이에 새로 눌린 비트는 `held` 에 모아 두고
    * 다음 시뮬 프레임에서 반드시 한 번은 '눌림' 으로 보이게 한다.
    */
-  setNet(bits, mx, mz) {
+  setNet(bits, mx, mz, pc) {
     this.held |= bits & ~this.lastNet;
     this.lastNet = bits;
+    if (pc !== undefined && pc !== this.lastPc) {
+      // 카운터가 바뀐 키는 (그 사이 패킷이 뒤바뀌거나 버려졌어도) 반드시 한 번 '눌림' 으로 보이게 한다
+      // prev 비트도 지워 직전 프레임까지 눌려 있던 키의 재입력(뗌 패킷이 아직 안 온 경우)도 justPressed 로 잡힌다
+      PC_KEYS.forEach((k, i) => { if (((pc >> (i * 4)) & 15) !== ((this.lastPc >> (i * 4)) & 15)) { this.held |= BIT[k]; this.prev &= ~BIT[k]; } });
+      this.lastPc = pc;
+    }
     this.bits = bits; this.mx = mx; this.mz = mz;
   }
   get eff() { return this.bits | (this.held || 0); }
   isDown(code) { const m = BIT[code]; return !!m && (this.eff & m) !== 0; }
   justPressed(code) { const m = BIT[code]; return !!m && (this.eff & m) !== 0 && (this.prev & m) === 0; }
-  endFrame() { this.prev = this.eff; this.held = 0; }
-  pack() { return [this.bits, +this.mx.toFixed(2), +this.mz.toFixed(2)]; }
+  endFrame() { this.prev = this.eff; this.held = 0; this._pbPrev = 0; }
+  pack() { return [this.bits, +this.mx.toFixed(2), +this.mz.toFixed(2), this.pc]; }
 }

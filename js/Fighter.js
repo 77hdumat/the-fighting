@@ -166,6 +166,8 @@ export class Fighter {
   canPredict(slotKey) {
     if (this.busy || this.benched || this.fallT > 0 || this.falling) return false;
     if (this.punch && this.punch.t < this.punch.dur * (this.dempsey.active ? 0.42 : 0.55)) return false;
+    const pp = this._predPunch;
+    if (pp && pp.t < pp.dur * (this.dempsey.active ? 0.42 : 0.55)) return false;   // 아직 서버 확인 전인 예측 펀치도 같은 캔슬 창을 따른다
     if (slotKey === 'U' || slotKey === 'I') return this.cd[slotKey] <= 0;
     if (slotKey === 'L') return !!this.dempsey.maxSpeed;
     return true;
@@ -206,9 +208,16 @@ export class Fighter {
   /** 버튼을 누른 즉시 팔 동작을 그려 준다. 판정은 호스트가 하고, 서버 포즈가 오면 예측은 버린다 */
   predictPunch(side, type = 'straight') {
     if (this.ko || this.downT > 0 || this.stagger > 0 || this.ultVictimT > 0) return;
-    const dur = (type === 'hook' ? 0.32 : type === 'special' ? 0.4 : 0.27) / this.def.speedMul;
+    const sm = this.def.speedMul * (type === 'special' ? 1 : (this.def.atkMul || 1));
+    const dur = (type === 'hook' ? 0.32 : type === 'special' ? 0.4 : 0.27) / sm;
     this._predPunch = createPunch(side, type, dur, 0.5);
     this._predAge = 0;
+    // 기본 펀치는 효과음도 즉시 낸다 (호스트가 보내는 같은 소리는 한 번 건너뛴다 — main.js onSnapshot)
+    if (type !== 'special') {
+      this.audio.swoosh(side === 'L' ? -1 : 1, 0.45 * this.def.powerMul, type === 'hook');
+      this._predSwoosh = true;
+      if (this.def.sfx === 'nyang') { this.audio.nyang(0.9 + Math.random() * 0.3); this._predNyang = true; }
+    }
   }
 
   /** 예측 포즈를 서버 포즈 위에 덮어쓴다 (서버가 실제 펀치를 보내오면 즉시 해제) */
@@ -217,7 +226,8 @@ export class Fighter {
     const pu = this._predPunch;
     if (pu) {
       this._predAge += dt; pu.t += dt;
-      if (serverPunching || this._predAge > pu.dur * 1.3) this._predPunch = null;
+      if (serverPunching) this._predPunch = null;
+      else if (this._predAge > pu.dur * 1.3) { this._predPunch = null; this._predSwoosh = this._predNyang = false; }   // 호스트가 거부한 펀치 → 다음 소리는 건너뛰지 않는다
       else { applyPunchToPose(this.pose, pu); touched = true; }
     }
     // 가드도 즉시 반영 (서버 플래그가 아직 안 왔을 때만)
@@ -268,7 +278,7 @@ export class Fighter {
       return false;
     }
     const I = this.dempsey.intensity;
-    const sm = this.def.speedMul;
+    const sm = this.def.speedMul * (this.def.atkMul || 1);   // atkMul: 기본 펀치 전용 공격속도 배수 (이동속도엔 영향 없음)
     const st = this.stanceStyle;
     let dur, power;
     if (type === 'hook' && this.dempsey.active && st === 'dempsey') {
@@ -281,7 +291,7 @@ export class Fighter {
     } else if (type === 'hook') { dur = 0.32 / sm; power = 0.55 * (1 + Math.min(0.3, this.combo * 0.05)); }
     else if (type === 'flicker') { dur = 0.32 / sm; power = 0.3; }
     else { dur = 0.27 / sm; power = 0.4; }
-    if (durOverride) dur = durOverride / sm;
+    if (durOverride) dur = durOverride / this.def.speedMul;   // 고유기·연출용 지속시간은 공격속도 배수를 타지 않는다
     if (powerOverride) power = powerOverride;
     power *= this.def.powerMul;
     if (this.boostT > 0) power *= 1.3;   // 로프 반동 부스트
