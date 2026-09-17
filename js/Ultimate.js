@@ -327,15 +327,22 @@ export class UltimateFx {
     const hm = it.hammer;
     // 망치: 손 위치(가슴 앞)에서 뒤로 젖혔다가 상대 머리로 내려친다
     const pop = Math.min(1, u / 0.25);
-    hm.scale.setScalar(Math.max(0.001, 1.0 * (1 - Math.pow(1 - pop, 3))));
     let swing;   // 0 = 뒤로 치켜듦, 1 = 상대 머리에 닿음
     if (u < HIT0) swing = 0.15 * (1 - u / HIT0);
     else if (u < HIT0 + STEP * N) { const ph = ((u - HIT0) % STEP) / STEP; swing = ph < 0.45 ? 1 - ph / 0.45 : (ph - 0.45) / 0.55; swing = swing * swing; }
     else swing = 0;
-    const dist = Math.min(1.1, att.pos.distanceTo(tp));
-    hm.position.copy(att.pos).addScaledVector(aim, 0.28).add(new THREE.Vector3(0, 1.32, 0));
+    // 피벗(손) → 상대 머리 벡터로 '내려찍었을 때' 각도와 필요한 망치 길이를 구한다 → 머리가 정확히 뚝배기에 떨어진다
+    const pivot = att.pos.clone().addScaledVector(aim, 0.28).add(new THREE.Vector3(0, 1.32, 0));
+    const dHead = new THREE.Vector3(tp.x, 1.5, tp.z).sub(pivot);
+    const fwdDist = Math.max(0.3, dHead.dot(aim)), upDist = dHead.y;
+    const bottomAngle = Math.atan2(fwdDist, upDist);                 // 수직에서 상대 쪽으로 기운 각
+    const HAMMER_LEN = 1.66;                                          // 자루 1.3 + 머리 반지름
+    const need = Math.hypot(fwdDist, upDist) / HAMMER_LEN;
+    const sc = Math.max(0.62, Math.min(1.0, need + 0.08));            // 멀면 크게, 가까우면 조금 작게 (그래도 초대형)
+    hm.scale.setScalar(Math.max(0.001, sc * (1 - Math.pow(1 - pop, 3))));
+    hm.position.copy(pivot);
     hm.rotation.set(0, yaw, 0);
-    hm.rotateX(-1.1 + (1.1 + 0.55 + 0.25 * (1 - dist / 1.1)) * swing);   // 뒤로 -63° → 앞으로 +32°(+가까울수록 더)
+    hm.rotateX(-1.1 + (1.1 + bottomAngle + 0.12) * swing);            // 뒤로 -63° → 상대 머리까지 (살짝 더 눌러 찌그러뜨리는 느낌)
     // 타격 카운트: 내려찍기가 바닥에 닿는 순간(ph≥0.97)마다 한 번. 프레임을 건너뛰어도 빠진 횟수는 따라잡는다
     if (u >= HIT0 && it.hits < N) {
       const idx = Math.floor((u - HIT0) / STEP), ph = ((u - HIT0) % STEP) / STEP;
@@ -369,7 +376,7 @@ export class UltimateFx {
       st.m.rotation.x += dt * 9; st.m.rotation.y += dt * 7;
       if (st.t > 0.45) { st.t = -1; st.m.visible = false; }
     }
-    if (u > it.dur) hm.scale.setScalar(Math.max(0.001, 1.0 * Math.max(0, 1 - (u - it.dur) / 0.4)));
+    if (u > it.dur) hm.scale.setScalar(Math.max(0.001, sc * Math.max(0, 1 - (u - it.dur) / 0.4)));
   }
 
   _buildBike(item, attacker) {
