@@ -136,7 +136,7 @@ export class UltimateFx {
     this.active = [];
     // 예열: 필살기 소품이 쓰는 재질(그림자 포함)을 첫 프레임부터 그려 두어 셰이더가 미리 컴파일되게 한다
     const warm = new THREE.Group();
-    for (const c of [0x15151c, 0xfff4cf, 0xff4f8b, 0xe0b064, 0xffffff, 0x6b4a32, 0x8fd6f2, 0xfff6d0, 0xff2d2d, 0xd3391c, 0x1f6fd0, 0x18181e, 0xffc400, 0xf4f6f8]) {
+    for (const c of [0x15151c, 0xfff4cf, 0xff4f8b, 0xe0b064, 0xffffff, 0x6b4a32, 0x8fd6f2, 0xfff6d0, 0xff2d2d, 0xd3391c, 0x1f6fd0, 0x18181e, 0xffc400, 0xf4f6f8, 0x5a3a22, 0xf3f1ec, 0x3c2b1e]) {
       const m = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.01, 0.01), TOON(c));
       m.castShadow = true; warm.add(m);
     }
@@ -157,7 +157,7 @@ export class UltimateFx {
     if (!target) return;
     const root = new THREE.Group();
     this.scene.add(root);
-    const DUR = { reels: 3.4, snackRain: 3.6, cafeRush: 3.2, coldCut: 3.4, forge: 3.3 };
+    const DUR = { reels: 3.4, snackRain: 3.6, cafeRush: 3.2, coldCut: 3.4, forge: 3.3, coffeeBarrage: 3.6 };
     const item = { kind, root, t: 0, dur: DUR[kind] || 3.2, parts: [], attacker, target, tp: target.pos.clone() };
     if (kind === 'reels') this._buildReels(item, attacker);
     else if (kind === 'snackRain') this._buildSnackRain(item);
@@ -166,6 +166,7 @@ export class UltimateFx {
     else if (kind === 'barbell') this._buildRack(item);
     else if (kind === 'bike') this._buildBike(item, attacker);
     else if (kind === 'forge') this._buildForge(item, attacker);
+    else if (kind === 'coffeeBarrage') this._buildCoffee(item, attacker);
     this.active.push(item);
   }
 
@@ -244,6 +245,108 @@ export class UltimateFx {
       item.steam.push({ m: p2, t: i * 0.25 });
     }
     cafe.scale.setScalar(0.01);
+  }
+
+  _buildCoffee(item, attacker) {
+    // 정주원: 옆에 카페가 솟아나고, 거기서 꺼낸 커피 50잔을 상대에게 우다다 던진다
+    const g = item.root;
+    const aim = attacker ? new THREE.Vector3().subVectors(item.tp, attacker.pos).setY(0).normalize() : new THREE.Vector3(0, 0, 1);
+    const side = new THREE.Vector3(aim.z, 0, -aim.x);   // 촬영자 왼쪽
+    const spot = (attacker ? attacker.pos.clone() : item.tp.clone()).addScaledVector(side, 1.7).addScaledVector(aim, -0.3);
+    spot.x = Math.max(-3.4, Math.min(3.4, spot.x)); spot.z = Math.max(-3.4, Math.min(3.4, spot.z));
+    const cafe = new THREE.Group(); cafe.position.copy(spot); g.add(cafe); item.cafe = cafe;
+    cafe.lookAt(attacker ? attacker.pos.x : 0, 0, attacker ? attacker.pos.z : 0);
+    outlined(new THREE.BoxGeometry(1.5, 0.75, 0.6), 0x6b4a32, cafe, new THREE.Vector3(0, 0.38, 0));       // 카운터
+    outlined(new THREE.BoxGeometry(1.6, 0.08, 0.7), 0x3c2b1e, cafe, new THREE.Vector3(0, 0.79, 0));
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.36), new THREE.MeshBasicMaterial({ map: bubbleTexture('CAFE', '#f6efe4', '#4b2e17'), transparent: true }));
+    sign.position.set(0, 1.5, 0.05); cafe.add(sign);
+    outlined(new THREE.CylinderGeometry(0.04, 0.04, 1.9, 8), 0x8a8a94, cafe, new THREE.Vector3(0.75, 0.95, -0.1));
+    outlined(new THREE.ConeGeometry(1.1, 0.42, 12), 0xc0392b, cafe, new THREE.Vector3(0.75, 2.0, -0.1));
+    // 카운터 위 커피 더미 (던질수록 줄어든다)
+    item.stack = [];
+    for (let i = 0; i < 12; i++) {
+      const c = outlined(new THREE.CylinderGeometry(0.09, 0.07, 0.2, 10), 0xf3f1ec, cafe, new THREE.Vector3(-0.6 + (i % 6) * 0.24, 0.93 + Math.floor(i / 6) * 0.22, 0.05 + Math.floor(i / 6) * 0.05));
+      outlined(new THREE.CylinderGeometry(0.095, 0.095, 0.03, 10), 0x5a3a22, c, new THREE.Vector3(0, 0.11, 0));
+      item.stack.push(c);
+    }
+    cafe.scale.setScalar(0.01);
+    // 날아가는 컵 50개 + 튀는 커피 방울 풀
+    item.cups = [];
+    for (let i = 0; i < 50; i++) {
+      const c = new THREE.Group();
+      outlined(new THREE.CylinderGeometry(0.09, 0.07, 0.2, 10), 0xf3f1ec, c);
+      outlined(new THREE.CylinderGeometry(0.095, 0.095, 0.03, 10), 0x5a3a22, c, new THREE.Vector3(0, 0.11, 0));
+      c.visible = false; g.add(c);
+      item.cups.push({ m: c, at: 0.55 + i * 0.05, t: -1, spin: (Math.random() - 0.5) * 16, side: (Math.random() - 0.5) * 0.5, hi: (Math.random() - 0.4) * 0.5 });
+    }
+    item.drops = [];
+    for (let i = 0; i < 36; i++) {
+      const d = outlined(new THREE.SphereGeometry(0.035, 6, 5), 0x5a3a22, g);
+      d.castShadow = false; d.visible = false;
+      item.drops.push({ m: d, t: -1, v: new THREE.Vector3() });
+    }
+    item.thrown = 0; item.hits = 0;
+  }
+
+  _updCoffee(it, dt, tp) {
+    const u = it.t, att = it.attacker; if (!att) return;
+    const aim = new THREE.Vector3().subVectors(tp, att.pos).setY(0); if (aim.lengthSq() < 1e-4) aim.set(0, 0, 1); aim.normalize();
+    const sideV = new THREE.Vector3(aim.z, 0, -aim.x);
+    // 카페 등장/퇴장
+    if (it.cafe) {
+      const k = Math.min(1, u / 0.35);
+      it.cafe.scale.setScalar(Math.max(0.001, 0.01 + 0.99 * (1 - Math.pow(1 - k, 3))));
+      if (u > it.dur - 0.3) it.cafe.scale.setScalar(Math.max(0.001, Math.max(0, 1 - (u - it.dur + 0.3) / 0.5)));
+    }
+    // 컵: 던지는 손(양손 번갈아)에서 출발 → 0.3초 포물선 → 상대 가슴/머리 착탄 → 튕겨 떨어지며 사라짐
+    for (const c of it.cups) {
+      if (u < c.at) continue;
+      const m = c.m;
+      if (c.t < 0) {
+        c.t = 0; m.visible = true; it.thrown++;
+        const right = it.thrown % 2 === 1;
+        c.from = att.pos.clone().addScaledVector(aim, 0.35).addScaledVector(sideV, right ? -0.28 : 0.28).add(new THREE.Vector3(0, 1.35, 0));
+        c.to = new THREE.Vector3(tp.x, 1.1 + c.hi, tp.z).addScaledVector(sideV, c.side * 0.4);
+        m.position.copy(c.from);
+        // 카운터 위 더미가 줄어든다 (12개를 50번에 걸쳐)
+        const left = Math.max(0, 12 - Math.floor(it.thrown / 4.2));
+        it.stack.forEach((s2, i) => { s2.visible = i < left; });
+        if (!it._lastWhoosh || u - it._lastWhoosh > 0.12) { it._lastWhoosh = u; this.audio.whoosh(right ? 1 : -1, 1.3, 0.25); }
+      }
+      c.t += dt;
+      if (!c.hit) {
+        const k = Math.min(1, c.t / 0.3);
+        m.position.lerpVectors(c.from, c.to, k); m.position.y += Math.sin(k * Math.PI) * 0.35;
+        m.rotation.x += dt * c.spin; m.rotation.z += dt * c.spin * 0.6;
+        if (k >= 1) {
+          c.hit = true; it.hits++; c.life = 0;
+          c.vel = new THREE.Vector3(aim.x * (1.5 + Math.random() * 2) + (Math.random() - 0.5) * 3, 1.5 + Math.random() * 2.5, aim.z * (1.5 + Math.random() * 2) + (Math.random() - 0.5) * 3);
+          // 커피 튀김
+          let n = 0;
+          for (const d of it.drops) { if (d.t >= 0) continue; if (n++ >= 5) break; d.t = 0; d.m.visible = true; d.m.position.copy(m.position); const a = Math.random() * Math.PI * 2; d.v.set(Math.cos(a) * (1 + Math.random() * 2) + aim.x * 1.5, 1.5 + Math.random() * 2.5, Math.sin(a) * (1 + Math.random() * 2) + aim.z * 1.5); }
+          if (!it._lastHit || u - it._lastHit > 0.09) {
+            it._lastHit = u; this.audio.impact(0.45, 'body');
+            if (this.fx) { this.fx.flash = Math.max(this.fx.flash || 0, 0.1); }
+          }
+          if (this.fx && this.cam && (it.hits % 10 === 0 || it.hits === 1)) {
+            const v = new THREE.Vector3(tp.x, 1.6, tp.z).project(this.cam);
+            this.fx.addPopup((v.x * 0.5 + 0.5) * this.fx.w + (Math.random() - 0.5) * 140, (1 - (v.y * 0.5 + 0.5)) * this.fx.h - 30 - Math.random() * 50, it.hits >= 50 ? '커피 50잔!!!' : it.hits === 1 ? '촤악!' : `${it.hits}잔째!`, it.hits >= 50 ? 'groggy' : 'dodge');
+          }
+          if (it.hits >= 50) { this.audio.bassHit(); if (this.fx) this.fx.flash = Math.max(this.fx.flash || 0, 0.5); }
+        }
+      } else {
+        c.vel.y -= 16 * dt; m.position.addScaledVector(c.vel, dt);
+        if (m.position.y < 0.1) { m.position.y = 0.1; c.vel.y *= -0.3; c.vel.x *= 0.6; c.vel.z *= 0.6; }
+        m.rotation.x += dt * c.spin * 0.5;
+        c.life += dt;
+        if (c.life > 0.6) { const f = Math.max(0, 1 - (c.life - 0.6) / 0.3); m.scale.setScalar(Math.max(0.001, f)); if (f <= 0) m.visible = false; }
+      }
+    }
+    for (const d of it.drops) {
+      if (d.t < 0) continue;
+      d.t += dt; d.v.y -= 12 * dt; d.m.position.addScaledVector(d.v, dt);
+      if (d.t > 0.4 || d.m.position.y < 0.02) { d.t = -1; d.m.visible = false; }
+    }
   }
 
   _buildColdCut(item, attacker) {
@@ -463,6 +566,7 @@ export class UltimateFx {
       else if (it.kind === 'barbell') this._updRack(it, dt, tp);
       else if (it.kind === 'bike') this._updBike(it, dt, tp);
       else if (it.kind === 'forge') this._updForge(it, dt, tp);
+      else if (it.kind === 'coffeeBarrage') this._updCoffee(it, dt, tp);
       if (it.t > it.dur + 1.4) {
         this._release(it);
         this.active.splice(i, 1);

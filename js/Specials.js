@@ -168,7 +168,7 @@ export const KITS = {
   jjeonghyo: { stance: 'smash',   finisher: 'barbell', U: 'dumbbellPress', I: 'deadlift',  cdU: 6.5 },
   ppyeo:     { stance: 'counter', finisher: 'forge',    U: 'helmetBash',    I: 'teaThrow',  cdU: 4.5 },
   ohsh:      { stance: 'counter', finisher: 'snackRain', U: 'suddenSmack',  I: 'breadThrow', cdU: 4.5 },
-  jungjuwon: { stance: 'smash',   finisher: 'cafeRush',  U: 'onigiriThrow', I: 'bellyBump', cdU: 4.5 },
+  jungjuwon: { stance: 'smash',   finisher: 'coffeeBarrage',  U: 'onigiriThrow', I: 'bellyBump', cdU: 4.5 },
   gokomong:  { stance: 'counter', finisher: 'coldCut', U: 'babyKick',      I: 'lazyJab',   cdU: 6 },
 };
 

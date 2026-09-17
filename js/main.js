@@ -260,7 +260,7 @@ class Game {
       chaechae: { style: '히든 · 문화생활 인플루언서', st: '<b>기본</b> 냥냥펀치(초고속·경량) · <b>U</b> 냥냥 4연타 · <b>I</b> 고양이 할퀴기 · <b>L</b> <b>릴스 촬영</b>(스태프들이 둘러싸고 촬영 → 강제 유행 댄스 → 스태프 귀싸대기 5연타)<br><i>기 게이지 15% 빨리 참</i>', pw: 1, sp: 5, hp: 2 },
       jjeonghyo: { style: '히든 · 3대 500', st: '<b>기본</b> 덤벨 펀치(무겁고 느림) · <b>U</b> 덤벨 훅 · <b>I</b> 데드리프트 업(띄움) · <b>L</b> <b>바벨 내려찍기</b><br><i>기 게이지 20% 느림 · 체력 최고</i>', pw: 5, sp: 2, hp: 5 },
       ohsh: { style: '히든 · 빵 러버', st: '<b>기본</b> 빵 들고 타격(가볍고 빠름) · <b>U</b> 갑자기 때리기(기습·스턴) · <b>I</b> 빵 던지기 · <b>L</b> <b>간식 폭격</b>(소금빵·호두과자 120개 낙하)<br><i>가장 작고 약하지만 가장 빨리 기가 참</i>', pw: 1, sp: 5, hp: 1 },
-      jungjuwon: { style: '히든 · 헤드폰 먹방', st: '<b>기본</b> 묵직한 타격 · <b>U</b> 삼각김밥 던지기 · <b>I</b> 배치기(띄움) · <b>L</b> <b>카페 돌격</b>(카페 생성 후 질주, 부딪히는 전원 스턴+데미지)<br><i>체력 두 번째로 높음</i>', pw: 4, sp: 2, hp: 5 },
+      jungjuwon: { style: '히든 · 헤드폰 먹방', st: '<b>기본</b> 묵직한 타격 · <b>U</b> 삼각김밥 던지기 · <b>I</b> 배치기(띄움) · <b>L</b> <b>커피 폭격</b>(상대를 잡고 카페에서 꺼낸 커피 50잔 우다다 투척 · 가드 관통)<br><i>체력 두 번째로 높음</i>', pw: 4, sp: 2, hp: 5 },
       gokomong: { style: '히든 · ISTP 무감정', st: '<b>기본</b> 귀찮아 펀치(낭창) · <b>U</b> 집가서 아기봐야돼 킥(발 판정·띄움) · <b>I</b> 귀찮아 2연 · <b>L</b> <b>칼차단</b>(푸념을 끊고 도리도리 → 상처받아 기절)<br><i>무난한 올라운더</i>', pw: 3, sp: 3, hp: 3 },
       ppyeo: { style: '히든 · 오토바이 라이더', st: '<b>기본</b> 뼈펀치(리치 최장) · <b>U</b> 뼈 찌르기 · <b>I</b> 회전 팔꿈치 · <b>L</b> <b>뚝배기 강화</b>(망치로 머리를 +1강…+20강까지 초고속 연타)<br><i>리치·화력·속도 모두 상위. 얇은 몸에 비해 맷집도 붙었다</i>', pw: 4, sp: 4, hp: 3 },
     };
@@ -1502,7 +1502,7 @@ class Game {
           this.music.setDuck(0.3); setTimeout(() => this.music.setDuck(1), 3600);
           this.applySlow(f.slot, 0.35, 0.25);
           if (f.slot === this.localSlot || (tg && tg.slot === this.localSlot)) this.finisherWindFx();
-          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, ({ reels: '릴스 촬영 중!!', barbell: '3대 500!!', bike: '교통사고!!', forge: '뚝배기 강화!!', snackRain: '간식 폭격!!', cafeRush: '커피 마셔야 돼!!', coldCut: '칼차단!!' })[e.kind] || '필살!!', 'groggy');
+          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, ({ reels: '릴스 촬영 중!!', barbell: '3대 500!!', bike: '교통사고!!', forge: '뚝배기 강화!!', snackRain: '간식 폭격!!', cafeRush: '커피 마셔야 돼!!', coffeeBarrage: '커피 폭격!!', coldCut: '칼차단!!' })[e.kind] || '필살!!', 'groggy');
           if (this.mode === 'host') this.pendingEvents.push({ t: 'ult', s: f.slot, b: e.target, k: e.kind });
           continue;
         }
@@ -1672,12 +1672,12 @@ class Game {
         if (a) {
           this.ultFx.play(e.k, a, b);
           // 클라는 파이터 로직을 돌리지 않으므로 연출 카메라용 상태를 직접 세팅한다 (renderFrame 에서 감쇠)
-          const DUR = { reels: 3.4, snackRain: 3.6, cafeRush: 3.2, coldCut: 3.4, barbell: 3.6, bike: 3.0, forge: 3.3 };
+          const DUR = { reels: 3.4, snackRain: 3.6, cafeRush: 3.2, coldCut: 3.4, barbell: 3.6, bike: 3.0, forge: 3.3, coffeeBarrage: 3.6 };
           a.ultT = DUR[e.k] || 3.2; a.ultKind = e.k; a.ultTarget = b || a;
           this.music.setDuck(0.3); setTimeout(() => this.music.setDuck(1), 3600);
           this.applySlow(a.slot, 0.35, 0.25);
           if (a.slot === this.localSlot || (b && b.slot === this.localSlot)) this.finisherWindFx();
-          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, ({ reels: '릴스 촬영 중!!', barbell: '3대 500!!', bike: '교통사고!!', forge: '뚝배기 강화!!', snackRain: '간식 폭격!!', cafeRush: '커피 마셔야 돼!!', coldCut: '칼차단!!' })[e.k] || '필살!!', 'groggy');
+          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, ({ reels: '릴스 촬영 중!!', barbell: '3대 500!!', bike: '교통사고!!', forge: '뚝배기 강화!!', snackRain: '간식 폭격!!', cafeRush: '커피 마셔야 돼!!', coffeeBarrage: '커피 폭격!!', coldCut: '칼차단!!' })[e.k] || '필살!!', 'groggy');
         }
       }
       else if (e.t === 'ultblk') {

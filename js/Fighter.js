@@ -375,7 +375,7 @@ export class Fighter {
     const fk = this.kit.finisher;
     const F = FINISHERS[fk] || FINISHERS.finisherHook;
     const charge = d.charge;
-    const ULT = { reels: 3.4, barbell: 3.6, bike: 3.0, forge: 3.3, snackRain: 3.6, coldCut: 3.4, cafeRush: 3.2 };
+    const ULT = { reels: 3.4, barbell: 3.6, bike: 3.0, forge: 3.3, snackRain: 3.6, coldCut: 3.4, cafeRush: 3.2, coffeeBarrage: 3.6 };
     if (fk === 'cafeRush') {
       // ---- 카페 돌격: 경로상의 모두에게 스턴 + 데미지 (넘어뜨리진 않는다) ----
       this.ultT = 3.2; this.ultKind = fk; this.ultTarget = this.target;
@@ -393,8 +393,9 @@ export class Fighter {
       // ---- 연출형 필살: 상대를 붙잡아두고 스크립트대로 진행 ----
       const tg = this.target;
       if (!tg || tg.ko || tg.downT > 0) return false;
-      // 가드 중이면 연출형 필살도 막힌다 (가드는 모든 공격을 막는다는 규칙 유지)
-      if (tg.guard) {
+      // 가드 중이면 연출형 필살도 막힌다 (가드는 모든 공격을 막는다는 규칙 유지). 예외: 커피 폭격은 뜨거운 커피라 가드를 뚫는다 (데미지 절반 + 가드 파괴)
+      const guardPierce = fk === 'coffeeBarrage';
+      if (tg.guard && !guardPierce) {
         const chip = Math.max(1.5, (34 + 7 * charge) * this.def.powerMul * 0.08);
         tg.hp = Math.max(0, tg.hp - chip);
         tg.block = Math.max(tg.block, 0.5); tg.blockShock = 1; tg.blockGhost = 0.5;
@@ -413,12 +414,13 @@ export class Fighter {
       this.punch = null; this.queue.length = 0; this.armor = dur;
       tg.ultVictimT = dur; tg.ultVictimKind = fk; tg.punch = null; tg.queue.length = 0; tg.stagger = 0; tg.dempsey.stop();
       // 연출 동안 나눠서 들어간다. 채채(릴스)·오승현(간식 폭격)은 기본 파워가 낮아 필살기만은 크게 (경량 캐릭터의 한 방)
-      const ULT_MUL = { reels: 1.8, snackRain: 1.8, forge: 1.15 };
-      tg.ultDmg = (34 + 7 * charge) * this.def.powerMul * (ULT_MUL[fk] || 1);
+      const ULT_MUL = { reels: 1.8, snackRain: 1.8, forge: 1.15, coffeeBarrage: 1.3 };
+      tg.ultDmg = (34 + 7 * charge) * this.def.powerMul * (ULT_MUL[fk] || 1) * (guardPierce && tg.guard ? 0.5 : 1);
+      if (guardPierce && tg.guard) { tg.guard = false; tg.stam = 0; tg.guardBroken = Math.max(tg.guardBroken || 0, 2.0); tg.events.push({ type: 'guardBreak' }); }
       tg.ultDmgRate = tg.ultDmg / dur;
       d.consume();
       this.audio.finisherWind(0.5);
-      const line = fk === 'reels' ? '잡았다! 릴스 각이야, 찍는다!' : fk === 'barbell' ? '자, 10회 3세트 간다!' : fk === 'snackRain' ? '비, 빵이 떨어진다…!' : fk === 'coldCut' ? '…그래서 어쩌라고.' : fk === 'forge' ? '망치로 뚝배기 강화하기!' : '어… 이거 무거운데—!!';
+      const line = fk === 'reels' ? '잡았다! 릴스 각이야, 찍는다!' : fk === 'barbell' ? '자, 10회 3세트 간다!' : fk === 'snackRain' ? '비, 빵이 떨어진다…!' : fk === 'coldCut' ? '…그래서 어쩌라고.' : fk === 'forge' ? '망치로 뚝배기 강화하기!' : fk === 'coffeeBarrage' ? '커피 마셔야 돼!! 받아!!' : '어… 이거 무거운데—!!';
       this.subs.show(line, { duration: 1.6, strong: true });
       this.events.push({ type: 'ultStart', kind: fk, target: tg.slot, charge });
       return true;
@@ -1186,6 +1188,24 @@ export class Fighter {
           p.shLX += -1.35; p.shRX += -1.3; p.elL += -1.9; p.elR += -1.9;   // 두 손 모으고 구경
           p.headX += -0.25 + Math.sin(t * 3) * 0.05; p.hipsY += Math.abs(Math.sin(t * 4)) * 0.03;
         }
+      } else if (k === 'coffeeBarrage') {
+        // 카페에서 커피를 꺼내 양손 번갈아 던진다 (0.55초 후 0.05초 간격 50개)
+        const u = 3.6 - this.ultT;
+        const T0 = 0.55, STEP = 0.05, N = 50;
+        if (u < T0) {
+          const kk = u / T0;
+          p.waistY += -0.6 * kk; p.shRX += -0.4 - 0.8 * kk; p.shRY += 0.6 * kk; p.elR += -1.2; p.headY += -0.5 * kk;   // 옆의 카페로 손 뻗기
+        } else if (u < T0 + STEP * N) {
+          const i = Math.floor((u - T0) / STEP), ph = ((u - T0) % STEP) / STEP;
+          const right = i % 2 === 0, thr = Math.sin(ph * Math.PI);
+          const a = -2.4 + 1.9 * ph, b = -1.3;   // 던지는 팔: 뒤에서 앞으로 / 반대 팔: 다음 컵 집기
+          if (right) { p.shRX += a; p.elR += -0.3 - 0.5 * (1 - ph); p.shLX += b; p.elL += -1.6; p.shLY += -0.5; }
+          else { p.shLX += a; p.elL += -0.3 - 0.5 * (1 - ph); p.shRX += b; p.elR += -1.6; p.shRY += 0.5; }
+          p.waistX += 0.15 + 0.2 * thr; p.waistY += (right ? -1 : 1) * 0.25 * (1 - ph); p.headX += -0.1; p.hipsY += -0.04 * thr;
+        } else {
+          const kk = Math.min(1, (u - T0 - STEP * N) / 0.3);
+          p.shLX += -0.7 * kk; p.shRX += -0.7 * kk; p.elL += -1.8 * kk; p.elR += -1.8 * kk; p.headX += 0.2 * kk; p.waistX += 0.15 * kk;   // 만족스럽게 커피 한 모금
+        }
       } else if (k === 'cafeRush') {
         // 커피를 향해 전력 질주: 팔 흔들고 상체 앞으로, 부딪히는 사람은 스턴
         const u = 3.2 - this.ultT;
@@ -1392,6 +1412,20 @@ export class Fighter {
           p.thighLX += -1.0 * k2; p.thighRX += -0.95 * k2; p.shinL += 1.7 * k2; p.shinR += 1.6 * k2;
           p.waistZ += Math.sin(t * 4) * 0.2 * k2;
         }
+      } else if (k === 'coffeeBarrage') {
+        // 커피를 연달아 맞는다: 팔로 얼굴 가리고 움찔움찔, 점점 뒤로 밀리다 마지막엔 미끄러져 넘어질 듯
+        const u = 3.6 - this.ultVictimT;
+        const T0 = 0.55, STEP = 0.05, N = 50;
+        const n = Math.max(0, Math.min(N, Math.floor((u - T0 + 0.3) / STEP)));   // 컵 비행 0.3초 뒤 착탄
+        const ph = u < T0 + 0.3 ? 0 : ((u - T0 - 0.3) % STEP) / STEP;
+        const jolt = n > 0 && n < N ? Math.max(0, 1 - ph * 2.5) : 0;
+        const wet = n / N;
+        p.shLX += -1.7 - 0.3 * jolt; p.shRX += -1.5 - 0.3 * jolt; p.elL += -2.0; p.elR += -1.9; p.shLZ += 0.5; p.shRZ += -0.5;   // 얼굴 가리기
+        p.headX += 0.35 * wet + 0.25 * jolt; p.headY += (n % 2 ? 1 : -1) * 0.2 * jolt; p.waistX += 0.2 * wet + 0.12 * jolt; p.waistZ += (n % 2 ? 1 : -1) * 0.12 * jolt;
+        p.hipsY += -0.05 * wet - 0.03 * jolt; p.thighLX += -0.2 * wet; p.thighRX += -0.15 * wet; p.shinL += 0.3 * wet; p.shinR += 0.25 * wet;
+        if (jolt > 0.5) this.rattle = Math.max(this.rattle, 0.35);
+        if (u > 0.9 && u < T0 + STEP * N + 0.3) this.knock.addScaledVector(this.forward, -0.35 * dt);   // 조금씩 밀린다
+        if (n >= N) { const k2 = Math.min(1, (u - T0 - STEP * N - 0.3) / 0.4); p.waistX += 0.5 * k2; p.headX += 0.4 * k2; p.hipsY += -0.25 * k2; p.shinL += 0.6 * k2; p.shinR += 0.6 * k2; this.rattle = Math.max(this.rattle, 0.5); }
       } else if (k === 'forge') {
         // 망치에 맞을 때마다 조금씩 땅으로 박힌다 (+20강이면 무릎까지) → 끝나면 눈 돌아가며 주저앉음
         const u = 3.3 - this.ultVictimT;
