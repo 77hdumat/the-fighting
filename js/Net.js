@@ -3,6 +3,25 @@ const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 export function makeCode() { let s = ''; for (let i = 0; i < 5; i++) s += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]; return s; }
 const PREFIX = 'the-fighting-';
 
+/**
+ * '빠른 채널' (UDP 식): ordered:false + maxRetransmits:0 → 유실된 패킷을 재전송하지 않는다.
+ * PeerJS 기본 채널은 reliable:false 여도 SCTP 재전송이 붙어 있어서(순서만 안 지킴) 손실이 나면 재전송을 기다리느라 지연이 튄다.
+ * 스냅샷·입력처럼 "다음 것이 오면 이전 것은 필요 없는" 데이터는 이 채널로, 로비·채팅·타격 이벤트처럼 꼭 도착해야 하는 것은 기본 채널로 보낸다.
+ * 주의: PeerJS 는 peerConnection.ondatachannel 을 가로채 자기 DataConnection 의 채널로 바꿔치기하므로, 상대가 채널을 만들기 전에 핸들러를 감싸 둔다.
+ */
+const FAST_LABEL = 'fast';
+function guardDataChannel(conn, onFast) {
+  const pc = conn.peerConnection; if (!pc) return;
+  const orig = pc.ondatachannel;
+  pc.ondatachannel = (evt) => { if (evt.channel && evt.channel.label === FAST_LABEL) onFast(evt.channel); else if (orig) orig.call(pc, evt); };
+}
+function bindFast(ch, onMsg) {
+  ch.binaryType = 'arraybuffer';
+  ch.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch (err) { return; } onMsg(m); };
+  ch.onerror = () => {};
+  return ch;
+}
+
 export class Net {
   constructor() {
     this.peer = null;
@@ -85,7 +104,11 @@ export class Net {
       if (idx >= maxClients) { c.on('open', () => { c.send({ t: 'full', why: 'slots' }); setTimeout(() => c.close(), 300); }); return; }
       this.conns[idx] = c;
       c._lastRx = performance.now(); c._hb = false;
-      c.on('open', () => { c.send({ t: 'welcome', slot: idx + 1 }); this.onJoin && this.onJoin(idx + 1); });
+      c.on('open', () => {
+        // 게스트가 welcome 을 받고 빠른 채널을 만든다 → 그 전에 가로채기 준비
+        guardDataChannel(c, (ch) => { c._fast = bindFast(ch, (m) => { c._lastRx = performance.now(); this.onMessage && this.onMessage(m, idx + 1); }); });
+        c.send({ t: 'welcome', slot: idx + 1 }); this.onJoin && this.onJoin(idx + 1);
+      });
       c.on('data', (m) => {
         c._lastRx = performance.now();
         if (m && m.t === 'hb') { c._hb = true; try { c.send({ t: 'hb', t0: m.t0 }); } catch (e) {} return; }   // 하트비트는 게임에 안 넘긴다
@@ -136,7 +159,7 @@ export class Net {
       c.on('data', (m) => {
         lastRx = performance.now();
         if (m && m.t === 'hb') { const r = performance.now() - m.t0; this.rtt = this.rtt ? this.rtt * 0.8 + r * 0.2 : r; return; }
-        if (m.t === 'welcome') this.mySlot = m.slot;
+        if (m.t === 'welcome') { this.mySlot = m.slot; this._openFast(c); }
         this.onMessage && this.onMessage(m, 0);
       });
       c.on('close', () => { clearInterval(this._hbTimer); this.onError && this.onError({ type: 'closed' }); });
@@ -144,6 +167,35 @@ export class Net {
       c.on('iceStateChanged', (st) => { if (st === 'failed' || st === 'closed') { try { c.close(); } catch (e) {} } });
     });
     this.peer.on('error', (e) => this.onError && this.onError(e));
+  }
+
+  /** 클라: 호스트와의 연결 위에 UDP 식 채널을 하나 더 연다 (실패해도 기본 채널로 동작) */
+  _openFast(c) {
+    try {
+      const pc = c.peerConnection; if (!pc || c._fast) return;
+      const ch = pc.createDataChannel(FAST_LABEL, { ordered: false, maxRetransmits: 0 });
+      c._fast = bindFast(ch, (m) => { this._fastRx = performance.now(); this.onMessage && this.onMessage(m, 0); });
+      ch.onopen = () => { this.fastOpen = true; };
+      ch.onclose = () => { this.fastOpen = false; c._fast = null; };
+    } catch (e) { /* 지원 안 함 → 기본 채널 */ }
+  }
+
+  /** 연결 경로 (direct / relay) — HUD 표시용. 5초마다 갱신 */
+  async probePath() {
+    const c = this.role === 'client' ? this.conn : this.conns.find((x) => x && x.open);
+    const pc = c && c.peerConnection; if (!pc || !pc.getStats) return this.pathType;
+    try {
+      const stats = await pc.getStats();
+      let pair = null;
+      stats.forEach((r) => { if (r.type === 'candidate-pair' && r.state === 'succeeded' && (r.nominated || !pair)) pair = r; });
+      if (pair) {
+        const lc = stats.get(pair.localCandidateId), rc = stats.get(pair.remoteCandidateId);
+        const relay = (lc && lc.candidateType === 'relay') || (rc && rc.candidateType === 'relay');
+        this.pathType = relay ? 'relay' : 'direct';
+        if (pair.currentRoundTripTime !== undefined) this.iceRtt = pair.currentRoundTripTime * 1000;
+      }
+    } catch (e) {}
+    return this.pathType;
   }
 
   /** host → 모든 클라 */
@@ -163,16 +215,24 @@ export class Net {
     const ev = msg.ev || [];
     for (const c of this.conns) {
       if (!c || !c.open) continue;
-      const dc = c.dataChannel;
+      const fast = c._fast && c._fast.readyState === 'open' ? c._fast : null;
+      const dc = fast || c.dataChannel;
       const congested = dc && dc.bufferedAmount > Net.CONGESTED_BYTES;
       if (congested) { if (ev.length) c._evq = (c._evq || []).concat(ev); c._dropped = (c._dropped || 0) + 1; continue; }
       let out = msg;
       if (c._evq && c._evq.length) { out = Object.assign({}, msg, { ev: c._evq.concat(ev) }); c._evq = null; }
-      try { c.send(out); } catch (e) {}
+      try { if (fast) fast.send(JSON.stringify(out)); else c.send(out); } catch (e) {}
     }
   }
-  /** client → host */
+  /** client → host (신뢰) */
   send(msg) { if (this.conn && this.conn.open) { try { this.conn.send(msg); } catch (e) {} } }
+  /** client → host, 빠른 채널 우선 (입력처럼 다음 것으로 대체되는 데이터). 채널이 없으면 기본 채널 */
+  sendFast(msg) {
+    const c = this.conn; if (!c || !c.open) return;
+    const f = c._fast;
+    if (f && f.readyState === 'open') { try { f.send(JSON.stringify(msg)); return; } catch (e) {} }
+    try { c.send(msg); } catch (e) {}
+  }
 
   /** host: 슬롯 강퇴 — 통보 후 연결 종료 (close 이벤트로 onLeave 호출됨) */
   kick(slot) {

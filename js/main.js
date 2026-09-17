@@ -39,7 +39,7 @@ const _up = new THREE.Vector3(0, 1, 0);
 const _auraGold = new THREE.Color(1, 0.85, 0.35);
 const SPAWNS = [[0, 2.4], [0, -2.4], [2.4, 0], [-2.4, 0]];
 const AUDIO_FWD = ['whoosh', 'swoosh', 'impact', 'bassHit', 'riser', 'maxSpeedHit', 'stagger', 'ko', 'block', 'chargeUp', 'finisherWind', 'finisherHit', 'counter', 'cheer', 'engine', 'clang', 'nyang', 'shutter'];
-const SNAP_HZ = 45;   // 호스트→게스트 스냅샷 주기. 재생 지연은 (주기 + 지터) 이므로 올릴수록 게스트 응답성이 좋아진다 (대역폭 ∝ 주기)
+const SNAP_HZ = 60;   // 2인 기준 호스트→게스트 스냅샷 주기 (= 호스트 매 프레임). 재생 지연은 (주기 + 지터) 이므로 올릴수록 게스트 응답성이 좋아진다
 // 만화 색종이 스파크 팔레트 (배열이면 입자마다 랜덤)
 const HIT_CONFETTI = [new THREE.Color(1, 0.92, 0.25), new THREE.Color(1, 0.55, 0.15), new THREE.Color(1, 1, 1), new THREE.Color(1, 0.3, 0.35)];
 const RAINBOW = [new THREE.Color(1, 0.25, 0.3), new THREE.Color(1, 0.6, 0.1), new THREE.Color(1, 0.95, 0.2), new THREE.Color(0.3, 1, 0.5), new THREE.Color(0.25, 0.75, 1), new THREE.Color(0.75, 0.35, 1), new THREE.Color(1, 1, 1)];
@@ -781,6 +781,7 @@ class Game {
       else if (m.t === 'full') { this.joinRejected = m.why === 'playing' ? '경기가 진행 중입니다. 끝나면 다시 참가하세요' : '방이 가득 찼습니다 (최대 4명)'; this.lobbyMsg(this.joinRejected); }
       else if (m.t === 'start') { this.setMap(m.map || 'ring'); this.names = []; m.cfg.forEach((c) => { this.names[c.netSlot] = c.name; }); this.localSlot = Math.max(0, m.cfg.findIndex((c) => c.netSlot === net.mySlot)); this.startMatch('client', m.cfg); }
       else if (m.t === 'snap') { if (this.phase === 'fight') this.onSnapshot(m); }
+      else if (m.t === 'ev') { if (this.phase === 'fight' && m.ev) this.applyEvents(m.ev); }
       else if (m.t === 'pong') { const r = performance.now() - m.t0; this.rtt = this.rtt ? this.rtt * 0.8 + r * 0.2 : r; }
       else if (m.t === 'skipv') { this.showSkipHint(m.n, m.total); }
       else if (m.t === 'phase') { if (m.p === 'countdown') this.endIntro(); else if (m.p === 'fight') { this.phase = 'fight'; document.getElementById('countdown').classList.add('hidden'); } }
@@ -1423,14 +1424,16 @@ class Game {
     } else {
       this.simulate(rawDt);
       if (this.mode === 'host') {
+        // 이벤트(타격·효과음·연출)는 매 프레임 즉시, 신뢰 채널로 (스냅샷 주기를 기다리지 않는다 → 피격 확인이 더 빠르다)
+        if (this.pendingEvents.length) { this.net.broadcast({ t: 'ev', ev: this.pendingEvents }); this.pendingEvents = []; }
         this.snapAccum += rawDt;
-        // 3~4인은 스냅샷이 2배 크고 받는 사람도 많다 → 30Hz 로 (호스트 폰 업로드 대역폭 보호)
-        const hz = this.fighters.length > 2 ? 30 : SNAP_HZ;
+        // 인원이 많을수록 스냅샷이 크고 받는 사람도 많다 → 2인 60Hz / 3인 45Hz / 4인 30Hz (호스트 폰 업로드 보호)
+        const n = this.fighters.length;
+        const hz = n <= 2 ? SNAP_HZ : n === 3 ? 45 : 30;
         if (this.snapAccum >= 1 / hz - 0.002) {
           // 남은 누적을 이월해 평균 주기를 정확히 hz 로 맞춘다 (렉 스파이크 뒤 폭주는 한 주기로 제한)
           this.snapAccum = Math.min(this.snapAccum - 1 / hz, 1 / hz);
-          this.net.broadcastDroppable({ t: 'snap', q: ++this.outSeq, ts: this.realTime, f: this.fighters.map((f) => f.snapshot()), ev: this.pendingEvents });
-          this.pendingEvents = [];
+          this.net.broadcastDroppable({ t: 'snap', q: ++this.outSeq, ts: this.realTime, f: this.fighters.map((f) => f.snapshot()), ev: [] });
         }
       }
     }
@@ -1617,7 +1620,12 @@ class Game {
     this._lastRecv = now; this._lastRecvTs = ts;
     this.snaps.push({ recv: now, ts, d: m });
     if (this.snaps.length > 10) this.snaps.shift();
-    for (const e of m.ev) {
+    if (m.ev && m.ev.length) this.applyEvents(m.ev);
+  }
+
+  /** 호스트가 보낸 이벤트(타격·효과음·연출). 스냅샷은 유실될 수 있는 빠른 채널로 오므로 이벤트는 따로 신뢰 채널('ev')로 온다 */
+  applyEvents(evs) {
+    for (const e of evs) {
       if (e.t === 'hit') this.hitFx(e);
       else if (e.t === 'a') {
         if (e.n === 'whoosh' && e.s !== this.localSlot) continue;
@@ -1693,9 +1701,9 @@ class Game {
     const latest = this.snaps[n - 1];
     if (n === 1) { const s0 = latest.d.f; this.fighters.forEach((f, i) => f.applySnapshot(s0[i], s0[i], 1)); return; }
 
-    // 재생 지연: 스냅샷 간격 1개 + 지터 여유. RTT 는 지터가 아니므로 더하지 않는다 (회선이 깨끗하면 ~30ms)
+    // 재생 지연: 스냅샷 간격 0.7개 + 지터 여유 (부족하면 마지막 두 스냅샷으로 짧게 외삽한다). RTT 는 지터가 아니므로 더하지 않는다
     const interval = Math.max(1000 / SNAP_HZ, this._sendGap || 0);
-    const delay = Math.min(160, Math.max(24, interval + 4 + (this.jitter || 4) * 2));
+    const delay = Math.min(140, Math.max(10, interval * 0.7 + 2 + (this.jitter || 3) * 1.8));
     if (this.playT === undefined || this.playT === null) this.playT = latest.ts - delay;
 
     // 버퍼 두께에 따라 재생 속도 미세 조정 (±12%) — 튀지 않게 천천히 따라붙는다
@@ -1715,7 +1723,8 @@ class Game {
     const span = Math.max(1, B.ts - A.ts);
     // 최신 스냅샷보다 앞서 있으면 잠깐만 외삽 (최대 1프레임 분량)
     const t = Math.max(0, Math.min(1.35, (this.playT - A.ts) / span));
-    this.fighters.forEach((f, i) => f.applySnapshot(A.d.f[i], B.d.f[i], t));
+    // 내 캐릭터는 보간 지연 없이 최신 스냅샷 그대로 (피격·다운·가드 반응이 지연분만큼 더 빨리 보인다). 위치는 predictLocal 이 덮는다
+    this.fighters.forEach((f, i) => { if (f === this.localFighter) f.applySnapshot(latest.d.f[i], latest.d.f[i], 1); else f.applySnapshot(A.d.f[i], B.d.f[i], t); });
     for (const f of this.fighters) f.target = f.targetSlot >= 0 ? this.fighters[f.targetSlot] : null;
     this.netBufMs = latest.ts - this.playT;
     this.predictLocal(rawDt);
@@ -1732,7 +1741,7 @@ class Game {
     const changed = !last || last[0] !== d[0] || last[1] !== d[1] || last[2] !== d[2] || last[3] !== d[3];
     if (!changed && nowMs - this._lastSentT < 50) return;
     this._lastSent = d; this._lastSentT = nowMs;
-    this.net.send({ t: 'in', q: ++this.outSeq, d });
+    this.net.sendFast({ t: 'in', q: ++this.outSeq, d });
   }
 
   /**
@@ -2014,7 +2023,11 @@ class Game {
       if (benchEl) benchEl.classList.toggle('hidden', !(local && local.benched && !local.ko && this.phase === 'fight'));
       if (this.mode === 'client' && this.netLabel) {
         const el = document.getElementById('netinfo');
-        if (el) el.textContent = `${this.netLabel} · PING ${Math.round(this.rtt || 0)}ms · BUF ${Math.round(this.netBufMs || 0)}ms`;
+        const path = this.net.pathType ? (this.net.pathType === 'relay' ? ' · 중계(relay)' : ' · 직결') : '';
+        const fast = this.net.fastOpen ? ' · UDP' : '';
+        if (el) el.textContent = `${this.netLabel} · PING ${Math.round(this.rtt || 0)}ms · BUF ${Math.round(this.netBufMs || 0)}ms${path}${fast}`;
+        this._pathT = (this._pathT || 0) + 1;
+        if (this._pathT % 150 === 1) this.net.probePath();
       }
     }
     // 포커스 경고: 창에 포커스가 없거나(다른 앱/탭), 입력창에 포커스가 가 있으면 알린다

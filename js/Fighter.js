@@ -409,7 +409,9 @@ export class Fighter {
       this.ultT = dur; this.ultKind = fk; this.ultTarget = tg;
       this.punch = null; this.queue.length = 0; this.armor = dur;
       tg.ultVictimT = dur; tg.ultVictimKind = fk; tg.punch = null; tg.queue.length = 0; tg.stagger = 0; tg.dempsey.stop();
-      tg.ultDmg = (34 + 7 * charge) * this.def.powerMul;   // 연출 동안 나눠서 들어간다
+      // 연출 동안 나눠서 들어간다. 채채(릴스)·오승현(간식 폭격)은 기본 파워가 낮아 필살기만은 크게 (경량 캐릭터의 한 방)
+      const ULT_MUL = { reels: 1.8, snackRain: 1.8 };
+      tg.ultDmg = (34 + 7 * charge) * this.def.powerMul * (ULT_MUL[fk] || 1);
       tg.ultDmgRate = tg.ultDmg / dur;
       d.consume();
       this.audio.finisherWind(0.5);
