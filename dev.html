@@ -186,6 +186,49 @@
         boot.classList.add('err');
       }
       window.__bootFail = fail;
+
+      // ---- WebGL 불가 환경 안내 (인앱 브라우저 / 구형 iOS / GPU 차단) ----
+      // 게스트가 카톡·라인·인스타 안에서 초대 링크를 열면 WebGL2 컨텍스트가 안 만들어져 게임이 뜨지 않는다.
+      // 새로고침으로는 해결되지 않으므로 "외부 브라우저로 열기" 를 안내한다.
+      var ua = navigator.userAgent || '';
+      var inApp = /KAKAOTALK|Line\/|Instagram|FBAN|FBAV|NAVER\(inapp|DaumApps|Snapchat|TwitterAndroid|; wv\)/i.test(ua);
+      var isAndroid = /Android/i.test(ua), isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      function openExternal() {
+        var url = location.href;
+        if (/KAKAOTALK/i.test(ua)) { location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(url); return; }
+        if (/Line\//i.test(ua)) { location.href = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'openExternalBrowser=1'; return; }
+        if (isAndroid) { location.href = 'intent://' + url.replace(/^https?:\/\//, '') + '#Intent;scheme=' + location.protocol.replace(':', '') + ';package=com.android.chrome;end'; return; }
+        copyLink();
+      }
+      function copyLink() {
+        var url = location.href;
+        var done = function () { var b = document.getElementById('gl-copy'); if (b) b.textContent = '복사됨 — 브라우저 주소창에 붙여넣기'; };
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, function () { window.prompt('주소를 복사하세요', url); });
+        else window.prompt('주소를 복사하세요', url);
+      }
+      function glFail(msg) {
+        if (failed) return; failed = true;
+        var why = inApp ? '메신저/앱 안의 브라우저에서는 3D(WebGL)가 실행되지 않습니다.' : '이 브라우저는 WebGL2 를 지원하지 않거나 그래픽 가속이 꺼져 있습니다.';
+        var how = inApp
+          ? (isIOS ? '아래 버튼이 안 되면 화면 구석의 <b>⋯ / 공유</b> 메뉴에서 <b>Safari로 열기</b>를 누르세요.' : '아래 버튼이 안 되면 <b>⋮</b> 메뉴에서 <b>다른 브라우저로 열기</b>를 누르세요.')
+          : (isIOS ? 'iOS 15 이상 Safari 에서 열어 주세요.' : '최신 Chrome / Edge / Safari 에서 열어 주세요. (chrome://gpu 에서 WebGL 이 꺼져 있으면 하드웨어 가속을 켜세요)');
+        boot.innerHTML = '<div class="glfail"><b>게임을 시작할 수 없습니다</b><br>' + why + '<br><small>' + how + '</small>' +
+          '<div class="row"><button type="button" id="gl-open">' + (inApp || isAndroid ? 'Chrome / Safari 로 열기' : '') + '</button><button type="button" id="gl-copy">링크 복사</button></div>' +
+          '<small class="raw">' + String(msg).replace(/</g, '&lt;') + '</small></div>';
+        boot.classList.add('err');
+        var o = document.getElementById('gl-open'); if (o) { if (!o.textContent) o.remove(); else o.onclick = openExternal; }
+        var c = document.getElementById('gl-copy'); if (c) c.onclick = copyLink;
+        var menu = document.getElementById('menu'); if (menu) menu.classList.add('hidden');
+        document.querySelectorAll('#start-overlay .section-label, #start-overlay .charsel').forEach(function (el) { el.style.display = 'none'; });
+      }
+      window.__glFail = glFail;
+      // 모듈을 기다리지 않고 미리 확인 — 인앱 브라우저에서 WebGL2 가 없으면 바로 안내 (12초 타임아웃·새로고침 루프 방지)
+      try {
+        var probe = document.createElement('canvas').getContext('webgl2');
+        if (!probe) glFail('WebGL2 unavailable');
+        else { var lose = probe.getExtension('WEBGL_lose_context'); if (lose) lose.loseContext(); }
+      } catch (e) { glFail(String(e)); }
+
       window.addEventListener('error', function (e) { if (!window.game) fail(e.message || '스크립트 오류'); });
       window.addEventListener('unhandledrejection', function (e) { if (!window.game) fail(String(e.reason)); });
       setTimeout(function () { if (!window.game) fail('로딩이 너무 오래 걸립니다 (CDN 차단?)'); }, 12000);
@@ -214,6 +257,6 @@
       setInterval(function () { checkVersion(false); }, 60000);
     })();
   </script>
-  <script type="module" src="js/main.js?v=1789537226" onerror="__bootFail('모듈 로드 실패 (구버전 캐시)')"></script>
+  <script type="module" src="js/main.js?v=1789606809" onerror="__bootFail('모듈 로드 실패 (구버전 캐시)')"></script>
 </body>
 </html>

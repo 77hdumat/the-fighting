@@ -147,6 +147,12 @@ canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block;
 #start-overlay .title-ko { font-weight: 900; font-size: clamp(22px, 3.6vw, 38px); letter-spacing: 12px; color: #1c1c2e; margin-top: 6px; }
 #boot { font-family: Bangers, Impact, sans-serif; letter-spacing: 3px; font-size: 16px; color: #e60012; animation: blink 1s infinite; margin-top: 4px; }
 #boot.err { color: #fff; animation: none; font-family: "Noto Sans JP", sans-serif; letter-spacing: 0; font-size: 14px; background: #e60012; padding: 8px 14px; border-radius: 12px; }
+#boot .glfail { text-align: center; line-height: 1.55; }
+#boot .glfail b { font-size: 16px; }
+#boot .glfail small { display: block; opacity: .9; margin-top: 4px; }
+#boot .glfail small.raw { opacity: .55; font-size: 11px; font-family: monospace; margin-top: 8px; }
+#boot .glfail .row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+#boot .glfail button { font: 700 14px "Noto Sans JP", sans-serif; color: #e60012; background: #fff; border: 0; border-radius: 10px; padding: 9px 14px; cursor: pointer; }
 #start-overlay .section-label { align-self: flex-start; font-family: Bangers, Impact, sans-serif; font-size: 18px; letter-spacing: 4px; color: #8a8aa0; margin: 2px 0 -6px 6px; }
 /* character cards */
 .charsel { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; width: 100%; }

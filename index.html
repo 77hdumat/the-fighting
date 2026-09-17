@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta name="build-id" content="1789537226">
+<meta name="build-id" content="1789606809">
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -164,6 +164,12 @@ canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block;
 #start-overlay .title-ko { font-weight: 900; font-size: clamp(22px, 3.6vw, 38px); letter-spacing: 12px; color: #1c1c2e; margin-top: 6px; }
 #boot { font-family: Bangers, Impact, sans-serif; letter-spacing: 3px; font-size: 16px; color: #e60012; animation: blink 1s infinite; margin-top: 4px; }
 #boot.err { color: #fff; animation: none; font-family: "Noto Sans JP", sans-serif; letter-spacing: 0; font-size: 14px; background: #e60012; padding: 8px 14px; border-radius: 12px; }
+#boot .glfail { text-align: center; line-height: 1.55; }
+#boot .glfail b { font-size: 16px; }
+#boot .glfail small { display: block; opacity: .9; margin-top: 4px; }
+#boot .glfail small.raw { opacity: .55; font-size: 11px; font-family: monospace; margin-top: 8px; }
+#boot .glfail .row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+#boot .glfail button { font: 700 14px "Noto Sans JP", sans-serif; color: #e60012; background: #fff; border: 0; border-radius: 10px; padding: 9px 14px; cursor: pointer; }
 #start-overlay .section-label { align-self: flex-start; font-family: Bangers, Impact, sans-serif; font-size: 18px; letter-spacing: 4px; color: #8a8aa0; margin: 2px 0 -6px 6px; }
 /* character cards */
 .charsel { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; width: 100%; }
@@ -533,7 +539,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   }
 }
 </script>
-<script>window.__BUILD_ID = "1789537226";</script>
+<script>window.__BUILD_ID = "1789606809";</script>
 </head>
 <body>
   <canvas id="gl" tabindex="0"></canvas>
@@ -695,6 +701,49 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
         boot.classList.add('err');
       }
       window.__bootFail = fail;
+
+      // ---- WebGL 불가 환경 안내 (인앱 브라우저 / 구형 iOS / GPU 차단) ----
+      // 게스트가 카톡·라인·인스타 안에서 초대 링크를 열면 WebGL2 컨텍스트가 안 만들어져 게임이 뜨지 않는다.
+      // 새로고침으로는 해결되지 않으므로 "외부 브라우저로 열기" 를 안내한다.
+      var ua = navigator.userAgent || '';
+      var inApp = /KAKAOTALK|Line\/|Instagram|FBAN|FBAV|NAVER\(inapp|DaumApps|Snapchat|TwitterAndroid|; wv\)/i.test(ua);
+      var isAndroid = /Android/i.test(ua), isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      function openExternal() {
+        var url = location.href;
+        if (/KAKAOTALK/i.test(ua)) { location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(url); return; }
+        if (/Line\//i.test(ua)) { location.href = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'openExternalBrowser=1'; return; }
+        if (isAndroid) { location.href = 'intent://' + url.replace(/^https?:\/\//, '') + '#Intent;scheme=' + location.protocol.replace(':', '') + ';package=com.android.chrome;end'; return; }
+        copyLink();
+      }
+      function copyLink() {
+        var url = location.href;
+        var done = function () { var b = document.getElementById('gl-copy'); if (b) b.textContent = '복사됨 — 브라우저 주소창에 붙여넣기'; };
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, function () { window.prompt('주소를 복사하세요', url); });
+        else window.prompt('주소를 복사하세요', url);
+      }
+      function glFail(msg) {
+        if (failed) return; failed = true;
+        var why = inApp ? '메신저/앱 안의 브라우저에서는 3D(WebGL)가 실행되지 않습니다.' : '이 브라우저는 WebGL2 를 지원하지 않거나 그래픽 가속이 꺼져 있습니다.';
+        var how = inApp
+          ? (isIOS ? '아래 버튼이 안 되면 화면 구석의 <b>⋯ / 공유</b> 메뉴에서 <b>Safari로 열기</b>를 누르세요.' : '아래 버튼이 안 되면 <b>⋮</b> 메뉴에서 <b>다른 브라우저로 열기</b>를 누르세요.')
+          : (isIOS ? 'iOS 15 이상 Safari 에서 열어 주세요.' : '최신 Chrome / Edge / Safari 에서 열어 주세요. (chrome://gpu 에서 WebGL 이 꺼져 있으면 하드웨어 가속을 켜세요)');
+        boot.innerHTML = '<div class="glfail"><b>게임을 시작할 수 없습니다</b><br>' + why + '<br><small>' + how + '</small>' +
+          '<div class="row"><button type="button" id="gl-open">' + (inApp || isAndroid ? 'Chrome / Safari 로 열기' : '') + '</button><button type="button" id="gl-copy">링크 복사</button></div>' +
+          '<small class="raw">' + String(msg).replace(/</g, '&lt;') + '</small></div>';
+        boot.classList.add('err');
+        var o = document.getElementById('gl-open'); if (o) { if (!o.textContent) o.remove(); else o.onclick = openExternal; }
+        var c = document.getElementById('gl-copy'); if (c) c.onclick = copyLink;
+        var menu = document.getElementById('menu'); if (menu) menu.classList.add('hidden');
+        document.querySelectorAll('#start-overlay .section-label, #start-overlay .charsel').forEach(function (el) { el.style.display = 'none'; });
+      }
+      window.__glFail = glFail;
+      // 모듈을 기다리지 않고 미리 확인 — 인앱 브라우저에서 WebGL2 가 없으면 바로 안내 (12초 타임아웃·새로고침 루프 방지)
+      try {
+        var probe = document.createElement('canvas').getContext('webgl2');
+        if (!probe) glFail('WebGL2 unavailable');
+        else { var lose = probe.getExtension('WEBGL_lose_context'); if (lose) lose.loseContext(); }
+      } catch (e) { glFail(String(e)); }
+
       window.addEventListener('error', function (e) { if (!window.game) fail(e.message || '스크립트 오류'); });
       window.addEventListener('unhandledrejection', function (e) { if (!window.game) fail(String(e.reason)); });
       setTimeout(function () { if (!window.game) fail('로딩이 너무 오래 걸립니다 (CDN 차단?)'); }, 12000);
@@ -752,8 +801,32 @@ class Net {
   }
 
   _mkPeer(id) {
-    return new Peer(id, { debug: 1, config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] } });
+    // STUN 만으로는 대칭 NAT(특히 모바일 데이터망) 뒤의 게스트가 호스트에 못 붙는다 → 공개 TURN 을 후보에 넣어 릴레이 폴백.
+    // (openrelay: metered.ca 가 운영하는 무료 공개 TURN. 직결이 되면 ICE 가 알아서 직결 경로를 고른다)
+    const peer = new Peer(id, {
+      debug: 1,
+      pingInterval: 5000,
+      config: {
+        iceServers: [
+          { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] },
+          { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+          { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+          { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+        ],
+        iceCandidatePoolSize: 4,
+      },
+    });
+    // 시그널링 서버와 끊기면(모바일 화면 꺼짐·망 전환) 이미 맺은 P2P 는 살아 있지만 새 참가/재접속이 안 된다 → 자동 재연결
+    peer.on('disconnected', () => {
+      if (peer.destroyed || this.peer !== peer) return;
+      clearTimeout(this._reconnT);
+      this._reconnT = setTimeout(() => { if (!peer.destroyed && this.peer === peer && peer.disconnected) { try { peer.reconnect(); } catch (e) {} } }, 1200);
+    });
+    return peer;
   }
+
+  /** 클라: 이 시간 안에 데이터채널이 안 열리면 timeout 에러 (기본 15초) */
+  static JOIN_TIMEOUT = 15000;
 
   /** code 를 주면 그 코드로 방을 연다 (호스트 승계). 아직 이전 호스트 ID 가 안 풀렸으면 잠시 후 재시도 */
   host(maxClients = 3, code = null, tries = 0) {
@@ -787,15 +860,21 @@ class Net {
     this.role = 'client';
     this.code = code.toUpperCase().trim();
     this.peer = this._mkPeer(undefined);
+    let opened = false;
+    // 접속 타임아웃: 시그널링은 됐는데 ICE 가 끝내 안 붙는 경우(방화벽·NAT) 무한 "접속 중…" 을 막는다
+    this._joinT = setTimeout(() => { if (!opened && this.onError) this.onError({ type: 'timeout' }); }, Net.JOIN_TIMEOUT);
     this.peer.on('open', () => {
+      // reliable:false → 비순서(unordered) 채널. 손실된 패킷을 기다리느라 뒤 패킷까지 막히는(HOL) 일이 없어 게임용으로 낫다.
+      // 대신 순서가 뒤바뀔 수 있으므로 스냅샷/입력에는 시퀀스 번호를 붙여 오래된 것을 버린다 (main.js)
       const c = this.peer.connect(PREFIX + this.code, { serialization: 'json', reliable: false });
       this.conn = c;
-      c.on('open', () => { this.onOpen && this.onOpen(this.code); });
+      c.on('open', () => { opened = true; clearTimeout(this._joinT); this.onOpen && this.onOpen(this.code); });
       c.on('data', (m) => {
         if (m.t === 'welcome') this.mySlot = m.slot;
         this.onMessage && this.onMessage(m, 0);
       });
       c.on('close', () => this.onError && this.onError({ type: 'closed' }));
+      c.on('error', (e) => this.onError && this.onError({ type: 'conn-error', detail: e }));
     });
     this.peer.on('error', (e) => this.onError && this.onError(e));
   }
@@ -819,6 +898,7 @@ class Net {
   close() {
     // 콜백 먼저 끊는다 — destroy 중 나오는 close/error 이벤트가 새 Net 의 상태를 건드리지 않게
     this.onMessage = this.onJoin = this.onLeave = this.onOpen = this.onError = null;
+    clearTimeout(this._joinT); clearTimeout(this._reconnT);
     try { this.peer && this.peer.destroy(); } catch (e) {}
     this.peer = null; this.conns = []; this.conn = null; this.role = 'none';
   }
@@ -3017,7 +3097,9 @@ return { CHARACTERS, CHARACTER_ORDER, HIDDEN_ORDER, COACH_DEFS, POSE_KEYS, defau
 __M.Portraits = (() => {
 // Portraits.js — 캐릭터 선택용 초상 이미지를 '실제 리그'에서 그려 만든다.
 // 외부 일러스트를 쓰지 않으므로 인게임 외형과 항상 일치하고, 캐릭터를 고쳐도 따로 손댈 게 없다.
-// 오프스크린 렌더러를 하나 만들어 전원 렌더한 뒤 즉시 정리한다 (WebGL 컨텍스트를 물고 있지 않는다).
+// 별도의 WebGL 컨텍스트를 만들지 않는다 — 게임의 메인 렌더러로 렌더타겟에 그린 뒤 픽셀을 읽어 2D 캔버스에 옮긴다.
+// (모바일/인앱 브라우저는 동시 WebGL 컨텍스트 수 제한이 빡빡해서, 컨텍스트를 하나 더 만들면
+//  메인 캔버스 컨텍스트가 죽거나 아예 생성 실패("Error creating WebGL context")로 이어질 수 있다.)
 const { CHARACTERS, buildBoxer, defaultPose, applyPose } = __M.Rig;
 
 const cache = new Map();
@@ -3034,25 +3116,61 @@ function makeScene() {
   return scene;
 }
 
+// 렌더타겟에 그리면 톤매핑/sRGB 변환이 빠져(three 는 화면 출력에만 적용) 인게임과 색이 달라진다.
+// 그래서 메인 캔버스에 직접 그리고 같은 태스크 안에서 바로 읽는다 (합성 전이라 preserveDrawingBuffer 없이도 읽힌다).
+// 메인 캔버스는 불투명이라 배경을 검정·흰색으로 두 번 그려 차이로 알파를 복원한다 (difference matting).
+function readCanvas(renderer, W, H, buf) {
+  const gl = renderer.getContext();
+  gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+}
+function matteToDataURL(black, white, W, H) {
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const img = g.createImageData(W, H);
+  const out = img.data;
+  for (let y = 0; y < H; y++) {
+    const src = (H - 1 - y) * W * 4, dst = y * W * 4;   // GL 은 원점이 아래쪽
+    for (let x = 0; x < W * 4; x += 4) {
+      const br = black[src + x], bg = black[src + x + 1], bb = black[src + x + 2];
+      const a = 1 - ((white[src + x] - br) + (white[src + x + 1] - bg) + (white[src + x + 2] - bb)) / (3 * 255);
+      const A = a < 0.02 ? 0 : a > 0.98 ? 1 : a;
+      // 검정 배경 결과 = 색×알파 → 알파로 나눠 원색 복원
+      out[dst + x] = A ? Math.min(255, br / A) : 0;
+      out[dst + x + 1] = A ? Math.min(255, bg / A) : 0;
+      out[dst + x + 2] = A ? Math.min(255, bb / A) : 0;
+      out[dst + x + 3] = Math.round(A * 255);
+    }
+  }
+  g.putImageData(img, 0, 0);
+  return c.toDataURL('image/png');
+}
+
 /**
  * 주어진 키들의 초상을 만들어 { key: dataURL } 로 돌려준다.
- * 이미 만든 것은 캐시에서 재사용하므로 여러 번 불러도 안전하다.
+ * renderer 는 게임의 메인 WebGLRenderer. 이미 만든 것은 캐시에서 재사용하므로 여러 번 불러도 안전하다.
+ * 렌더러가 없거나 컨텍스트가 죽어 있으면 초상 없이 (null) 돌려주고, 카드는 이름/능력치만 표시된다.
  */
-function buildPortraits(keys, { w = 240, h = 300 } = {}) {
+function buildPortraits(keys, { renderer = null, w = 240, h = 300 } = {}) {
   const todo = keys.filter((k) => !cache.has(k) && CHARACTERS[k]);
-  if (todo.length) {
-    let renderer = null;
+  const ctxOk = renderer && renderer.getContext && !renderer.getContext().isContextLost();
+  if (todo.length && ctxOk) {
+    const canvas = renderer.domElement;
+    // 메인 렌더러 상태를 건드리므로 끝나면 전부 원복한다
+    const prev = {
+      target: renderer.getRenderTarget(), shadow: renderer.shadowMap.enabled, autoClear: renderer.autoClear,
+      clearColor: renderer.getClearColor(new THREE.Color()), clearAlpha: renderer.getClearAlpha(),
+      size: renderer.getSize(new THREE.Vector2()), dpr: renderer.getPixelRatio(),
+    };
     try {
-      renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
-      renderer.setPixelRatio(Math.min(2, globalThis.devicePixelRatio || 1));
-      renderer.setSize(w, h, false);
-      renderer.setClearAlpha(0);
-      renderer.outputColorSpace = THREE.SRGBColorSpace;
-      renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 0.95;
-
       const scene = makeScene();
       const camera = new THREE.PerspectiveCamera(30, w / h, 0.1, 100);
+      renderer.setRenderTarget(null);
+      renderer.shadowMap.enabled = false;
+      renderer.autoClear = true;
+      renderer.setPixelRatio(Math.min(2, globalThis.devicePixelRatio || 1));
+      renderer.setSize(w, h, false);          // 드로잉 버퍼만 바꾼다 (CSS 크기는 그대로)
+      const W = canvas.width, H = canvas.height;
+      const black = new Uint8Array(W * H * 4), white = new Uint8Array(W * H * 4);
 
       for (const key of todo) {
         const def = CHARACTERS[key];
@@ -3080,17 +3198,23 @@ function buildPortraits(keys, { w = 240, h = 300 } = {}) {
         camera.updateProjectionMatrix();
         scene.add(camera);
 
-        renderer.render(scene, camera);
-        cache.set(key, renderer.domElement.toDataURL('image/png'));
+        renderer.setClearColor(0x000000, 1); renderer.render(scene, camera); readCanvas(renderer, W, H, black);
+        renderer.setClearColor(0xffffff, 1); renderer.render(scene, camera); readCanvas(renderer, W, H, white);
+        cache.set(key, matteToDataURL(black, white, W, H));
 
         scene.remove(rig.root);
         rig.root.traverse((o) => { if (o.isMesh && o.geometry && o.geometry.dispose) o.geometry.dispose(); });
       }
     } catch (e) {
-      // WebGL 컨텍스트를 더 못 만드는 환경이면 초상 없이 기존 카드로 표시된다
+      // 못 그리는 환경이면 초상 없이 기존 카드로 표시된다
       for (const k of todo) cache.set(k, null);
     } finally {
-      if (renderer) { renderer.dispose(); renderer.forceContextLoss && renderer.forceContextLoss(); }
+      renderer.setPixelRatio(prev.dpr);
+      renderer.setSize(prev.size.x, prev.size.y, false);
+      renderer.setRenderTarget(prev.target);
+      renderer.shadowMap.enabled = prev.shadow;
+      renderer.autoClear = prev.autoClear;
+      renderer.setClearColor(prev.clearColor, prev.clearAlpha);
     }
   }
   const out = {};
@@ -3442,6 +3566,8 @@ class InputState {
     this.prev = 0;
     this.mx = 0; // 월드 기준 이동 벡터 (카메라 상대 → 보내는 쪽에서 계산)
     this.mz = 0;
+    this.held = 0;     // 네트워크: 프레임 사이에 눌렸다 풀린 비트 (setNet 참고)
+    this.lastNet = 0;
   }
   /** 로컬 키보드(Input) 로부터 채움. move 는 월드 벡터 */
   fromInput(input, move) {
@@ -3452,9 +3578,21 @@ class InputState {
     this.mx = move.x; this.mz = move.z;
   }
   set(bits, mx, mz) { this.bits = bits; this.mx = mx; this.mz = mz; }
-  isDown(code) { const m = BIT[code]; return !!m && (this.bits & m) !== 0; }
-  justPressed(code) { const m = BIT[code]; return !!m && (this.bits & m) !== 0 && (this.prev & m) === 0; }
-  endFrame() { this.prev = this.bits; }
+  /**
+   * 네트워크(호스트가 게스트 입력을 받을 때) 전용.
+   * 게스트는 매 프레임 보내고 호스트는 한 프레임에 여러 개를 받을 수 있어, 눌렀다 뗀 짧은 탭이 마지막 메시지에 덮여
+   * 사라지곤 했다 (게스트 J 입력이 가끔 씹히는 원인). 호스트 프레임 사이에 새로 눌린 비트는 `held` 에 모아 두고
+   * 다음 시뮬 프레임에서 반드시 한 번은 '눌림' 으로 보이게 한다.
+   */
+  setNet(bits, mx, mz) {
+    this.held |= bits & ~this.lastNet;
+    this.lastNet = bits;
+    this.bits = bits; this.mx = mx; this.mz = mz;
+  }
+  get eff() { return this.bits | (this.held || 0); }
+  isDown(code) { const m = BIT[code]; return !!m && (this.eff & m) !== 0; }
+  justPressed(code) { const m = BIT[code]; return !!m && (this.eff & m) !== 0 && (this.prev & m) === 0; }
+  endFrame() { this.prev = this.eff; this.held = 0; }
   pack() { return [this.bits, +this.mx.toFixed(2), +this.mz.toFixed(2)]; }
 }
 return { BIT, InputState };
@@ -8422,7 +8560,17 @@ const SNAP_HZ = 30;
 class Game {
   constructor() {
     const canvas = document.getElementById('gl');
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    // WebGL2 를 못 만드는 환경(카톡·인스타 등 인앱 브라우저, 구형 iOS, GPU 차단)이면 three 가 여기서 던진다.
+    // 게스트가 초대 링크를 메신저 안에서 여는 경우가 대표적 — 새 창에 안내를 띄우고 게임 초기화를 중단한다.
+    try {
+      this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    } catch (e) {
+      if (window.__glFail) window.__glFail(e && e.message ? e.message : String(e));
+      throw e;
+    }
+    // 컨텍스트가 죽으면(백그라운드 전환·GPU 리셋) 브라우저가 복구하도록 기본 동작을 막고, 돌아오면 후처리 버퍼를 다시 만든다
+    canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); this.glLost = true; }, false);
+    canvas.addEventListener('webglcontextrestored', () => { this.glLost = false; try { this.onResize(); } catch (e) {} }, false);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
@@ -8478,6 +8626,10 @@ class Game {
     this.localSlot = 0;
     this.localInput = new InputState();
     this.netInputs = [null, new InputState(), new InputState(), new InputState()];
+    this.inSeq = [0, 0, 0, 0];    // host: 슬롯별 마지막 입력 시퀀스
+    this.outSeq = 0;              // client: 보낸 입력 시퀀스 / host: 보낸 스냅샷 시퀀스
+    this.snapSeq = 0;             // client: 마지막으로 받아들인 스냅샷 시퀀스
+    this._lastSent = null; this._lastSentT = 0;
     this.snaps = [];             // client: 최근 스냅샷 2개
     this.pendingEvents = [];     // host: 다음 스냅샷에 실어 보낼 이벤트
     this.snapAccum = 0;
@@ -8673,7 +8825,7 @@ class Game {
     container.innerHTML = '';
     const keys = CHARACTER_ORDER.concat(this.hiddenShown ? HIDDEN_ORDER : []);
     // 초상은 실제 리그에서 렌더해 만든다 (캐시되므로 두 번째 호출부터는 즉시 반환)
-    const portraits = buildPortraits(keys);
+    const portraits = buildPortraits(keys, { renderer: this.renderer });
     for (const key of keys) {
       const c = CHARACTERS[key], dsc = DESC[key];
       const card = document.createElement('div');
@@ -9028,7 +9180,7 @@ class Game {
     this.seats = [0, 1, 2, 3];   // 좌석 → netSlot (방장이 드래그로 바꾼다)
     net.onOpen = (code) => { try { history.replaceState(null, '', `?r=${code}`); } catch (e) {} this.showLobby(code); this.showRoomRules(); this.renderRoster(this.roster); document.getElementById('btn-start').classList.remove('hidden'); this.lobbyMsg('친구에게 코드를 알려주세요. 참가한 사람끼리만 싸웁니다 (2~4명). 시작 버튼으로 시작'); this.broadcastLobby(); };
     net.onError = (e) => this.lobbyMsg('연결 오류: ' + (e.type || e));
-    net.onJoin = (slot) => { this.names[slot] = 'P' + (slot + 1); this.roster[slot] = { type: 'remote', name: this.names[slot] }; this.renderRoster(this.roster); this.broadcastLobby(); if (this.started) this.net.conns[slot - 1].send({ t: 'full' }); };
+    net.onJoin = (slot) => { this.inSeq[slot] = 0; this.netInputs[slot] = new InputState(); this.names[slot] = 'P' + (slot + 1); this.roster[slot] = { type: 'remote', name: this.names[slot] }; this.renderRoster(this.roster); this.broadcastLobby(); if (this.started) this.net.conns[slot - 1].send({ t: 'full' }); };
     net.onLeave = (slot) => {
       this.roster[slot] = { type: 'empty' }; this.renderRoster(this.roster); this.broadcastLobby();
       this.addChat(0, `${this.chatName(slot)} 퇴장`, true); this.net.broadcast({ t: 'chat', sys: true, text: `${this.chatName(slot)} 퇴장` });
@@ -9036,7 +9188,13 @@ class Game {
       if (this.started) { const f = this.fighters.find((x) => x.netSlot === slot); if (f && !f.ko) f._die(); }
     };
     net.onMessage = (m, slot) => {
-      if (m.t === 'in' && this.netInputs[slot]) this.netInputs[slot].set(m.d[0], m.d[1], m.d[2]);
+      if (m.t === 'in' && this.netInputs[slot]) {
+        // 비순서 채널이라 오래된 입력이 새 입력 뒤에 도착할 수 있다 → 시퀀스가 뒤진 것은 버린다 (키가 '눌린 채 고정' 되던 원인)
+        const q = m.q | 0, last = this.inSeq[slot] | 0;
+        if (q && q <= last && last - q < 100000) return;
+        this.inSeq[slot] = q;
+        this.netInputs[slot].setNet(m.d[0], m.d[1], m.d[2]);
+      }
       else if (m.t === 'chat' && typeof m.text === 'string') { const text = m.text.slice(0, 120); this.addChat(slot, text); this.net.broadcast({ t: 'chat', from: slot, text }); }
       else if (m.t === 'skip') { this.voteSkip(slot); }
       else if (m.t === 'ping') { const c = this.net.conns[slot - 1]; if (c && c.open) { try { c.send({ t: 'pong', t0: m.t0 }); } catch (e) {} } }
@@ -9086,10 +9244,17 @@ class Game {
 
   joinRoom(code) {
     const net = this.net;
-    net.onOpen = () => { this.showLobby(code); this.showRoomRules(); this.showChat(true); this.lobbyMsg('접속 완료. 방장이 시작할 때까지 대기…'); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); };
+    net.onOpen = () => { this.joinTries = 0; this.showLobby(code); this.showRoomRules(); this.showChat(true); this.lobbyMsg('접속 완료. 방장이 시작할 때까지 대기…'); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); };
     net.onError = (e) => {
       if (e.type === 'closed' && !this.migrating) { if (!this.kicked) this.migrateHost(); return; }
-      if ((e.type === 'peer-unavailable' || e.type === 'closed') && this.migrating) {
+      if (e.type === 'timeout' && !this.migrating) {
+        // 시그널링은 됐는데 P2P 가 안 붙음 (방화벽/NAT). 새 Peer 로 두 번까지 재시도 → 그래도 안 되면 안내
+        this.joinTries = (this.joinTries || 0) + 1;
+        if (this.joinTries <= 2) { this.lobbyMsg(`호스트에 연결이 안 됩니다. 다시 시도 중… (${this.joinTries}/2)`); this.net.close(); this.net = new Net(); this.joinRoom(code); }
+        else { this.joinTries = 0; this.leaveRoom('호스트에 연결하지 못했습니다. 양쪽 모두 Wi-Fi/데이터를 바꿔 보거나 방을 다시 만들어 주세요'); }
+        return;
+      }
+      if ((e.type === 'peer-unavailable' || e.type === 'closed' || e.type === 'timeout') && this.migrating) {
         // 승계 중: 새 방장이 아직 방을 못 열었을 수 있음 → 재시도
         if (this.migrateTimer) return;   // 같은 시도에서 closed + unavailable 둘 다 올 수 있음 → 한 번만
         if (this.migrateTries < 8) { this.migrateTries++; this.lobbyMsg(`새 방장에게 재접속 중… (${this.migrateTries})`); const c = this.net.code; this.net.close(); this.net = new Net(); this.migrateTimer = setTimeout(() => { this.migrateTimer = null; this.joinRoom(c); }, 1500); }
@@ -9099,7 +9264,7 @@ class Game {
       this.lobbyMsg(e.type === 'peer-unavailable' ? '그 코드의 방이 없습니다' : '연결 오류: ' + (e.type || e));
     };
     net.onMessage = (m) => {
-      if (m.t === 'welcome') { this.migrating = false; this.migrateTries = 0; this.lastSlot = m.slot; this.names = []; this.chars = []; net.send({ t: 'hello', name: this.myNick, char: this.myChar, intro: this.myIntro }); }
+      if (m.t === 'welcome') { this.snapSeq = 0; this.snaps = []; this.playT = null; this.migrating = false; this.migrateTries = 0; this.lastSlot = m.slot; this.names = []; this.chars = []; net.send({ t: 'hello', name: this.myNick, char: this.myChar, intro: this.myIntro }); }
       else if (m.t === 'lobby') { if (m.map) this.myMap = m.map; if (m.rule) this.myRule = m.rule; if (m.seats) this.seats = m.seats; this.showRoomRules(); this.rosterRaw = m.roster; this.names = m.names || []; this.chars = m.chars || []; this.renderRoster(m.roster.map((r, i) => (i === net.mySlot ? { type: 'local', name: r.name } : i === 0 ? { type: 'remote', name: r.name } : r))); }
       else if (m.t === 'full') this.lobbyMsg('방이 가득 찼거나 이미 시작됨');
       else if (m.t === 'start') { this.setMap(m.map || 'ring'); this.names = []; m.cfg.forEach((c) => { this.names[c.netSlot] = c.name; }); this.localSlot = Math.max(0, m.cfg.findIndex((c) => c.netSlot === net.mySlot)); this.startMatch('client', m.cfg); }
@@ -9706,7 +9871,7 @@ class Game {
     } else if (this.phase === 'countdown') {
       this.updateCountdown(rawDt);
     } else if (this.mode === 'client') {
-      this.net.send({ t: 'in', d: this.localInput.pack() });
+      this.sendInput();
       this.predictInput(input);
       this.pingT = (this.pingT || 0) + rawDt;
       if (this.pingT > 1) { this.pingT = 0; this.net.send({ t: 'ping', t0: performance.now() }); }
@@ -9715,9 +9880,10 @@ class Game {
       this.simulate(rawDt);
       if (this.mode === 'host') {
         this.snapAccum += rawDt;
-        if (this.snapAccum >= 1 / SNAP_HZ) {
-          this.snapAccum = 0;
-          this.net.broadcast({ t: 'snap', ts: this.realTime, f: this.fighters.map((f) => f.snapshot()), ev: this.pendingEvents });
+        if (this.snapAccum >= 1 / SNAP_HZ - 0.002) {
+          // 남은 누적을 이월해 평균 주기를 정확히 SNAP_HZ 로 맞춘다 (렉 스파이크 뒤 폭주는 한 주기로 제한)
+          this.snapAccum = Math.min(this.snapAccum - 1 / SNAP_HZ, 1 / SNAP_HZ);
+          this.net.broadcast({ t: 'snap', q: ++this.outSeq, ts: this.realTime, f: this.fighters.map((f) => f.snapshot()), ev: this.pendingEvents });
           this.pendingEvents = [];
         }
       }
@@ -9889,6 +10055,9 @@ class Game {
 
   // ================= 클라이언트 =================
   onSnapshot(m) {
+    // 비순서 채널: 늦게 도착한 옛 스냅샷은 버린다 (보간 구간이 뒤로 튀어 캐릭터가 떨리던 원인)
+    if (m.q) { if (m.q <= this.snapSeq && this.snapSeq - m.q < 100000) return; this.snapSeq = m.q; }
+    else if (this.snaps.length && (m.ts || 0) * 1000 <= this.snaps[this.snaps.length - 1].ts) return;
     const now = performance.now();
     // 도착 간격의 흔들림(지터)을 추적해 재생 지연을 필요한 만큼만 잡는다
     if (this._lastRecv) {
@@ -9999,6 +10168,20 @@ class Game {
     for (const f of this.fighters) f.target = f.targetSlot >= 0 ? this.fighters[f.targetSlot] : null;
     this.netBufMs = latest.ts - this.playT;
     this.predictLocal(rawDt);
+  }
+
+  /**
+   * 게스트 → 호스트 입력 전송. 바뀐 프레임엔 즉시, 그 외엔 50ms 마다 키프레임(손실 대비).
+   * 120Hz 화면에서 매 프레임 보내던 것을 줄여 채널 혼잡(=지연)을 낮추고, 시퀀스로 순서 역전을 막는다.
+   */
+  sendInput() {
+    const d = this.localInput.pack();
+    const nowMs = performance.now();
+    const last = this._lastSent;
+    const changed = !last || last[0] !== d[0] || last[1] !== d[1] || last[2] !== d[2];
+    if (!changed && nowMs - this._lastSentT < 50) return;
+    this._lastSent = d; this._lastSentT = nowMs;
+    this.net.send({ t: 'in', q: ++this.outSeq, d });
   }
 
   /** 버튼 입력을 받은 그 프레임에 내 캐릭터 동작을 먼저 그려 준다 (호스트 확인 전) */

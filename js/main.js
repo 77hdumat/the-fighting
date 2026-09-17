@@ -41,7 +41,17 @@ const SNAP_HZ = 30;
 class Game {
   constructor() {
     const canvas = document.getElementById('gl');
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    // WebGL2 를 못 만드는 환경(카톡·인스타 등 인앱 브라우저, 구형 iOS, GPU 차단)이면 three 가 여기서 던진다.
+    // 게스트가 초대 링크를 메신저 안에서 여는 경우가 대표적 — 새 창에 안내를 띄우고 게임 초기화를 중단한다.
+    try {
+      this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    } catch (e) {
+      if (window.__glFail) window.__glFail(e && e.message ? e.message : String(e));
+      throw e;
+    }
+    // 컨텍스트가 죽으면(백그라운드 전환·GPU 리셋) 브라우저가 복구하도록 기본 동작을 막고, 돌아오면 후처리 버퍼를 다시 만든다
+    canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); this.glLost = true; }, false);
+    canvas.addEventListener('webglcontextrestored', () => { this.glLost = false; try { this.onResize(); } catch (e) {} }, false);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
@@ -97,6 +107,10 @@ class Game {
     this.localSlot = 0;
     this.localInput = new InputState();
     this.netInputs = [null, new InputState(), new InputState(), new InputState()];
+    this.inSeq = [0, 0, 0, 0];    // host: 슬롯별 마지막 입력 시퀀스
+    this.outSeq = 0;              // client: 보낸 입력 시퀀스 / host: 보낸 스냅샷 시퀀스
+    this.snapSeq = 0;             // client: 마지막으로 받아들인 스냅샷 시퀀스
+    this._lastSent = null; this._lastSentT = 0;
     this.snaps = [];             // client: 최근 스냅샷 2개
     this.pendingEvents = [];     // host: 다음 스냅샷에 실어 보낼 이벤트
     this.snapAccum = 0;
@@ -292,7 +306,7 @@ class Game {
     container.innerHTML = '';
     const keys = CHARACTER_ORDER.concat(this.hiddenShown ? HIDDEN_ORDER : []);
     // 초상은 실제 리그에서 렌더해 만든다 (캐시되므로 두 번째 호출부터는 즉시 반환)
-    const portraits = buildPortraits(keys);
+    const portraits = buildPortraits(keys, { renderer: this.renderer });
     for (const key of keys) {
       const c = CHARACTERS[key], dsc = DESC[key];
       const card = document.createElement('div');
@@ -647,7 +661,7 @@ class Game {
     this.seats = [0, 1, 2, 3];   // 좌석 → netSlot (방장이 드래그로 바꾼다)
     net.onOpen = (code) => { try { history.replaceState(null, '', `?r=${code}`); } catch (e) {} this.showLobby(code); this.showRoomRules(); this.renderRoster(this.roster); document.getElementById('btn-start').classList.remove('hidden'); this.lobbyMsg('친구에게 코드를 알려주세요. 참가한 사람끼리만 싸웁니다 (2~4명). 시작 버튼으로 시작'); this.broadcastLobby(); };
     net.onError = (e) => this.lobbyMsg('연결 오류: ' + (e.type || e));
-    net.onJoin = (slot) => { this.names[slot] = 'P' + (slot + 1); this.roster[slot] = { type: 'remote', name: this.names[slot] }; this.renderRoster(this.roster); this.broadcastLobby(); if (this.started) this.net.conns[slot - 1].send({ t: 'full' }); };
+    net.onJoin = (slot) => { this.inSeq[slot] = 0; this.netInputs[slot] = new InputState(); this.names[slot] = 'P' + (slot + 1); this.roster[slot] = { type: 'remote', name: this.names[slot] }; this.renderRoster(this.roster); this.broadcastLobby(); if (this.started) this.net.conns[slot - 1].send({ t: 'full' }); };
     net.onLeave = (slot) => {
       this.roster[slot] = { type: 'empty' }; this.renderRoster(this.roster); this.broadcastLobby();
       this.addChat(0, `${this.chatName(slot)} 퇴장`, true); this.net.broadcast({ t: 'chat', sys: true, text: `${this.chatName(slot)} 퇴장` });
@@ -655,7 +669,13 @@ class Game {
       if (this.started) { const f = this.fighters.find((x) => x.netSlot === slot); if (f && !f.ko) f._die(); }
     };
     net.onMessage = (m, slot) => {
-      if (m.t === 'in' && this.netInputs[slot]) this.netInputs[slot].set(m.d[0], m.d[1], m.d[2]);
+      if (m.t === 'in' && this.netInputs[slot]) {
+        // 비순서 채널이라 오래된 입력이 새 입력 뒤에 도착할 수 있다 → 시퀀스가 뒤진 것은 버린다 (키가 '눌린 채 고정' 되던 원인)
+        const q = m.q | 0, last = this.inSeq[slot] | 0;
+        if (q && q <= last && last - q < 100000) return;
+        this.inSeq[slot] = q;
+        this.netInputs[slot].setNet(m.d[0], m.d[1], m.d[2]);
+      }
       else if (m.t === 'chat' && typeof m.text === 'string') { const text = m.text.slice(0, 120); this.addChat(slot, text); this.net.broadcast({ t: 'chat', from: slot, text }); }
       else if (m.t === 'skip') { this.voteSkip(slot); }
       else if (m.t === 'ping') { const c = this.net.conns[slot - 1]; if (c && c.open) { try { c.send({ t: 'pong', t0: m.t0 }); } catch (e) {} } }
@@ -705,10 +725,17 @@ class Game {
 
   joinRoom(code) {
     const net = this.net;
-    net.onOpen = () => { this.showLobby(code); this.showRoomRules(); this.showChat(true); this.lobbyMsg('접속 완료. 방장이 시작할 때까지 대기…'); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); };
+    net.onOpen = () => { this.joinTries = 0; this.showLobby(code); this.showRoomRules(); this.showChat(true); this.lobbyMsg('접속 완료. 방장이 시작할 때까지 대기…'); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); };
     net.onError = (e) => {
       if (e.type === 'closed' && !this.migrating) { if (!this.kicked) this.migrateHost(); return; }
-      if ((e.type === 'peer-unavailable' || e.type === 'closed') && this.migrating) {
+      if (e.type === 'timeout' && !this.migrating) {
+        // 시그널링은 됐는데 P2P 가 안 붙음 (방화벽/NAT). 새 Peer 로 두 번까지 재시도 → 그래도 안 되면 안내
+        this.joinTries = (this.joinTries || 0) + 1;
+        if (this.joinTries <= 2) { this.lobbyMsg(`호스트에 연결이 안 됩니다. 다시 시도 중… (${this.joinTries}/2)`); this.net.close(); this.net = new Net(); this.joinRoom(code); }
+        else { this.joinTries = 0; this.leaveRoom('호스트에 연결하지 못했습니다. 양쪽 모두 Wi-Fi/데이터를 바꿔 보거나 방을 다시 만들어 주세요'); }
+        return;
+      }
+      if ((e.type === 'peer-unavailable' || e.type === 'closed' || e.type === 'timeout') && this.migrating) {
         // 승계 중: 새 방장이 아직 방을 못 열었을 수 있음 → 재시도
         if (this.migrateTimer) return;   // 같은 시도에서 closed + unavailable 둘 다 올 수 있음 → 한 번만
         if (this.migrateTries < 8) { this.migrateTries++; this.lobbyMsg(`새 방장에게 재접속 중… (${this.migrateTries})`); const c = this.net.code; this.net.close(); this.net = new Net(); this.migrateTimer = setTimeout(() => { this.migrateTimer = null; this.joinRoom(c); }, 1500); }
@@ -718,7 +745,7 @@ class Game {
       this.lobbyMsg(e.type === 'peer-unavailable' ? '그 코드의 방이 없습니다' : '연결 오류: ' + (e.type || e));
     };
     net.onMessage = (m) => {
-      if (m.t === 'welcome') { this.migrating = false; this.migrateTries = 0; this.lastSlot = m.slot; this.names = []; this.chars = []; net.send({ t: 'hello', name: this.myNick, char: this.myChar, intro: this.myIntro }); }
+      if (m.t === 'welcome') { this.snapSeq = 0; this.snaps = []; this.playT = null; this.migrating = false; this.migrateTries = 0; this.lastSlot = m.slot; this.names = []; this.chars = []; net.send({ t: 'hello', name: this.myNick, char: this.myChar, intro: this.myIntro }); }
       else if (m.t === 'lobby') { if (m.map) this.myMap = m.map; if (m.rule) this.myRule = m.rule; if (m.seats) this.seats = m.seats; this.showRoomRules(); this.rosterRaw = m.roster; this.names = m.names || []; this.chars = m.chars || []; this.renderRoster(m.roster.map((r, i) => (i === net.mySlot ? { type: 'local', name: r.name } : i === 0 ? { type: 'remote', name: r.name } : r))); }
       else if (m.t === 'full') this.lobbyMsg('방이 가득 찼거나 이미 시작됨');
       else if (m.t === 'start') { this.setMap(m.map || 'ring'); this.names = []; m.cfg.forEach((c) => { this.names[c.netSlot] = c.name; }); this.localSlot = Math.max(0, m.cfg.findIndex((c) => c.netSlot === net.mySlot)); this.startMatch('client', m.cfg); }
@@ -1325,7 +1352,7 @@ class Game {
     } else if (this.phase === 'countdown') {
       this.updateCountdown(rawDt);
     } else if (this.mode === 'client') {
-      this.net.send({ t: 'in', d: this.localInput.pack() });
+      this.sendInput();
       this.predictInput(input);
       this.pingT = (this.pingT || 0) + rawDt;
       if (this.pingT > 1) { this.pingT = 0; this.net.send({ t: 'ping', t0: performance.now() }); }
@@ -1334,9 +1361,10 @@ class Game {
       this.simulate(rawDt);
       if (this.mode === 'host') {
         this.snapAccum += rawDt;
-        if (this.snapAccum >= 1 / SNAP_HZ) {
-          this.snapAccum = 0;
-          this.net.broadcast({ t: 'snap', ts: this.realTime, f: this.fighters.map((f) => f.snapshot()), ev: this.pendingEvents });
+        if (this.snapAccum >= 1 / SNAP_HZ - 0.002) {
+          // 남은 누적을 이월해 평균 주기를 정확히 SNAP_HZ 로 맞춘다 (렉 스파이크 뒤 폭주는 한 주기로 제한)
+          this.snapAccum = Math.min(this.snapAccum - 1 / SNAP_HZ, 1 / SNAP_HZ);
+          this.net.broadcast({ t: 'snap', q: ++this.outSeq, ts: this.realTime, f: this.fighters.map((f) => f.snapshot()), ev: this.pendingEvents });
           this.pendingEvents = [];
         }
       }
@@ -1508,6 +1536,9 @@ class Game {
 
   // ================= 클라이언트 =================
   onSnapshot(m) {
+    // 비순서 채널: 늦게 도착한 옛 스냅샷은 버린다 (보간 구간이 뒤로 튀어 캐릭터가 떨리던 원인)
+    if (m.q) { if (m.q <= this.snapSeq && this.snapSeq - m.q < 100000) return; this.snapSeq = m.q; }
+    else if (this.snaps.length && (m.ts || 0) * 1000 <= this.snaps[this.snaps.length - 1].ts) return;
     const now = performance.now();
     // 도착 간격의 흔들림(지터)을 추적해 재생 지연을 필요한 만큼만 잡는다
     if (this._lastRecv) {
@@ -1618,6 +1649,20 @@ class Game {
     for (const f of this.fighters) f.target = f.targetSlot >= 0 ? this.fighters[f.targetSlot] : null;
     this.netBufMs = latest.ts - this.playT;
     this.predictLocal(rawDt);
+  }
+
+  /**
+   * 게스트 → 호스트 입력 전송. 바뀐 프레임엔 즉시, 그 외엔 50ms 마다 키프레임(손실 대비).
+   * 120Hz 화면에서 매 프레임 보내던 것을 줄여 채널 혼잡(=지연)을 낮추고, 시퀀스로 순서 역전을 막는다.
+   */
+  sendInput() {
+    const d = this.localInput.pack();
+    const nowMs = performance.now();
+    const last = this._lastSent;
+    const changed = !last || last[0] !== d[0] || last[1] !== d[1] || last[2] !== d[2];
+    if (!changed && nowMs - this._lastSentT < 50) return;
+    this._lastSent = d; this._lastSentT = nowMs;
+    this.net.send({ t: 'in', q: ++this.outSeq, d });
   }
 
   /** 버튼 입력을 받은 그 프레임에 내 캐릭터 동작을 먼저 그려 준다 (호스트 확인 전) */
