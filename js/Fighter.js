@@ -239,6 +239,8 @@ export class Fighter {
   }
 
   updateVisualFx(rawDt) {
+    const blink = ((this.rtime + this.slot * .73) % 3.9) > 3.81;
+    this.rig.setExpression(this.flash > .45 || this.stagger > .12 ? 'hurt' : blink ? 'blink' : 'focused');
     for (const side of ['L', 'R']) {
       const g = side === 'L' ? this.rig.gloveL : this.rig.gloveR;
       const k = this.squash[side];

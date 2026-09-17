@@ -94,10 +94,10 @@ export class PostFX {
     this.damp = 0;
 
     const size = renderer.getDrawingBufferSize(new THREE.Vector2());
-    const opts = { type: THREE.HalfFloatType, depthBuffer: true, stencilBuffer: false };
+    const opts = { type: THREE.HalfFloatType, depthBuffer: true, stencilBuffer: true };
     this.rtScene = new THREE.WebGLRenderTarget(size.x, size.y, opts);
-    this.rtA = new THREE.WebGLRenderTarget(size.x, size.y, { ...opts, depthBuffer: false });
-    this.rtB = new THREE.WebGLRenderTarget(size.x, size.y, { ...opts, depthBuffer: false });
+    this.rtA = new THREE.WebGLRenderTarget(size.x, size.y, { ...opts, depthBuffer: false, stencilBuffer: false });
+    this.rtB = new THREE.WebGLRenderTarget(size.x, size.y, { ...opts, depthBuffer: false, stencilBuffer: false });
     for (const rt of [this.rtScene, this.rtA, this.rtB]) {
       rt.texture.minFilter = THREE.LinearFilter;
       rt.texture.magFilter = THREE.LinearFilter;
@@ -145,8 +145,8 @@ export class PostFX {
   }
 
   onHit(power, cx, cy) {
-    this.hitRadial = 0.12 + 0.18 * power;
-    this.hitDamp = 0.6;
+    this.hitRadial = 0.012 + 0.018 * Math.min(1.5, power);
+    this.hitDamp = 0;
     this.compositeMat.uniforms.center.value.set(cx, cy);
   }
 
@@ -169,7 +169,7 @@ export class PostFX {
     u.samplesMix.value = this.quality > 1 ? 1 : 0;
 
     const damp = (s.dempseyActive ? 0.1 + 0.25 * I : 0) + (s.maxSpeed ? 0.05 : 0);
-    this.damp = this.quality > 0 ? Math.min(0.7, Math.max(damp, this.hitDamp)) : 0;
+    this.damp = 0; // Historical rig silhouettes provide motion without smearing colored frames.
   }
 
   /** 씬 렌더 + 합성. EffectComposer 없이 직접 돌린다 */

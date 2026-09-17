@@ -7,12 +7,12 @@ export const clamp01 = (t) => Math.max(0, Math.min(1, t));
 
 // 팔 키프레임 (왼팔 기준, 오른팔은 y/z 부호 반전)
 const HOOK_WIND   = { x: -0.25, y: 0.95, z: 1.25, el: -1.9 };
-const HOOK_STRIKE = { x: -0.25, y: -1.6, z: 1.5, el: -0.35 };
+const HOOK_STRIKE = { x: -0.25, y: -1.6, z: 1.25, el: -1.12 };
 const STR_WIND    = { x: -0.55, y: -0.15, z: 0.12, el: -2.45 };
-const STR_STRIKE  = { x: -1.62, y: -0.15, z: 0.02, el: -0.06 };
+const STR_STRIKE  = { x: -1.62, y: -0.15, z: 0.02, el: -0.16 };
 // 플리커 잽: 축 늘어진 팔을 채찍처럼 아래에서 위로 후려친다
 const FLK_WIND    = { x: 0.35, y: -0.1, z: 0.35, el: -0.35 };
-const FLK_STRIKE  = { x: -1.5, y: -0.2, z: 0.2, el: -0.05 };
+const FLK_STRIKE  = { x: -1.5, y: -0.2, z: 0.2, el: -0.14 };
 
 /** 점 p 와 선분 ab 사이 거리 (몸통 캡슐 판정용) */
 export function pointSegmentDist(p, a, b) {

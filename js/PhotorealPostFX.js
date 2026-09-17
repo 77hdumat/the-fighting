@@ -12,7 +12,7 @@ class PhotorealPostFX {
     this.renderer = renderer; this.scene = scene; this.camera = camera; this.P = P;
     this.delta = 0; this.hit = 0; this.cut = false;
     try {
-      this.composer = new P.EffectComposer(renderer, { frameBufferType: THREE.HalfFloatType, multisampling: 0 });
+      this.composer = new P.EffectComposer(renderer, { frameBufferType: THREE.HalfFloatType, multisampling: 0, stencilBuffer: true });
       this.composer.addPass(new P.RenderPass(scene, camera));
       this.ao = new A.N8AOPostPass(scene, camera, innerWidth, innerHeight);
       this.ao.configuration.gammaCorrection = false;

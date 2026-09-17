@@ -2,6 +2,17 @@
 // 화이트 플래시, 히트스톱 만화 임팩트 프레임, 의성어 텍스트, MAX SPEED 비네트
 const SFX_WORDS = ['ドゴォ', 'バキィ', 'ゴッ', 'ドンッ', 'ズガッ', 'バァン'];
 
+// 임팩트 팔레트 (만화 폭발). ring: 바깥/안쪽 링, spikes: 스파이크 교대색, word: 의성어 채움, flash: 화면 플래시
+// 'rainbow' 는 스파이크마다 색상환을 돌린다 (카운터·필살).
+const PALETTES = {
+  hit:     { ring: ['255,255,255', '255,150,30'], spikes: ['255,232,60', '255,140,30', '255,255,255'], word: '255,228,60', flash: '255,240,190' },
+  heavy:   { ring: ['255,240,120', '255,90,30'],  spikes: ['255,210,40', '255,70,40', '255,255,255'],  word: '255,210,40', flash: '255,225,150' },
+  counter: { ring: ['255,255,255', '255,50,120'], spikes: 'rainbow', word: '255,80,150', flash: '255,190,220' },
+  finisher:{ ring: ['255,255,255', '255,40,80'],  spikes: 'rainbow', word: '255,240,90', flash: '255,255,255' },
+  blue:    { ring: ['140,200,255', '80,150,255'], spikes: ['120,200,255', '80,140,255', '255,255,255'], word: '150,210,255', flash: '150,200,255' },
+  pink:    { ring: ['255,200,240', '255,120,200'],spikes: ['255,120,200', '255,200,240', '255,255,255'], word: '255,140,210', flash: '255,210,240' },
+};
+
 export class FxOverlay {
   constructor(canvas) {
     this.c = canvas;
@@ -16,6 +27,8 @@ export class FxOverlay {
     this.carry = 0;
     this.carry2 = 0;
     this.t = 0;
+    this.impactImage = new Image();
+    this.impactImage.src = 'assets/effects/boxing-impact-v2.png';
     this.resize();
   }
 
@@ -24,14 +37,23 @@ export class FxOverlay {
     this.h = this.c.height = window.innerHeight;
   }
 
+  /**
+   * @param tint 팔레트 이름 ('hit'|'heavy'|'counter'|'finisher'|'blue'|'pink'). 생략 시 power 로 hit/heavy 자동.
+   *             (옛 호출 호환: [r,g,b] 배열은 pink 로)
+   */
   addImpact(x, y, power, maxSpeed, tint = null) {
-    this.impacts.push({ tint,
+    const name = Array.isArray(tint) ? 'pink' : (tint && PALETTES[tint] ? tint : (power >= 0.9 ? 'heavy' : 'hit'));
+    const pal = PALETTES[name];
+    // 만화식 폭발 실루엣: 꼭짓점마다 반지름이 들쭉날쭉한 별 모양
+    const star = []; for (let i = 0; i < 14; i++) star.push(0.55 + Math.random() * 0.45);
+    this.impacts.push({ pal, star,
       x, y, power, age: 0, rot: Math.random() * Math.PI * 2,
       word: SFX_WORDS[Math.floor(Math.random() * SFX_WORDS.length)],
       wordRot: (Math.random() - 0.5) * 0.5, maxSpeed,
     });
-    this.flash = Math.max(this.flash, 0.3 + 0.5 * power);
-    this.flashRGB = '255,255,255';
+    if (this.impacts.length > 6) this.impacts.shift();
+    this.flash = Math.max(this.flash, .025 + .035 * Math.min(1, power));
+    this.flashRGB = pal.flash;
   }
 
   /** 화면 위치에 짧은 텍스트 팝업 (예: 피함!) */
@@ -152,55 +174,22 @@ export class FxOverlay {
       ctx.restore();
     }
 
-    // ---- 임팩트 링 / 버스트 / 의성어 ----
+    // Compact contact flash. Depth-correct white contact sprite is rendered by HitSparks;
+    // this screen layer keeps only a brief, low-opacity accent without a huge ring or text.
     for (let i = this.impacts.length - 1; i >= 0; i--) {
-      const im = this.impacts[i];
-      im.age += dt;
-      const T = 0.42;
-      if (im.age > T) { this.impacts.splice(i, 1); continue; }
-      const k = im.age / T;
-      const e = 1 - Math.pow(1 - k, 3);
-      const P = im.power;
-      // 링
-      const rad = Math.max(1, 30 + (220 + 200 * P) * e);
-      ctx.lineWidth = Math.max(0.5, (18 + 10 * P) * (1 - k));
-      const c1 = im.tint === 'blue' ? '140,200,255' : '255,255,255', c2 = im.tint === 'blue' ? '80,150,255' : '255,170,60';
-      ctx.strokeStyle = `rgba(${c1},${(1 - k) * 0.95})`;
-      ctx.beginPath(); ctx.arc(im.x, im.y, rad, 0, Math.PI * 2); ctx.stroke();
-      ctx.lineWidth = Math.max(0.5, 6 * (1 - k));
-      ctx.strokeStyle = `rgba(${c2},${(1 - k) * 0.9})`;
-      ctx.beginPath(); ctx.arc(im.x, im.y, rad * 0.72, 0, Math.PI * 2); ctx.stroke();
-      // 버스트 스파이크
-      const spikes = 14;
-      for (let j = 0; j < spikes; j++) {
-        const ang = im.rot + (j / spikes) * Math.PI * 2;
-        const L = (130 + 260 * P) * e * (0.6 + 0.4 * Math.abs(Math.sin(j * 2.7)));
-        const wdt = (14 + 10 * P) * (1 - k);
-        ctx.fillStyle = j % 3 === 0 ? `rgba(${c2},${(1 - k)})` : `rgba(${c1},${(1 - k)})`;
-        ctx.beginPath();
-        ctx.moveTo(im.x + Math.cos(ang) * 20, im.y + Math.sin(ang) * 20);
-        ctx.lineTo(im.x + Math.cos(ang + 0.06) * (20 + wdt), im.y + Math.sin(ang + 0.06) * (20 + wdt));
-        ctx.lineTo(im.x + Math.cos(ang) * (20 + L), im.y + Math.sin(ang) * (20 + L));
-        ctx.lineTo(im.x + Math.cos(ang - 0.06) * (20 + wdt), im.y + Math.sin(ang - 0.06) * (20 + wdt));
-        ctx.closePath(); ctx.fill();
+      const im = this.impacts[i]; im.age += dt;
+      const duration = .12;
+      if (im.age >= duration) { this.impacts.splice(i, 1); continue; }
+      const k = im.age / duration;
+      const radius = Math.min(w,h) * (.018 + .012 * Math.min(1.5,im.power));
+      ctx.save();ctx.translate(im.x, im.y);ctx.rotate(im.wordRot * .4);
+      ctx.globalAlpha = .22 * Math.pow(1-k,2);
+      if (this.impactImage.complete && this.impactImage.naturalWidth) {
+        ctx.drawImage(this.impactImage, -radius, -radius*.50, radius*2, radius);
+      } else {
+        ctx.fillStyle = '#fff';ctx.beginPath();ctx.ellipse(0,0,radius*.4,radius*.10,0,0,Math.PI*2);ctx.fill();
       }
-      // 의성어
-      if (im.age < 0.4) {
-        const pop = k < 0.2 ? 1.6 - 3 * k : 1;
-        const size = (60 + 60 * P) * pop;
-        ctx.save();
-        ctx.translate(im.x + 60, im.y - 50);
-        ctx.rotate(im.wordRot);
-        ctx.font = `900 ${size}px "Noto Sans JP", "Hiragino Sans", sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.lineJoin = 'round';
-        ctx.lineWidth = 12;
-        ctx.strokeStyle = `rgba(0,0,0,${1 - k * 0.8})`;
-        ctx.strokeText(im.word, 0, 0);
-        ctx.fillStyle = im.maxSpeed ? `rgba(255,220,80,${1 - k * 0.8})` : `rgba(255,255,255,${1 - k * 0.8})`;
-        ctx.fillText(im.word, 0, 0);
-        ctx.restore();
-      }
+      ctx.restore();
     }
 
     // ---- 텍스트 팝업 ----
@@ -233,9 +222,9 @@ export class FxOverlay {
 
     // ---- 화이트 플래시 ----
     if (this.flash > 0.01) {
-      ctx.fillStyle = `rgba(${this.flashRGB},${Math.min(1, this.flash)})`;
+      ctx.fillStyle = `rgba(${this.flashRGB},${Math.min(.12, this.flash)})`;
       ctx.fillRect(0, 0, w, h);
-      this.flash *= Math.exp(-dt * 16);
+      this.flash *= Math.exp(-dt * 30);
     }
   }
 }

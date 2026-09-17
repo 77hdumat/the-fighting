@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta name="build-id" content="1789608020">
+<meta name="build-id" content="1789611379">
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -539,7 +539,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   }
 }
 </script>
-<script>window.__BUILD_ID = "1789608020";</script>
+<script>window.__BUILD_ID = "1789611379";</script>
 </head>
 <body>
   <canvas id="gl" tabindex="0"></canvas>
@@ -774,10 +774,103 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   </script>
   <script type="module">
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 const __M = {};
+// ===== Anatomy.js =====
+__M.Anatomy = (() => {
+// Continuous anatomical surfaces. Profiles interpolate smoothly instead of stacking primitives.
+const bell = (x,c,w) => Math.exp(-(((x-c)/w)**2));
+function loft(profile, rings=40, sides=32, shape=null) {
+  const points=[], uv=[], indices=[];
+  for(let i=0;i<=rings;i++){
+    const t=i/rings, q=t*(profile.length-1), k=Math.min(profile.length-2,Math.floor(q));
+    const a=profile[k],b=profile[k+1],f=q-k,s=f*f*(3-2*f);
+    const y=a[0]+(b[0]-a[0])*f,rx=a[1]+(b[1]-a[1])*s,rz=a[2]+(b[2]-a[2])*s;
+    for(let j=0;j<=sides;j++){
+      const angle=j/sides*Math.PI*2;let x=Math.sin(angle)*rx,z=Math.cos(angle)*rz;
+      if(shape){const p=shape(x,y,z,t,angle);x=p[0];z=p[1];}
+      points.push(x,y,z);uv.push(j/sides,t);
+      if(i<rings&&j<sides){const n=i*(sides+1)+j;if(profile[0][0] < profile.at(-1)[0]) indices.push(n,n+1,n+sides+1,n+1,n+sides+2,n+sides+1); else indices.push(n,n+sides+1,n+1,n+1,n+sides+1,n+sides+2);}
+    }
+  }
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(points,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(indices);g.computeVertexNormals();return g;
+}
+function torsoGeometry(P,def){
+  const w=P.torsoW,d=P.torsoD,m=def.bodyColor?0:P.muscle;
+  return loft([[.015,.12*w,.095*d],[.08,.165*w,.12*d],[.20,.17*w,.125*d],[.32,.215*w,.145*d],[.43,.247*w,.142*d],[.50,.232*w,.12*d],[.55,.16*w,.085*d],[.59,.066*w,.060*d]],48,40,(x,y,z,t,a)=>{
+    const front=Math.max(0,Math.cos(a))**3;
+    const pec=(bell(x,.105*w,.08*w)+bell(x,-.105*w,.08*w))*bell(y,.415,.062)*.023;
+    let abs=0;for(const row of [.14,.22,.29])abs+=(bell(x,.052*w,.044*w)+bell(x,-.052*w,.044*w))*bell(y,row,.040)*.006;
+    const clavicle=bell(y,.50,.018)*bell(Math.abs(x),.13*w,.09*w)*.007;
+    const belly=def.belly?bell(y,.20,.15)*.072:0;
+    return [x,z+front*(m*(pec+abs+clavicle)+belly)];
+  });
+}
+function sculptHead(g,P,def={}){
+  const p=g.attributes.position,R=.17*P.headS;
+  for(let i=0;i<p.count;i++){
+    const x=p.getX(i),y=p.getY(i),z=p.getZ(i),v=y/R;
+    const jaw=1-(def.gender === 'f' ? .29 : P.headY > 1.1 ? .28 : .21)*THREE.MathUtils.smoothstep(-v,.1,.95);
+    const front=Math.max(0,z/R);
+    const bridge=bell(x,0,.020*P.headS)*bell(v,-.12,.22)*.017*P.headS;
+    const socket=(bell(x,.061*P.headS,.028*P.headS)+bell(x,-.061*P.headS,.028*P.headS))*bell(v,.16,.13)*.007*P.headS;
+    p.setXYZ(i,x*jaw,y,z*.91+front*(bell(v,-.10,.45)*.010*P.headS+bridge-socket));
+  }
+  g.computeVertexNormals();return g;
+}
+function hairLock(radius,length,sweep=.045){
+  return loft([[-length*.5,radius*.70,radius*.50],[-length*.25,radius,radius*.58],[length*.10,radius*.82,radius*.42],[length*.32,radius*.42,radius*.24],[length*.5,.001,.001]],18,12,(x,y,z,t)=>[x+sweep*t*t,z-.025*t*t]);
+}
+function limbGeometry(length,radius,leg=false,simple=false){
+  const l=length,r=radius;
+  const profile=leg?[[.025,.01,.01],[0,r*.9,r*.86],[-l*.25,r*1.12,r],[-l*.65,r*.87,r*.85],[-l,r*.70,r*.72],[-l*1.28,r*.83,r*.90],[-l*1.60,r*.66,r*.70],[-l*1.95,r*.42,r*.45],[-l*2.02,.01,.01]]:
+    [[.068,.012,.012],[.025,r*1.13,r*.96],[-l*.15,r*1.19,r*1.04],[-l*.45,r*.96,r*1.02],[-l*.80,r*.68,r*.77],[-l,r*.62,r*.65],[-l*1.22,r*.89,r*.82],[-l*1.56,r*.70,r*.67],[-l*1.90,r*.46,r*.48],[-l*2.02,.006,.006]];
+  const g=loft(profile,simple?28:48,simple?16:24);const ids=[],weights=[];
+  for(let i=0;i<g.attributes.position.count;i++){
+    const u=-g.attributes.position.getY(i)/l;
+    // A third bone follows the joint bisector; its ring retains elbow/knee volume in a deep guard.
+    const h=THREE.MathUtils.smoothstep(u,.76,1.0),k=THREE.MathUtils.smoothstep(u,1.0,1.24);
+    ids.push(0,1,2,0);weights.push(1-h,h*(1-k),k,0);
+  }
+  g.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(ids,4));g.setAttribute('skinWeight',new THREE.Float32BufferAttribute(weights,4));return g;
+}
+function skinInk() {
+  const ink = new THREE.MeshBasicMaterial({color:0x30201b,side:THREE.BackSide});
+  ink.userData.thickness = {value:.0035};
+  ink.onBeforeCompile = shader => {
+    shader.uniforms.inkThickness = ink.userData.thickness;
+    shader.vertexShader = 'uniform float inkThickness;\n' + shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\ntransformed += normal * inkThickness;');
+  };
+  ink.customProgramCacheKey = () => 'anatomy-silhouette-v1';
+  return ink;
+}
+function attachLimb(parent,joint,geometry,material,outlineMaterial){
+  const upper=new THREE.Bone(),middle=new THREE.Bone(),lower=new THREE.Bone();
+  parent.add(upper,middle);joint.add(lower);middle.position.copy(joint.position);
+  const skeleton=new THREE.Skeleton([upper,middle,lower]);
+  const mesh=new THREE.SkinnedMesh(geometry,material);parent.add(mesh);parent.updateWorldMatrix(true,true);mesh.bind(skeleton);mesh.frustumCulled=false;mesh.castShadow=!material.transparent;mesh.receiveShadow=false;
+  let ink = null;
+  if(outlineMaterial){
+    ink=skinInk();
+    const shell=new THREE.SkinnedMesh(geometry,ink);parent.add(shell);shell.bind(skeleton,mesh.bindMatrix);shell.frustumCulled=false;
+  }
+  return {mesh,middle,joint,ink};
+}
+function attachTorso(waist,chest,geometry,material,outline){
+  const lower=new THREE.Bone(),upper=new THREE.Bone();waist.add(lower);chest.add(upper);
+  const ids=[],weights=[];
+  for(let i=0;i<geometry.attributes.position.count;i++){
+    const w=THREE.MathUtils.smoothstep(geometry.attributes.position.getY(i),.25,.53);ids.push(0,1,0,0);weights.push(1-w,w,0,0);
+  }
+  geometry.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(ids,4));geometry.setAttribute('skinWeight',new THREE.Float32BufferAttribute(weights,4));
+  const mesh=new THREE.SkinnedMesh(geometry,material);waist.add(mesh);waist.updateWorldMatrix(true,true);const skeleton=new THREE.Skeleton([lower,upper]);mesh.bind(skeleton);mesh.frustumCulled=false;mesh.castShadow=!material.transparent;
+  if(outline){const ink=skinInk();const shell=new THREE.SkinnedMesh(geometry,ink);waist.add(shell);shell.bind(skeleton,mesh.bindMatrix);shell.frustumCulled=false;mesh.userData.ink=ink;}
+  return mesh;
+}
+return { loft, torsoGeometry, sculptHead, hairLock, limbGeometry, attachLimb, attachTorso };
+})();
 // ===== Net.js =====
 __M.Net = (() => {
 // Net.js — PeerJS 방코드 매칭 (호스트 권위 스타형). 전역 `Peer` (peerjs UMD) 사용.
@@ -981,9 +1074,10 @@ const _side = new THREE.Vector3();
 const _camDir = new THREE.Vector3();
 
 class Ribbon {
-  constructor(scene, { maxPoints = 24, width = 0.16, color = 0xffffff, coreColor = 0xffffff, opacity = 1 } = {}) {
+  constructor(scene, { maxPoints = 12, width = 0.045, color = 0xffffff, coreColor = 0xffffff, opacity = 1 } = {}) {
+    maxPoints = Math.min(12, maxPoints);
     this.maxPoints = maxPoints;
-    this.width = width;
+    this.width = Math.min(.055, width);
     this.points = [];
     for (let i = 0; i < maxPoints; i++) this.points.push(new THREE.Vector3());
     this.len = 0;
@@ -1006,7 +1100,7 @@ class Ribbon {
     this.mat = new THREE.ShaderMaterial({
       uniforms: { color: { value: new THREE.Color(color) }, coreColor: { value: new THREE.Color(coreColor) }, opacity: { value: opacity } },
       vertexShader: VERT, fragmentShader: FRAG,
-      transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+      transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.NormalBlending, toneMapped: false,
     });
     this.mesh = new THREE.Mesh(geo, this.mat);
     this.mesh.frustumCulled = false;
@@ -1023,10 +1117,11 @@ class Ribbon {
   }
 
   clear() { this.len = 0; }
+  setColor(hex) { const u = this.mat.uniforms.color.value; if (u.getHex() !== hex) u.set(hex); }
 
   update(dt, camera, active) {
     this.targetStrength = active ? 1 : 0;
-    this.strength += (this.targetStrength - this.strength) * Math.min(1, dt * (active ? 20 : 8));
+    this.strength += (this.targetStrength - this.strength) * Math.min(1, dt * (active ? 30 : 28));
     if (this.strength < 0.02 || this.len < 2) { this.mesh.visible = false; return; }
     this.mesh.visible = true;
     camera.getWorldDirection(_camDir);
@@ -1040,11 +1135,11 @@ class Ribbon {
       if (_tan.lengthSq() < 1e-8) _tan.set(0, 1, 0);
       _side.crossVectors(_tan, _camDir).normalize();
       const f = 1 - k / (n - 1);
-      const w = this.width * (0.25 + 0.75 * f);
+      const w = this.width * Math.sin(Math.PI * (.08 + .84 * f));
       const o = i * 6;
       this.pos[o] = p.x - _side.x * w; this.pos[o + 1] = p.y - _side.y * w; this.pos[o + 2] = p.z - _side.z * w;
       this.pos[o + 3] = p.x + _side.x * w; this.pos[o + 4] = p.y + _side.y * w; this.pos[o + 5] = p.z + _side.z * w;
-      const a = Math.pow(f, 1.4) * this.strength * (i < n ? 1 : 0);
+      const a = .42 * Math.pow(f, 1.8) * this.strength * (i < n ? 1 : 0);
       this.alpha[i * 2] = a; this.alpha[i * 2 + 1] = a;
     }
     this.geo.attributes.position.needsUpdate = true;
@@ -1258,12 +1353,12 @@ const clamp01 = (t) => Math.max(0, Math.min(1, t));
 
 // 팔 키프레임 (왼팔 기준, 오른팔은 y/z 부호 반전)
 const HOOK_WIND   = { x: -0.25, y: 0.95, z: 1.25, el: -1.9 };
-const HOOK_STRIKE = { x: -0.25, y: -1.6, z: 1.5, el: -0.35 };
+const HOOK_STRIKE = { x: -0.25, y: -1.6, z: 1.25, el: -1.12 };
 const STR_WIND    = { x: -0.55, y: -0.15, z: 0.12, el: -2.45 };
-const STR_STRIKE  = { x: -1.62, y: -0.15, z: 0.02, el: -0.06 };
+const STR_STRIKE  = { x: -1.62, y: -0.15, z: 0.02, el: -0.16 };
 // 플리커 잽: 축 늘어진 팔을 채찍처럼 아래에서 위로 후려친다
 const FLK_WIND    = { x: 0.35, y: -0.1, z: 0.35, el: -0.35 };
-const FLK_STRIKE  = { x: -1.5, y: -0.2, z: 0.2, el: -0.05 };
+const FLK_STRIKE  = { x: -1.5, y: -0.2, z: 0.2, el: -0.14 };
 
 /** 점 p 와 선분 ab 사이 거리 (몸통 캡슐 판정용) */
 function pointSegmentDist(p, a, b) {
@@ -1390,7 +1485,7 @@ return { easeOutQuad, easeOutCubic, easeInOut, clamp01, pointSegmentDist, segSeg
 __M.HitSparks = (() => {
 // HitSparks.js — 타격 지점 3D 파티클 (땀방울/스파크). additive Points, 중력, 수명 페이드
 
-const MAX = 400;
+const MAX = 160;
 class HitSparks {
   constructor(scene) {
     const geo = new THREE.BufferGeometry();
@@ -1398,6 +1493,7 @@ class HitSparks {
     this.col = new Float32Array(MAX * 3);
     this.size = new Float32Array(MAX);
     this.vel = new Float32Array(MAX * 3);
+    this.baseSize = new Float32Array(MAX);
     this.life = new Float32Array(MAX);
     this.maxLife = new Float32Array(MAX);
     geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
@@ -1421,11 +1517,23 @@ class HitSparks {
       fragmentShader: /* glsl */`
         uniform sampler2D map; varying vec3 vC; varying float vA;
         void main() { vec4 t = texture2D(map, gl_PointCoord); gl_FragColor = vec4(vC * t.rgb, t.a * vA); }`,
-      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      transparent: true, depthWrite: false, blending: THREE.NormalBlending, toneMapped: false,
     });
     this.points = new THREE.Points(geo, this.mat);
     this.points.frustumCulled = false;
     scene.add(this.points);
+    // Shared generated alpha sprite, six pooled flashes, tested against opaque world depth.
+    const impactTexture = new THREE.TextureLoader().load('assets/effects/boxing-impact-v2.png');
+    impactTexture.colorSpace = THREE.SRGBColorSpace;
+    this.flashes = Array.from({length:6},()=>{
+      const material = new THREE.SpriteMaterial({map:impactTexture,color:0xffffff,transparent:true,opacity:0,depthTest:true,depthWrite:false,toneMapped:false});
+      const sprite = new THREE.Sprite(material);sprite.visible=false;sprite.renderOrder=30;scene.add(sprite);return {sprite,life:0};
+    });
+    this.flashHead=0;
+    const streakGeo=new THREE.BufferGeometry();this.streakPositions=new Float32Array(MAX*6);this.streakAlpha=new Float32Array(MAX*2);
+    streakGeo.setAttribute('position',new THREE.BufferAttribute(this.streakPositions,3));streakGeo.setAttribute('alpha',new THREE.BufferAttribute(this.streakAlpha,1));
+    this.streaks=new THREE.LineSegments(streakGeo,new THREE.ShaderMaterial({vertexShader:'attribute float alpha; varying float a; void main(){a=alpha;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',fragmentShader:'varying float a;void main(){gl_FragColor=vec4(1.,1.,1.,a);}',transparent:true,depthWrite:false,depthTest:true}));
+    this.streaks.frustumCulled=false;scene.add(this.streaks);
     this.head = 0;
     this.tmp = new THREE.Vector3();
   }
@@ -1438,7 +1546,11 @@ class HitSparks {
    * @param speed 초기 속도 배율
    */
   burst(pos, dir, n = 20, color = new THREE.Color(1, 1, 1), speed = 1, size = 0.5) {
+    if(n>=6){const f=this.flashes[this.flashHead++%this.flashes.length];f.life=.10;f.sprite.visible=true;f.sprite.position.copy(pos).addScaledVector(dir,.025);f.sprite.scale.set(.20+Math.min(size,.6)*.15,.10+Math.min(size,.6)*.08,1);f.sprite.material.opacity=.70;}
+    n=Math.min(14,n);
+    const colors = null;   // 배열이면 입자마다 랜덤 색 (만화 색종이 스파크)
     for (let k = 0; k < n; k++) {
+      if (colors) color = colors[Math.floor(Math.random() * colors.length)];
       const i = this.head; this.head = (this.head + 1) % MAX;
       const o = i * 3;
       this.pos[o] = pos.x; this.pos[o + 1] = pos.y; this.pos[o + 2] = pos.z;
@@ -1448,25 +1560,29 @@ class HitSparks {
       this.vel[o] = (dir.x * 0.8 + rx * 1.4) * sp;
       this.vel[o + 1] = (0.6 + ry * 1.6) * sp;
       this.vel[o + 2] = (dir.z * 0.8 + rz * 1.4) * sp;
-      const c = color.clone().offsetHSL(0, 0, (Math.random() - 0.5) * 0.2);
+      const c = new THREE.Color(0xffffff);
       this.col[o] = c.r; this.col[o + 1] = c.g; this.col[o + 2] = c.b;
-      this.maxLife[i] = this.life[i] = 0.25 + Math.random() * 0.35;
-      this.size[i] = size * (0.6 + Math.random() * 0.8);
+      this.maxLife[i] = this.life[i] = 0.08 + Math.random() * 0.10;
+      this.baseSize[i] = this.size[i] = Math.min(.16, size*.3) * (.6 + Math.random()*.4);
     }
   }
 
   update(dt) {
+    for(const f of this.flashes){f.life=Math.max(0,f.life-dt);f.sprite.visible=f.life>0;f.sprite.material.opacity=.70*(f.life/.10)**2;}
     for (let i = 0; i < MAX; i++) {
-      if (this.life[i] <= 0) { this.size[i] = 0; continue; }
+      if (this.life[i] <= 0) { this.size[i] = 0; this.streakAlpha[i*2]=this.streakAlpha[i*2+1]=0; continue; }
       this.life[i] -= dt;
       const o = i * 3;
       this.vel[o + 1] -= 9.8 * dt;
       this.pos[o] += this.vel[o] * dt; this.pos[o + 1] += this.vel[o + 1] * dt; this.pos[o + 2] += this.vel[o + 2] * dt;
       if (this.pos[o + 1] < 0.01) { this.pos[o + 1] = 0.01; this.vel[o + 1] *= -0.3; this.vel[o] *= 0.7; this.vel[o + 2] *= 0.7; }
       const k = Math.max(0, this.life[i] / this.maxLife[i]);
-      this.size[i] = Math.min(this.size[i], 1) * (0.3 + 0.7 * k) + (k < 1 ? 0 : 0);
+      this.size[i] = this.baseSize[i] * k;
+      for(let axis=0;axis<3;axis++){this.streakPositions[i*6+axis]=this.pos[o+axis];this.streakPositions[i*6+3+axis]=this.pos[o+axis]-this.vel[o+axis]*.025*k;}
+      this.streakAlpha[i*2]=k*.40;this.streakAlpha[i*2+1]=0;
       if (this.life[i] <= 0) this.size[i] = 0;
     }
+    this.streaks.geometry.attributes.position.needsUpdate=true;this.streaks.geometry.attributes.alpha.needsUpdate=true;
     const g = this.points.geometry;
     g.attributes.position.needsUpdate = true;
     g.attributes.color.needsUpdate = true;
@@ -1993,173 +2109,19 @@ class UltimateFx {
 }
 return { UltimateFx };
 })();
-// ===== RenderSettings.js =====
-__M.RenderSettings = (() => {
-// The measured-performance gate keeps the existing renderer as the release default.
-const PHOTOREAL = new URLSearchParams(globalThis.location?.search || '').get('photoreal') === '1';
-const PRESETS = Object.freeze({
-  low: { shadows: 1024, ao: 'Low', bloom: false, dof: false, fx: 0 },
-  medium: { shadows: 1024, ao: 'Medium', bloom: true, dof: false, fx: 1 },
-  high: { shadows: 2048, ao: 'High', bloom: true, dof: true, fx: 2 },
-  ultra: { shadows: 2048, ao: 'Ultra', bloom: true, dof: true, fx: 2 },
-});
-
-function initialPreset(device = globalThis.navigator || {}) {
-  if (device.maxTouchPoints > 1 || (device.deviceMemory && device.deviceMemory <= 4)) return 'low';
-  return device.hardwareConcurrency >= 8 ? 'high' : 'medium';
-}
-
-// Frame intervals are not clamped simulation dt. Windows exclude tab suspension.
-class ResolutionGovernor {
-  constructor(onChange, { allow30fps = false, onFrameRate = () => {} } = {}) {
-    this.onChange = onChange;
-    this.allow30fps = allow30fps; this.onFrameRate = onFrameRate; this.targetFps = 60;
-    this.steps = [1, .85, .7, .6];
-    this.index = 0;
-    this.reset();
-  }
-  reset() { this.elapsed = 0; this.frames = 0; this.cooldown = 4; this.good = 0; this.floorOverload = 0; }
-  retry60fps() { this.targetFps = 60; this.reset(); this.onFrameRate(60); }
-  sample(ms, visible = true) {
-    if (!visible || !Number.isFinite(ms) || ms <= 0 || ms > 250) { this.reset(); return; }
-    // Intentional 30fps presentation must never be interpreted as overload/recovery.
-    if (this.targetFps === 30) return;
-    this.cooldown = Math.max(0, this.cooldown - ms / 1000);
-    this.elapsed += ms; this.frames++;
-    if (this.elapsed < 2000) return;
-    const avg = this.elapsed / this.frames;
-    this.elapsed = 0; this.frames = 0;
-    if (this.cooldown > 0) return;
-    if (avg <= 22) this.floorOverload = 0;
-    if (avg > 18.5 && this.index < this.steps.length - 1) {
-      this.index++; this.good = 0; this.cooldown = 4;
-      this.onChange(this.steps[this.index]);
-    } else if (avg < 17.2 && this.index > 0) {
-      // Sustained 60 Hz for 12 s permits one trial up; a failed trial drops again.
-      if (++this.good >= 6) { this.index--; this.good = 0; this.cooldown = 8; this.onChange(this.steps[this.index]); }
-    } else {
-      this.good = 0;
-      if (this.allow30fps && this.index === this.steps.length - 1 && avg > 22) {
-        if (++this.floorOverload >= 4) { this.targetFps = 30; this.onFrameRate(30); }
-      } else this.floorOverload = 0;
-    }
-  }
-}
-
-// Presentation-only cap. Simulation, input, audio and networking still run each rAF.
-class FramePacer {
-  constructor() { this.targetFps = 60; this.previous = null; }
-  setTarget(fps) { this.targetFps = fps === 30 ? 30 : 60; this.previous = null; }
-  shouldRender(now) {
-    if (!Number.isFinite(now)) return false;
-    if (this.targetFps === 60) { this.previous = now; return true; }
-    if (this.previous === null || now < this.previous || now - this.previous > 250) {
-      this.previous = now; return true;
-    }
-    const interval = 1000 / this.targetFps, elapsed = now - this.previous;
-    if (elapsed + .2 < interval) return false;
-    this.previous += Math.max(1, Math.floor((elapsed + .2) / interval)) * interval;
-    return true;
-  }
-}
-return { PHOTOREAL, PRESETS, initialPreset, ResolutionGovernor, FramePacer };
-})();
-// ===== BatchRig.js =====
-__M.BatchRig = (() => {
-
-// Retain the gameplay transform hierarchy; draw its rigid parts as one skinned mesh.
-// One weight per vertex reproduces existing joint motion without changing topology.
-function batchRig(rig, { ghost = false } = {}) {
-  const root = rig.root;
-  root.updateMatrixWorld(true);
-  const anchors = new Set(Object.values(rig).filter(value => value?.isObject3D));
-  const protectedNodes = new Set(ghost ? [] : [rig.gloveL, rig.gloveR]);
-  const candidates = [];
-  const canMerge = object => object.isMesh && !Array.isArray(object.material) &&
-    (object.material.isMeshPhysicalMaterial || (ghost && object.material.isMeshBasicMaterial)) &&
-    !object.material.map && (ghost || !object.material.transparent);
-  root.traverse(object => {
-    if (!canMerge(object)) return;
-    for (let parent = object; parent && parent !== root; parent = parent.parent) if (protectedNodes.has(parent)) return;
-    // Do not hide retained text planes or transparent accessories under a merged parent.
-    let retainedChild = false;
-    object.traverse(child => { if (child !== object && child.isMesh && !canMerge(child)) retainedChild = true; });
-    if (!retainedChild) candidates.push(object);
-  });
-  if (candidates.length < 2) return;
-  const targets = [], groups = new Map(), inverseRoot = root.matrixWorld.clone().invert();
-  const matrix = new THREE.Matrix4();
-  for (const object of candidates) {
-    let anchor = object;
-    while (!anchors.has(anchor)) anchor = anchor.parent;
-    let boneIndex = targets.indexOf(anchor);
-    if (boneIndex < 0) { boneIndex = targets.length; targets.push(anchor); }
-    const material = object.material;
-    const key = [material.roughness, material.metalness, material.sheen, material.clearcoat,
-      material.clearcoatRoughness, material.side, material.emissive?.getHex()].join(':');
-    if (!groups.has(key)) {
-      const shared = material.clone(); shared.color.set(0xffffff); shared.sheenColor?.set(0xffffff); shared.vertexColors = true;
-      groups.set(key, {material:shared, geometries:[]});
-    }
-    const geometry = object.geometry.index ? object.geometry.toNonIndexed() : object.geometry.clone();
-    matrix.multiplyMatrices(inverseRoot, object.matrixWorld); geometry.applyMatrix4(matrix);
-    // All source primitives share only position/normal/uv after this normalization.
-    for (const name of Object.keys(geometry.attributes)) if (!['position','normal','uv'].includes(name)) geometry.deleteAttribute(name);
-    const count = geometry.attributes.position.count;
-    const colors = new Float32Array(count * 3), indices = new Uint16Array(count * 4), weights = new Float32Array(count * 4);
-    for (let i = 0; i < count; i++) {
-      colors[i*3] = material.color.r; colors[i*3+1] = material.color.g; colors[i*3+2] = material.color.b;
-      indices[i*4] = boneIndex; weights[i*4] = 1;
-    }
-    if (!geometry.attributes.uv) geometry.setAttribute('uv',new THREE.Float32BufferAttribute(new Float32Array(count*2),2));
-    geometry.setAttribute('color',new THREE.BufferAttribute(colors,3));
-    geometry.setAttribute('skinIndex',new THREE.BufferAttribute(indices,4));
-    geometry.setAttribute('skinWeight',new THREE.BufferAttribute(weights,4));
-    groups.get(key).geometries.push(geometry);
-  }
-  const mergedGroups = [], materials = [];
-  for (const group of groups.values()) {
-    const geometry = mergeGeometries(group.geometries,false);
-    for (const source of group.geometries) source.dispose();
-    mergedGroups.push(geometry); materials.push(group.material);
-  }
-  const geometry = mergeGeometries(mergedGroups,true);
-  for (const part of mergedGroups) part.dispose();
-  const bones = targets.map(target => { const bone = new THREE.Bone(); bone.matrixAutoUpdate = false; bone.matrixWorld.copy(target.matrixWorld); return bone; });
-  const skeleton = new THREE.Skeleton(bones);
-  const mesh = new THREE.SkinnedMesh(geometry,materials);
-  mesh.name = 'Batched boxer'; mesh.castShadow = mesh.receiveShadow = !ghost;
-  mesh.frustumCulled = false; // Animated bounds; root is hidden by the game's bench logic.
-  mesh.bind(skeleton,root.matrixWorld);
-  const sync = () => {
-    for (let i=0;i<targets.length;i++) bones[i].matrixWorld.copy(targets[i].matrixWorld);
-    skeleton.update();
-  };
-  mesh.onBeforeRender = sync; mesh.onBeforeShadow = sync;
-  root.add(mesh);
-  const mergedMaterials = new Set(candidates.map(object=>object.material));
-  const retainedMaterials = rig.bodyMats.filter(material=>!mergedMaterials.has(material));
-  rig.bodyMats.splice(0,rig.bodyMats.length,...retainedMaterials,...materials);
-  for (const object of candidates) object.visible = false;
-  // Original meshes remain as lightweight transform anchors, retaining hitbox references.
-  rig.batch = {mesh,skeleton,targets,sourceMeshes:candidates};
-}
-return { batchRig };
-})();
 // ===== Rig.js =====
 __M.Rig = (() => {
 // Rig.js — 오리지널 복서 캐릭터 (셀 셰이딩 + 검은 외곽선) 와 포즈 파라미터 시스템
 // 캐릭터 정의(비율/헤어/얼굴/트렁크)로 서로 다른 체형의 복서를 생성한다.
-const { PHOTOREAL } = __M.RenderSettings;
-const { batchRig } = __M.BatchRig;
+const { torsoGeometry, sculptHead, hairLock, limbGeometry, attachLimb, attachTorso } = __M.Anatomy;
 
-// 셀 셰이딩 램프: 강한 명암 경계 (그림자 / 좁은 중간톤 / 밝은면)
+// Soft three-region ramp: shadows, warm midtones, lit planes.
 // 원작 화면에서 추출한 명암 분포에 맞춰 그림자 단을 더 깊게, 경계를 더 좁게 잡는다.
 const gradientMap = (() => {
-  const data = new Uint8Array([70, 70, 70, 168, 255, 255]);
+  const data = new Uint8Array([112, 112, 156, 198, 232, 255]);
   const tex = new THREE.DataTexture(data, data.length, 1, THREE.RedFormat);
-  tex.minFilter = THREE.NearestFilter;
-  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
   tex.generateMipmaps = false;
   tex.needsUpdate = true;
   return tex;
@@ -2171,11 +2133,11 @@ const gradientMap = (() => {
 // 밝기 배율만 하는 gradientMap 으로는 이 느낌이 안 나오므로, 셰이딩 결과 휘도를 3단 컬러 램프로 다시 매핑한다.
 const DEFAULT_SKIN_RAMP = { lit: 0xf0cdb0, mid: 0xd8906c, shadow: 0xa15230 };
 
-// 역할별 질감 파라미터: 하이브리드 (몸·장비는 실제 반사, 얼굴·머리는 셀)
+// Material differences: matte skin and cloth; restrained hair and leather highlights.
 const ROLE_LOOK = {
   // specEdge 는 하이라이트가 생기기 시작하는 문턱이다. 낮으면 넓은 흰 원이 되어 즉시 플라스틱처럼 보인다.
-  skin:  { grade: 0.88, rim: 0.34, specPower: 46, specGain: 0.16, specEdge: 0.74, outline: 1.0 },
-  face:  { grade: 0.92, rim: 0.28, specPower: 52, specGain: 0.10, specEdge: 0.80, outline: 1.35 },
+  skin:  { grade: 0.88, rim: 0.10, specPower: 46, specGain: 0.015, specEdge: 0.74, outline: 1.0 },
+  face:  { grade: 0.92, rim: 0.08, specPower: 52, specGain: 0.0, specEdge: 0.80, outline: 0.8 },
   hair:  { grade: 0.55, rim: 0.14, specPower: 40, specGain: 0.05, specEdge: 0.88, outline: 0.75, hairBand: 1 },
   glove: { grade: 0.62, rim: 0.38, specPower: 64, specGain: 0.30, specEdge: 0.80, outline: 0.62 },
   cloth: { grade: 0.45, rim: 0.20, specPower: 34, specGain: 0.08, specEdge: 0.78, outline: 1.0 },
@@ -2190,12 +2152,14 @@ const TONE_GRADE_GLSL = /* glsl */`
   // 현재 프래그먼트가 베이스 색 대비 얼마나 밝게 셰이딩됐는지 (0 = 완전 그림자, 1 = 정면광)
   const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
   float baseLum = max(dot(uBaseColor, LUMA), 1e-4);
-  float shade = clamp(dot(gl_FragColor.rgb, LUMA) / baseLum, 0.0, 1.6);
+  float illumination = clamp(dot(gl_FragColor.rgb, LUMA) / baseLum, 0.0, 1.25);
+  float formLight = .56 + .48 * dot(nrm, normalize(vec3(-.45,.72,.65)));
+  float shade = mix(illumination, formLight, uGrade * .65);
 
-  // 3톤 램프 — 경계를 좁게 유지해 셀 느낌을 살리되 완전한 계단은 피한다
+  // Soft transitions retain comic planes without hard black muscle borders.
   vec3 toned = mix(uShadowColor, uMidColor, smoothstep(0.36, 0.58, shade));
   toned = mix(toned, uLitColor, smoothstep(0.72, 0.96, shade));
-  toned *= 0.74 + 0.22 * clamp(shade, 0.0, 1.15);   // 광량 차이는 남기되 상단을 눌러 클리핑 방지
+  toned *= 0.82 + 0.18 * clamp(shade, 0.0, 1.15);   // 광량 차이는 남기되 상단을 눌러 클리핑 방지
   gl_FragColor.rgb = mix(gl_FragColor.rgb, toned, uGrade);
 
   // 인트로처럼 조명이 강한 장면에서 얼굴이 흰색으로 날아가지 않도록 밝은 쪽 가산을 줄인다
@@ -2220,7 +2184,7 @@ const TONE_GRADE_GLSL = /* glsl */`
   if (uHairBand > 0.5) {
     float band = 1.0 - abs(nrm.y - 0.46) * 15.0;
     band = smoothstep(0.55, 0.78, band);
-    gl_FragColor.rgb += vec3(0.34, 0.37, 0.48) * band * 0.34;
+    gl_FragColor.rgb += vec3(0.06, 0.055, 0.05) * band * 0.12;
   }
 }`;
 
@@ -2415,13 +2379,14 @@ function applyPose(rig, p) {
   rig.head.rotation.set(p.headX, p.headY, p.headZ);
   rig.head.position.set(p.headOffX, rig.headBaseY + p.headOffY, p.headOffZ);
   rig.shoulderL.rotation.set(p.shLX, p.shLY, p.shLZ);
-  rig.elbowL.rotation.x = p.elL;
+  rig.elbowL.rotation.x = THREE.MathUtils.clamp(p.elL, -2.65, .02);
   rig.shoulderR.rotation.set(p.shRX, p.shRY, p.shRZ);
-  rig.elbowR.rotation.x = p.elR;
+  rig.elbowR.rotation.x = THREE.MathUtils.clamp(p.elR, -2.65, .02);
   rig.thighL.rotation.set(p.thighLX, 0, p.thighLZ);
-  rig.shinL.rotation.x = p.shinL;
+  rig.shinL.rotation.x = THREE.MathUtils.clamp(p.shinL, 0, 2.4);
   rig.thighR.rotation.set(p.thighRX, 0, p.thighRZ);
-  rig.shinR.rotation.x = p.shinR;
+  rig.shinR.rotation.x = THREE.MathUtils.clamp(p.shinR, 0, 2.4);
+  for (const d of rig.deformers || []) d.middle.rotation.x = d.joint.rotation.x * .5;
 }
 
 // 캐릭터별 지오메트리 캐시 (잔상 8개가 같은 지오메트리 공유)
@@ -2449,48 +2414,40 @@ function taperY(geo, { top = 1, bottom = 1, curve = 1 } = {}) {
 }
 
 function geometriesFor(def) {
-  if (geoCache.has(def.name)) return geoCache.get(def.name);
+  if (geoCache.has(def)) return geoCache.get(def);
   const P = def.prop;
   const G = {
     pelvis: new RoundedBoxGeometry(0.36 * P.torsoW, 0.24, 0.26 * P.torsoD, 4, 0.08),
     band: new RoundedBoxGeometry(0.38 * P.torsoW, 0.06, 0.28 * P.torsoD, 2, 0.02),
     stripe: new THREE.BoxGeometry(0.03, 0.2, 0.05),
     // 어깨(위) 넓고 허리(아래) 좁은 역삼각형. muscle 이 높을수록 차이를 크게 준다
-    torso: taperY(new RoundedBoxGeometry(0.46 * P.torsoW, 0.52, 0.28 * P.torsoD, 5, 0.1),
-      { top: 1.02 + 0.16 * P.muscle, bottom: 0.88 - 0.10 * P.muscle, curve: 0.78 }),
-    // 대흉근: 아래로 갈수록 좁아져 가슴 아래 선이 생긴다
-    pec: taperY(new RoundedBoxGeometry(0.21 * P.torsoW, 0.145, 0.095, 3, 0.045), { top: 1.0, bottom: 0.82 }),
-    abs: new RoundedBoxGeometry(0.075 * P.torsoW, 0.072, 0.05, 2, 0.02),
-    // 삼각근: 어깨 실루엣을 만드는 핵심. 다만 머리만 해지면 안 된다
-    delt: new THREE.SphereGeometry(0.106 * P.armR, 16, 12),
+    torso: torsoGeometry(P, def),
+    ghostTorso: torsoGeometry(P, {...def, bodyColor: 0xffffff}),
+    armSurface: limbGeometry(.32 * P.armLen, .080 * P.armR),
+    legSurface: limbGeometry(.42 * P.legLen, .087 * P.legR, true),
+    ghostArm: limbGeometry(.32 * P.armLen, .080 * P.armR, false, true),
+    ghostLeg: limbGeometry(.42 * P.legLen, .087 * P.legR, true, true),
+    // Pectorals and abdomen are already sculpted into the continuous torso.
+    // Deltoid, upper arm, elbow and forearm share a weighted surface.
     // 목: 원작 복서는 목이 굵고 짧게 드러나되, 머리보다는 확실히 가늘다
     neck: new THREE.CylinderGeometry(0.060 * P.torsoW, 0.076 * P.torsoW, 0.15 * P.neck, 14),
-    thigh: new THREE.CapsuleGeometry(0.09 * P.legR, 0.28 * P.legLen, 4, 14),
-    shin: new THREE.CapsuleGeometry(0.075 * P.legR, 0.28 * P.legLen, 4, 14),
     foot: new RoundedBoxGeometry(0.14, 0.1, 0.3, 3, 0.035),
     footTrim: new RoundedBoxGeometry(0.15, 0.03, 0.31, 2, 0.01),
-    upperArm: new THREE.CapsuleGeometry(0.078 * P.armR, 0.2 * P.armLen, 4, 14),
-    forearm: new THREE.CapsuleGeometry(0.07 * P.armR, 0.18 * P.armLen, 4, 14),
     // 글러브: 원작은 구체가 아니라 각이 살아있는 큰 주먹. 앞면이 넓고 손목 쪽으로 좁아진다
     // 세그먼트·라운드를 넉넉히 준다. 각이 너무 날카로우면 외곽선(인버티드 헐)이 모서리에서 벌어져 격자로 깨진다
     glove: taperY(new RoundedBoxGeometry(0.25, 0.235, 0.27, 7, 0.108), { top: 0.80, bottom: 1.04, curve: 1.1 }),
     hand: new THREE.SphereGeometry(0.13, 16, 12),   // 맨손 캐릭터용
     gloveCuff: new THREE.CylinderGeometry(0.09, 0.108, 0.105, 14),
     // 3톤 램프는 면 경계를 드러낸다 — 얼굴은 가까이 잡히므로 세그먼트를 넉넉히 준다 (메시 1개라 비용 무시 가능)
-    head: new THREE.SphereGeometry(0.17 * P.headS, 40, 30),
-    jaw: new RoundedBoxGeometry(0.2 * P.headS, 0.12, 0.2 * P.headS, 3, 0.06),
+    head: sculptHead(new THREE.SphereGeometry(0.17 * P.headS, 40, 30), P, def),
     ear: new THREE.SphereGeometry(0.035, 8, 6),
-    hair: new THREE.SphereGeometry(0.19 * P.headS, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.55),
-    spike: new THREE.ConeGeometry(0.06, 0.2, 6),
-    spikeBig: new THREE.ConeGeometry(0.078, 0.30, 6),          // 크게 뻗치는 머리칼
-    strand: new RoundedBoxGeometry(0.082, 0.30, 0.058, 2, 0.024),   // 늘어지는 긴 머리칼
-    bang: new RoundedBoxGeometry(0.30 * P.headS, 0.11, 0.085, 2, 0.03), // 이마 덮는 앞머리
-    sclera: new THREE.SphereGeometry(0.045, 10, 8),
-    pupil: new THREE.SphereGeometry(0.02, 8, 6),
-    brow: new THREE.BoxGeometry(0.09, def.brows === 'thick' ? 0.035 : 0.014, 0.02),
-    mouth: new THREE.BoxGeometry(def.mouth === 'grin' ? 0.11 : 0.07, 0.012, 0.02),
+    hair: new THREE.SphereGeometry(0.184 * P.headS, 32, 20, 0, Math.PI * 2, 0, Math.PI * 0.48),
+    spike: hairLock(0.048 * P.headS, 0.17 * P.headS),
+    spikeBig: hairLock(0.058 * P.headS, 0.235 * P.headS),          // 크게 뻗치는 머리칼
+    strand: hairLock(0.041 * P.headS, 0.30 * P.headS, 0.014),   // 늘어지는 긴 머리칼
+    bang: new RoundedBoxGeometry(.27 * P.headS, .075 * P.headS, .055, 4, .025), // 이마 덮는 앞머리
   };
-  geoCache.set(def.name, G);
+  geoCache.set(def, G);
   return G;
 }
 
@@ -2554,8 +2511,8 @@ function buildHeldItem(kind, glove, part, sx) {
 // 원작의 눈은 "얼굴 평면에 그려진 날카로운 도형"이다. 구체를 박아 넣으면 눈알이 튀어나온 인형이 된다.
 // 눈·눈썹·입을 캔버스에 그려서 얼굴 앞면에 감싼다.
 const faceTexCache = new Map();
-function faceTexture(def) {
-  const key = [def.eyes, def.brows, def.mouth, def.gender].join('|');
+function faceTexture(def, expression = 'focused') {
+  const key = [def.name, def.eyes, def.brows, def.mouth, def.gender, expression].join('|');
   if (faceTexCache.has(key)) return faceTexCache.get(key);
 
   const S = 512;
@@ -2564,6 +2521,8 @@ function faceTexture(def) {
   const c = cv.getContext('2d');
   c.clearRect(0, 0, S, S);
 
+  const blinking = expression === 'blink';
+  const injured = expression === 'hurt';
   const narrow = def.eyes === 'narrow';
   const big = def.eyes === 'big';
   const round = def.eyes === 'round';
@@ -2571,8 +2530,8 @@ function faceTexture(def) {
 
   // 눈 한 쪽 (sx = -1 왼쪽 / +1 오른쪽). cx, cy 는 캔버스 좌표.
   const eye = (cx, cy, sx) => {
-    const w = big ? 62 : narrow ? 74 : 58;          // 가로 반폭
-    const h = big ? 58 : narrow ? 16 : 34;          // 세로 반높이
+    const w = big ? 60 : narrow ? 64 : 62;          // 가로 반폭
+    const h = blinking ? 2 : (big ? 39 : narrow ? 19 : 36) * (injured ? .60 : 1);          // 세로 반높이
     const tilt = sx * (narrow ? 0.20 : big ? -0.04 : 0.10);   // 눈꼬리 올라감 = 날카로움
 
     c.save();
@@ -2591,8 +2550,8 @@ function faceTexture(def) {
     c.fill();
 
     // 홍채/동공 — 크고 어둡게, 아래 눈꺼풀에 닿도록 살짝 내려 앉힌다
-    if (!narrow) {
-      const ir = big ? 40 : 27;
+    if (!narrow && !blinking) {
+      const ir = big ? 29 : 26;
       c.save();
       c.clip();
       c.beginPath();
@@ -2611,7 +2570,7 @@ function faceTexture(def) {
       c.ellipse(sx * w * 0.08 - sx * ir * 0.34, h * 0.16 - ir * 0.44, ir * 0.26, ir * 0.3, 0, 0, Math.PI * 2);
       c.fillStyle = '#ffffff';
       c.fill();
-    } else {
+    } else if (!blinking) {
       // 가늘게 찢어진 눈: 흰자 없이 검은 선 + 작은 동공
       c.beginPath();
       c.ellipse(sx * w * 0.1, 0, w * 0.26, h * 0.85, 0, 0, Math.PI * 2);
@@ -2625,7 +2584,7 @@ function faceTexture(def) {
     c.quadraticCurveTo(-w * 0.35, -h * 1.18, w * 0.58, -h * 0.80);
     c.quadraticCurveTo(w * 1.0, -h * 0.58, w * 1.06, -h * 0.12);
     c.strokeStyle = INK;
-    c.lineWidth = narrow ? 15 : big ? 13 : 17;
+    c.lineWidth = narrow ? 9 : big ? 10 : 11;
     c.lineCap = 'round';
     c.stroke();
 
@@ -2639,8 +2598,8 @@ function faceTexture(def) {
     c.restore();
 
     // 눈썹 — 두꺼울수록 사납다
-    const bw = def.brows === 'thick' ? 26 : 13;
-    const by = cy - (big ? 118 : narrow ? 74 : 92);
+    const bw = def.brows === 'thick' ? 20 : 11;
+    const by = cy - (big ? 69 : narrow ? 53 : 66) + (injured ? 12 : 0);
     c.save();
     c.beginPath();
     c.moveTo(cx - sx * 68, by + (narrow ? 26 : 18));
@@ -2652,7 +2611,7 @@ function faceTexture(def) {
     c.restore();
   };
 
-  eye(S * 0.305, S * 0.40, -1);
+  eye(S * (def.name === 'MASHIBA' ? 0.31 : 0.30), S * 0.40, -1);
   eye(S * 0.695, S * 0.40, 1);
 
   // 입
@@ -2660,7 +2619,9 @@ function faceTexture(def) {
   c.strokeStyle = INK;
   c.lineWidth = 11;
   c.lineCap = 'round';
-  if (def.mouth === 'grin') {
+  if (injured) {
+    c.moveTo(S*.415,S*.762);c.quadraticCurveTo(S*.50,S*.742,S*.585,S*.762);c.lineTo(S*.575,S*.802);c.quadraticCurveTo(S*.50,S*.817,S*.425,S*.802);c.closePath();c.fillStyle='#e8dfd2';c.fill();
+  } else if (def.mouth === 'grin') {
     c.moveTo(S * 0.40, S * 0.755);
     c.quadraticCurveTo(S * 0.50, S * 0.825, S * 0.60, S * 0.750);
   } else {
@@ -2670,6 +2631,9 @@ function faceTexture(def) {
   }
   c.stroke();
 
+  c.strokeStyle='rgba(91,47,33,.70)';c.lineWidth=5;
+  c.beginPath();c.moveTo(255,260);c.quadraticCurveTo(248,302,264,316);c.lineTo(280,312);c.stroke();
+  c.strokeStyle='rgba(102,52,36,.35)';c.lineWidth=4;c.beginPath();c.moveTo(239,417);c.quadraticCurveTo(257,422,273,416);c.stroke();
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
@@ -2706,18 +2670,18 @@ function buildBoxer(def, opts = {}) {
   const G = geometriesFor(def);
   const bodyMats = [];
 
-  // 굵기별 외곽선 재질 (얼굴·머리는 굵게 = 원작의 선 강약)
+  // Thin warm silhouette ink; ghosts never create outline meshes.
   const outlineMats = new Map();
   const outlineFor = (scale) => {
     const key = Math.round(scale * 100);
     let m = outlineMats.get(key);
-    if (!m) { m = makeOutlineMaterial(ghost, 0.013 * scale); outlineMats.set(key, m); }
+    if (!m) { m = makeOutlineMaterial(ghost, 0.0038 * scale); if (ghost) m.uniforms.color.value.set(0xffffff); outlineMats.set(key, m); }
     return m;
   };
 
   // 부위 판정: 지오메트리 우선, 없으면 색으로 역추적
   const geomRole = new Map([
-    [G.head, 'face'], [G.jaw, 'face'], [G.ear, 'face'], [G.neck, 'skin'],
+    [G.head, 'face'], [G.ear, 'face'], [G.neck, 'skin'],
     [G.hair, 'hair'], [G.spike, 'hair'],
     [G.glove, 'glove'], [G.gloveCuff, 'glove'],
   ]);
@@ -2738,7 +2702,7 @@ function buildBoxer(def, opts = {}) {
   };
   const skinRamp = def.ramp || (def.skin != null ? deriveRamp(def.skin) : DEFAULT_SKIN_RAMP);
   const rampFor = (role, c) => (role === 'skin' || role === 'face')
-    ? { lit: new THREE.Color(skinRamp.lit), mid: new THREE.Color(skinRamp.mid), shadow: new THREE.Color(skinRamp.shadow) }
+    ? { lit: new THREE.Color(skinRamp.lit), mid: new THREE.Color(skinRamp.mid), shadow: new THREE.Color(skinRamp.shadow).lerp(new THREE.Color(skinRamp.mid), .22) }
     : deriveRamp(c);
 
   // (역할, 색) 단위 재질 캐시 — 부위 300개가 재질 300개를 만들던 것을 10여 개로 줄인다
@@ -2750,10 +2714,12 @@ function buildBoxer(def, opts = {}) {
 
     let m;
     if (ghost) {
+      // Unlit white silhouette: no skin tint, gloss or ink.
+      // 톤매핑을 끄면 흰색이 회색으로 눌리지 않고 그대로 하얗게 남는다 (만화의 흰 잔상).
       m = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(c).lerp(new THREE.Color(tint), 0.22),
-        transparent: true, opacity: 0.4, depthWrite: false,
+        color: 0xffffff, transparent: true, opacity: 0.1, depthWrite: false, depthTest: true, toneMapped: false,
       });
+      m.userData.base = new THREE.Color(0xffffff);
     } else {
       const look = ROLE_LOOK[role] || ROLE_LOOK.cloth;
       const ramp = rampFor(role, c);
@@ -2775,11 +2741,20 @@ uniform vec3 uBaseColor; uniform vec3 uLitColor; uniform vec3 uMidColor; uniform
 uniform float uGrade; uniform float uRim; uniform float uSpecPower; uniform float uSpecGain;
 uniform float uSpecEdge; uniform float uHairBand;
 ` + sh.fragmentShader.replace(
-          '#include <dithering_fragment>',
-          '#include <dithering_fragment>\n' + TONE_GRADE_GLSL
+          '#include <tonemapping_fragment>',
+          TONE_GRADE_GLSL + '\n#include <tonemapping_fragment>'
         );
       };
     }
+    // Reserve stencil bit 0 for current characters. Historical poses may overlap
+    // them in world space, but must never paint over their projected silhouette.
+    m.stencilWrite = true;
+    m.stencilRef = 1;
+    m.stencilWriteMask = ghost ? 0 : 1;
+    m.stencilFuncMask = 1;
+    m.stencilFunc = ghost ? THREE.NotEqualStencilFunc : THREE.AlwaysStencilFunc;
+    m.stencilFail = m.stencilZFail = THREE.KeepStencilOp;
+    m.stencilZPass = ghost ? THREE.KeepStencilOp : THREE.ReplaceStencilOp;
     matCache.set(key, m);
     bodyMats.push(m);
     return m;
@@ -2789,9 +2764,9 @@ uniform float uSpecEdge; uniform float uHairBand;
     const role = roleFor(geom, color);
     const mesh = new THREE.Mesh(geom, M(color, role));
     mesh.castShadow = !ghost;
-    mesh.receiveShadow = !ghost;
+    mesh.receiveShadow = false; // Stable painted form shading; floor still receives cast shadows.
     mesh.position.set(x, y, z);
-    if (outline) {
+    if (outline && !ghost && role !== 'hair') {
       // 숫자를 넘기면 그 값이 굵기 배율 (작은 부위는 선이 뭉치지 않게 가늘게)
       const w = typeof outline === 'number' ? outline : (ROLE_LOOK[role] || ROLE_LOOK.cloth).outline;
       mesh.add(new THREE.Mesh(geom, outlineFor(w)));
@@ -2804,6 +2779,7 @@ uniform float uSpecEdge; uniform float uHairBand;
   // 전체 체격 축소 (맵이 넓어져 상대적으로 크게 보이던 것을 70% 로)
   root.scale.setScalar(FIGHTER_SCALE);
   const legLen = 0.42 * P.legLen;
+  const deformers = [];
   const hipsBaseY = 0.1 + legLen * 2 + 0.04;
 
   // ---- 골반 / 트렁크 ----
@@ -2825,11 +2801,11 @@ uniform float uSpecEdge; uniform float uHairBand;
     const thigh = new THREE.Group();
     thigh.position.set(sx * 0.115 * P.torsoW, -0.1, 0);
     hips.add(thigh);
-    part(G.thigh, def.pants || bodyCol, thigh, 0, -legLen * 0.48, 0);
+
     const shin = new THREE.Group();
     shin.position.y = -legLen;
     thigh.add(shin);
-    part(G.shin, def.pants || bodyCol, shin, 0, -legLen * 0.48, 0);
+    deformers.push(attachLimb(thigh, shin, ghost ? G.ghostLeg : G.legSurface, M(def.pants || def.skin, def.pants ? 'cloth' : 'skin'), !ghost));
     const foot = part(G.foot, def.shoes, shin, 0, -legLen, 0.05);
     part(G.footTrim, def.shoesTrim, shin, 0, -legLen - 0.04, 0.05, false);
     return { thigh, shin, foot };
@@ -2841,19 +2817,6 @@ uniform float uSpecEdge; uniform float uHairBand;
   const waist = new THREE.Group();
   waist.position.y = 0.06;
   hips.add(waist);
-  part(G.torso, bodyCol, waist, 0, 0.3, 0);
-  // 뱃살 (정주원)
-  if (def.belly) {
-    const b = part(new THREE.SphereGeometry(0.22, 16, 12), bodyCol, waist, 0, 0.2, 0.06 * P.torsoD);
-    b.scale.set(1.25 * P.torsoW, 0.95, 0.95 * P.torsoD);
-  }
-  // 근육 디테일 (가슴/복근) — 잔상엔 생략
-  if (!ghost && P.muscle > 0.5) {
-    // 원작은 근육을 선으로 구분한다 — 대흉근·복근에도 외곽선을 넣어 윤곽을 만든다 (가늘게)
-    part(G.pec, def.skin, waist, 0.1 * P.torsoW, 0.4, 0.11 * P.torsoD, 0.72);
-    part(G.pec, def.skin, waist, -0.1 * P.torsoW, 0.4, 0.11 * P.torsoD, 0.72);
-    for (let r = 0; r < 3; r++) for (let c = -1; c <= 1; c += 2) part(G.abs, def.skin, waist, c * 0.045 * P.torsoW, 0.26 - r * 0.08, 0.125 * P.torsoD, 0.5);
-  }
 
   // 가슴 프린트 (티셔츠 로고)
   if (def.chestText && !ghost) {
@@ -2891,18 +2854,15 @@ uniform float uSpecEdge; uniform float uHairBand;
   const chest = new THREE.Group();
   chest.position.y = 0.52;
   waist.add(chest);
+  const torso = attachTorso(waist, chest, ghost ? G.ghostTorso : G.torso, M(bodyCol, def.bodyColor ? 'cloth' : 'skin'), !ghost);
   part(G.neck, def.skin, chest, 0, 0.06 * P.neck, 0.02);
 
   const armLen = 0.32 * P.armLen;
   const mkArm = (sx) => {
     const shoulder = new THREE.Group();
-    shoulder.position.set(sx * 0.27 * P.torsoW, 0.0, 0);
+    shoulder.position.set(sx * 0.248 * P.torsoW, -0.004, 0);
     shoulder.rotation.order = 'YZX'; // X(들어올림) → Z(벌림) → Y(휘두름) 순으로 적용
     chest.add(shoulder);
-    // 삼각근을 바깥·위로 부풀려 어깨 실루엣을 만든다 (팔에 묻히면 역삼각형이 안 읽힌다)
-    const delt = part(G.delt, bodyCol, shoulder, sx * 0.010 * P.torsoW, 0.028, 0);
-    delt.scale.set(1.14, 0.94, 1.02);
-    part(G.upperArm, bodyCol, shoulder, 0, -armLen * 0.5, 0);
     if (def.oversize) {   // 소매가 팔보다 크다
       const sl = part(new THREE.CapsuleGeometry(0.098 * P.armR, armLen * 0.72, 4, 12), def.sleeveColor || bodyCol, shoulder, 0, -armLen * 0.52, 0);
       sl.scale.set(1.12, 1, 1.12);
@@ -2910,13 +2870,14 @@ uniform float uSpecEdge; uniform float uHairBand;
     const elbow = new THREE.Group();
     elbow.position.y = -armLen;
     shoulder.add(elbow);
-    part(G.forearm, def.sleeves || bodyCol, elbow, 0, -armLen * 0.45, 0);
-    if (!def.noGloves) part(G.gloveCuff, def.gloves, elbow, 0, -armLen * 0.78, 0);
+    const armColor = def.sleeves || def.skin;
+    deformers.push(attachLimb(shoulder, elbow, ghost ? G.ghostArm : G.armSurface, M(armColor, armColor === def.skin ? 'skin' : 'cloth'), !ghost));
+    if (!def.noGloves) part(G.gloveCuff, 0xe9e3d7, elbow, 0, -armLen * 0.78, 0);
     const glove = part(def.noGloves ? G.hand : G.glove, def.gloves, elbow, 0, -armLen - 0.02, 0);
     if (def.noGloves) glove.scale.setScalar(0.6);
     else if (!ghost) {
       // 글러브 솔기(엄지 라인) + 손목 스트랩
-      const seam = part(new THREE.TorusGeometry(0.118, 0.013, 6, 24), 0x2a1010, glove, 0, 0.025, 0.012, false);
+      const seam = part(new THREE.TorusGeometry(0.101, 0.004, 6, 24), 0x6c2824, glove, 0, 0.025, 0.012, false);
       seam.rotation.x = Math.PI / 2; seam.rotation.z = 0.5;
       const strap = part(new THREE.CylinderGeometry(0.1, 0.1, 0.035, 14), 0xf5f5f5, elbow, 0, -armLen * 0.86, 0, false);
     }
@@ -2929,28 +2890,26 @@ uniform float uSpecEdge; uniform float uHairBand;
   const armR = mkArm(-1);
 
   // ---- 머리 / 얼굴 ----
-  const headBaseY = 0.04 + 0.1 * P.neck;
+  const headBaseY = 0.02 + 0.07 * P.neck;
   const head = new THREE.Group();
   head.position.y = headBaseY;
   chest.add(head);
-  const hy = 0.2 * P.headS;
+  const hy = 0.178 * P.headS;
   const headMesh = part(G.head, def.skin, head, 0, hy, 0);
   headMesh.scale.set(1, P.headY, 1);
   // 턱 (장신 캐릭터는 길고 뾰족한 인상)
   // 턱은 머리 구면 안에 머물러야 한다 — 앞으로 삐져나오면 얼굴 텍스처를 뚫고 면이 얼룩진다
-  const jaw = part(G.jaw, def.skin, head, 0, hy - 0.115 * P.headY, -0.012);
-  jaw.scale.set(P.headY > 1.1 ? 0.78 : 0.94, P.headY > 1.1 ? 1.45 : 0.96, 0.82);
-  part(G.ear, def.skin, head, 0.165 * P.headS, hy, 0);
-  part(G.ear, def.skin, head, -0.165 * P.headS, hy, 0);
+  if (!ghost) part(G.ear, def.skin, head, 0.165 * P.headS, hy, 0);
+  if (!ghost) part(G.ear, def.skin, head, -0.165 * P.headS, hy, 0);
   // 머리 캡을 뒤로 젖힌다 — 앞쪽 헤어라인이 올라가 이마와 눈썹이 드러난다 (원작은 눈썹이 항상 보인다)
-  const hairCap = part(G.hair, def.hair, head, 0, hy + 0.028, -0.032);
-  hairCap.rotation.x = -0.26;
+  const hairCap = part(G.hair, def.hair, head, 0, hy + 0.018, -0.022);
+  hairCap.rotation.x = -0.32;
+  hairCap.scale.set(1.03, P.headY, 1.02);
+  if (!ghost) {
   if (def.hairStyle === 'bobsharp') {
     // 칼단발: 턱선에서 직선으로 뚝 떨어지는 실루엣 + 일자 앞머리
-    const cap = part(new THREE.SphereGeometry(0.208 * P.headS, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.62), def.hair, head, 0, hy + 0.015, -0.01);
-    cap.scale.set(1.03, 1.0, 1.06);
     // 옆/뒤를 감싸는 원통형 컷 (아래가 일자로 잘린 느낌)
-    const cut = part(new THREE.CylinderGeometry(0.215 * P.headS, 0.225 * P.headS, 0.26, 18, 1, true), def.hair, head, 0, hy - 0.1, -0.012);
+    const cut = part(new THREE.CylinderGeometry(0.215 * P.headS, 0.225 * P.headS, 0.26, 18, 1, true, Math.PI * .5, Math.PI), def.hair, head, 0, hy - 0.1, -0.012);
     cut.material.side = THREE.DoubleSide;
     cut.scale.set(1, 1, 1.02);
     const backFill = part(new THREE.BoxGeometry(0.3 * P.headS, 0.26, 0.16), def.hair, head, 0, hy - 0.1, -0.11);
@@ -2959,8 +2918,6 @@ uniform float uSpecEdge; uniform float uHairBand;
     bang.rotation.x = -0.1;
   } else if (def.hairStyle === 'bob') {
     // 단발: 머리통을 감싸는 짧은 컷 + 앞머리 뱅
-    const cap = part(new THREE.SphereGeometry(0.205 * P.headS, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.72), def.hair, head, 0, hy + 0.012, -0.012);
-    cap.scale.set(1.02, 1.0, 1.04);
     for (const sx of [-1, 1]) {   // 옆머리 (귀 아래까지)
       const side = part(new THREE.CapsuleGeometry(0.055 * P.headS, 0.16, 4, 10), def.hair, head, sx * 0.155 * P.headS, hy - 0.06, -0.01);
       side.scale.set(1, 1, 0.75);
@@ -2969,7 +2926,6 @@ uniform float uSpecEdge; uniform float uHairBand;
     bang.rotation.x = -0.18;
   } else if (def.hairStyle === 'long') {
     // 긴 생머리: 뒤로 길게 흐르는 판 + 양옆 머리카락
-    const cap = part(new THREE.SphereGeometry(0.2 * P.headS, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.66), def.hair, head, 0, hy + 0.01, -0.01);
     const back = part(new THREE.CapsuleGeometry(0.115 * P.headS, 0.42, 4, 12), def.hair, head, 0, hy - 0.3, -0.075);
     back.scale.set(1.15, 1, 0.6);
     for (const sx of [-1, 1]) {
@@ -2979,20 +2935,16 @@ uniform float uSpecEdge; uniform float uHairBand;
     const bang = part(new THREE.BoxGeometry(0.24 * P.headS, 0.06, 0.07), def.hair, head, 0, hy + 0.105, 0.1 * P.headS);
     bang.rotation.x = -0.25;
   } else if (def.hairStyle === 'spiky') {
-    // 이치로: 사방으로 크고 굵게 뻗친 스파이크 + 이마로 내려온 앞머리 몇 가닥
-    const n = 11;
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2 + 0.3;
-      const rr = 0.10 + 0.035 * Math.sin(i * 2.1);
-      const s = part(G.spikeBig, def.hair, head, Math.cos(a) * rr, hy + 0.15, Math.sin(a) * rr * 0.9 - 0.035);
-      s.rotation.set(Math.sin(a) * 0.62, 0, -Math.cos(a) * 0.62);
-      s.scale.set(1.0, 0.95 + 0.45 * Math.abs(Math.sin(i * 1.7)), 1.0);
+    // Locks emerge tangentially from one scalp mass; short fringe keeps brows readable.
+    for (let i = 0; i < 10; i++) {
+      const a = i / 10 * Math.PI * 2;
+      const lock = part(G.spikeBig, def.hair, head, Math.cos(a)*.115*P.headS, hy+.145*P.headS, Math.sin(a)*.093*P.headS-.025, false);
+      lock.rotation.set(Math.sin(a)*.85, .15, -Math.cos(a)*.85);
+      lock.scale.set(.90,.65+.12*Math.sin(i*1.7),.85);
     }
-    // 이마로 흘러내린 앞머리 — 원작의 인상을 만드는 부분
-    for (const [sx, tilt, sc] of [[-1, 0.42, 0.95], [0, 0.10, 1.12], [1, -0.38, 0.9]]) {
-      const s = part(G.spikeBig, def.hair, head, sx * 0.068, hy + 0.135, 0.108 * P.headS);
-      s.rotation.set(2.45, 0, tilt);
-      s.scale.set(0.82, sc * 0.62, 0.82);
+    for(const [x,tilt] of [[-.10,-.25],[-.045,.2],[.03,-.12],[.09,.35]]){
+      const lock=part(G.spikeBig,def.hair,head,x*P.headS,hy+.126*P.headS,.111*P.headS,false);
+      lock.rotation.set(2.65,0,tilt);lock.scale.set(.58,.33,.50);
     }
   } else if (def.hairStyle === 'mane') {
     // 센도: 뒤·위로 크게 젖혀진 갈기.
@@ -3004,7 +2956,7 @@ uniform float uSpecEdge; uniform float uHairBand;
       const z = -0.04 - 0.08 * Math.sin(u * Math.PI);      // 가운데일수록 더 뒤로
       const s = part(G.spikeBig, def.hair, head, x, hy + 0.145, z);
       s.rotation.set(-0.95 - 0.22 * Math.sin(u * Math.PI), 0, -(u - 0.5) * 1.15);
-      s.scale.set(1.05, 1.25 + 0.55 * Math.sin(u * Math.PI), 1.05);
+      s.scale.set(1.05, 0.82 + 0.25 * Math.sin(u * Math.PI), 1.05);
     }
     // 앞으로 뾰족하게 내려온 앞머리 두 갈래 — 눈을 덮지 않도록 짧고 높게
     for (const sx of [-1, 1]) {
@@ -3018,26 +2970,23 @@ uniform float uSpecEdge; uniform float uHairBand;
       const a = Math.PI * 0.5 + (i / 6) * Math.PI * 1.0;
       const s = part(G.spikeBig, def.hair, head, Math.cos(a) * 0.095, hy + 0.14, Math.sin(a) * 0.08 - 0.05);
       s.rotation.set(-0.5, 0, -Math.cos(a) * 0.5);
-      s.scale.set(0.95, 1.15, 0.95);
+      s.scale.set(0.80, 0.82, 0.80);
     }
     // 얼굴 옆으로 흐르는 긴 머리칼 (턱선 아래까지)
     for (const sx of [-1, 1]) {
       for (const [ox, oz, len, tilt] of [[0.155, 0.02, 1.35, 0.10], [0.135, -0.075, 1.6, 0.04]]) {
         const s = part(G.strand, def.hair, head, sx * ox * P.headS, hy - 0.10, oz);
-        s.rotation.set(0.06, 0, sx * tilt);
+        s.rotation.set(0.06, 0, Math.PI + sx * tilt);
         s.scale.set(0.92, len, 0.85);
       }
     }
     // 관자놀이를 스치는 앞머리 한 가닥 (한쪽으로 쏠림) — 눈은 가리지 않는다
     const fringe = part(G.strand, def.hair, head, -0.088 * P.headS, hy + 0.088, 0.096 * P.headS);
-    fringe.rotation.set(0.26, 0, 0.46);
+    fringe.rotation.set(0.26, 0, Math.PI + 0.46);
     fringe.scale.set(0.72, 0.42, 0.5);
   } else if (def.hairStyle === 'bowl') {
     // 미야타: 이마를 덮는 일자 앞머리 + 귀를 덮는 단정한 중단발
     // 캡은 눈썹 위에서 멈춰야 한다. 적도 아래까지 내려오면 얼굴을 덮는 검은 헬멧이 된다
-    const cap = part(new THREE.SphereGeometry(0.194 * P.headS, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.46), def.hair, head, 0, hy + 0.022, -0.026);
-    cap.rotation.x = -0.20;
-    cap.scale.set(1.03, 1.0, 1.06);
     const bang = part(G.bang, def.hair, head, 0, hy + 0.098, 0.100 * P.headS);
     bang.rotation.x = -0.16;
     bang.scale.set(1, 0.78, 0.85);
@@ -3064,16 +3013,17 @@ uniform float uSpecEdge; uniform float uHairBand;
       s.scale.set(0.5, 0.8, 0.5);
     }
   }
+  }
   // 얼굴: 머리 구면에 딱 맞는 앞면 패치에 눈·눈썹·입 텍스처를 감싼다 (튀어나온 눈알 없음)
   const eyeY = hy + 0.02 * P.headY, eyeZ = 0.14 * P.headS;   // 소품(선글라스 등) 기준점
   let rigFace = null;
   if (!ghost) {
     const R = 0.17 * P.headS;
-    const faceGeo = new THREE.SphereGeometry(
+    const faceGeo = sculptHead(new THREE.SphereGeometry(
       R * 1.006, 28, 22,
       Math.PI * 0.5 - 0.62, 1.24,          // 가로: 얼굴 폭
       Math.PI * 0.5 - 0.50, 0.94,          // 세로: 이마 ~ 턱
-    );
+    ), P, def);
     const faceMesh = new THREE.Mesh(faceGeo, new THREE.MeshBasicMaterial({
       map: faceTexture(def), transparent: true, depthWrite: false,
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
@@ -3085,7 +3035,7 @@ uniform float uSpecEdge; uniform float uHairBand;
     rigFace = faceMesh;
   }
   // 헤드폰 (정주원)
-  if (def.accessory === 'headphones') {
+  if (!ghost && def.accessory === 'headphones') {
     const band = part(new THREE.TorusGeometry(0.2 * P.headS, 0.022, 8, 20, Math.PI), 0x24242c, head, 0, hy + 0.03, -0.01);
     band.rotation.set(0, 0, 0);
     for (const sx of [-1, 1]) {
@@ -3097,7 +3047,7 @@ uniform float uSpecEdge; uniform float uHairBand;
     }
   }
   // 선글라스 (채채더킴)
-  if (def.accessory === 'sunglasses') {
+  if (!ghost && def.accessory === 'sunglasses') {
     const gl = new THREE.Group(); gl.position.set(0, eyeY + 0.012, eyeZ + 0.028); head.add(gl);
     for (const sx of [-1, 1]) {
       const lens = part(new THREE.BoxGeometry(0.085, 0.055, 0.016), 0x15151c, gl, sx * 0.058, 0, 0);
@@ -3108,24 +3058,31 @@ uniform float uSpecEdge; uniform float uHairBand;
     }
     part(new THREE.BoxGeometry(0.038, 0.012, 0.014), 0x15151c, gl, 0, 0.008, 0, false);
   }
-  // 코 — 옆모습 실루엣용으로만 작게. 정면의 코/입은 얼굴 텍스처가 그린다
-  const nose = part(new THREE.ConeGeometry(0.019, 0.042, 6), def.skin, head, 0, hy - 0.025 * P.headY, 0.163 * P.headS, false);
-  nose.rotation.x = Math.PI / 2 - 0.35;
-
+  const skinOutlineMats = [...deformers.map(d => d.ink), torso.userData.ink].filter(Boolean);
   const rig = {
-    root, hips, waist, chest, head, headMesh, hipsBaseY, headBaseY, def,
+    root, hips, waist, chest, head, headMesh, hipsBaseY, headBaseY, def, deformers, torso,
     shoulderL: armL.shoulder, elbowL: armL.elbow, gloveL: armL.glove,
     shoulderR: armR.shoulder, elbowR: armR.elbow, gloveR: armR.glove,
     thighL: legL.thigh, shinL: legL.shin, thighR: legR.thigh, shinR: legR.shin,
     footL: legL.foot, footR: legR.foot,
     face: rigFace,
+    setExpression(expression) {
+      if (!rigFace || this._expression === expression) return;
+      this._expression = expression;
+      rigFace.material.map = faceTexture(def, expression);
+    },
     bodyMats,
-    get outlineMats() { return [...outlineMats.values()]; },
+    get outlineMats() { return [...outlineMats.values(), ...skinOutlineMats]; },
     setOpacity(o) {
       for (let i = 0; i < bodyMats.length; i++) bodyMats[i].opacity = o;
       this.setOutlineOpacity(Math.min(1, o * 1.3));
     },
+    /** Legacy tint API: motion silhouettes always remain unlit white. */
+    setTint(color, k = 0.3) {
+      if (ghost) for (const m of bodyMats) m.color.set(0xffffff);
+    },
     setOutlineOpacity(a) {
+      for (const m of skinOutlineMats) { m.opacity=a; m.transparent=a<.999; m.depthWrite=a>.5; }
       for (const m of outlineMats.values()) {
         m.uniforms.opacity.value = a;
         m.transparent = a < 0.999;
@@ -3133,12 +3090,13 @@ uniform float uSpecEdge; uniform float uHairBand;
     },
     // 인자는 '몸통 기준' 굵기. 얼굴·머리의 굵기 배율은 그대로 유지한다.
     setOutline(thickness) {
+      for (const m of skinOutlineMats) m.userData.thickness.value = thickness * .92;
       const k = thickness / 0.013;
       for (const [key, m] of outlineMats) m.uniforms.thickness.value = 0.013 * (key / 100) * k;
     },
   };
   applyPose(rig, defaultPose());
-  if (PHOTOREAL) batchRig(rig, { ghost });
+  // Anatomical skinned surfaces retain smooth joint weights in every render mode.
   return rig;
 }
 return { CHARACTERS, CHARACTER_ORDER, HIDDEN_ORDER, COACH_DEFS, POSE_KEYS, defaultPose, copyPose, lerpPose, applyPose, FIGHTER_SCALE, buildBoxer };
@@ -3273,6 +3231,77 @@ function buildPortraits(keys, { renderer = null, w = 240, h = 300 } = {}) {
 }
 return { buildPortraits };
 })();
+// ===== RenderSettings.js =====
+__M.RenderSettings = (() => {
+// The measured-performance gate keeps the existing renderer as the release default.
+const PHOTOREAL = new URLSearchParams(globalThis.location?.search || '').get('photoreal') === '1';
+const PRESETS = Object.freeze({
+  low: { shadows: 1024, ao: 'Low', bloom: false, dof: false, fx: 0 },
+  medium: { shadows: 1024, ao: 'Medium', bloom: true, dof: false, fx: 1 },
+  high: { shadows: 2048, ao: 'High', bloom: true, dof: true, fx: 2 },
+  ultra: { shadows: 2048, ao: 'Ultra', bloom: true, dof: true, fx: 2 },
+});
+
+function initialPreset(device = globalThis.navigator || {}) {
+  if (device.maxTouchPoints > 1 || (device.deviceMemory && device.deviceMemory <= 4)) return 'low';
+  return device.hardwareConcurrency >= 8 ? 'high' : 'medium';
+}
+
+// Frame intervals are not clamped simulation dt. Windows exclude tab suspension.
+class ResolutionGovernor {
+  constructor(onChange, { allow30fps = false, onFrameRate = () => {} } = {}) {
+    this.onChange = onChange;
+    this.allow30fps = allow30fps; this.onFrameRate = onFrameRate; this.targetFps = 60;
+    this.steps = [1, .85, .7, .6];
+    this.index = 0;
+    this.reset();
+  }
+  reset() { this.elapsed = 0; this.frames = 0; this.cooldown = 4; this.good = 0; this.floorOverload = 0; }
+  retry60fps() { this.targetFps = 60; this.reset(); this.onFrameRate(60); }
+  sample(ms, visible = true) {
+    if (!visible || !Number.isFinite(ms) || ms <= 0 || ms > 250) { this.reset(); return; }
+    // Intentional 30fps presentation must never be interpreted as overload/recovery.
+    if (this.targetFps === 30) return;
+    this.cooldown = Math.max(0, this.cooldown - ms / 1000);
+    this.elapsed += ms; this.frames++;
+    if (this.elapsed < 2000) return;
+    const avg = this.elapsed / this.frames;
+    this.elapsed = 0; this.frames = 0;
+    if (this.cooldown > 0) return;
+    if (avg <= 22) this.floorOverload = 0;
+    if (avg > 18.5 && this.index < this.steps.length - 1) {
+      this.index++; this.good = 0; this.cooldown = 4;
+      this.onChange(this.steps[this.index]);
+    } else if (avg < 17.2 && this.index > 0) {
+      // Sustained 60 Hz for 12 s permits one trial up; a failed trial drops again.
+      if (++this.good >= 6) { this.index--; this.good = 0; this.cooldown = 8; this.onChange(this.steps[this.index]); }
+    } else {
+      this.good = 0;
+      if (this.allow30fps && this.index === this.steps.length - 1 && avg > 22) {
+        if (++this.floorOverload >= 4) { this.targetFps = 30; this.onFrameRate(30); }
+      } else this.floorOverload = 0;
+    }
+  }
+}
+
+// Presentation-only cap. Simulation, input, audio and networking still run each rAF.
+class FramePacer {
+  constructor() { this.targetFps = 60; this.previous = null; }
+  setTarget(fps) { this.targetFps = fps === 30 ? 30 : 60; this.previous = null; }
+  shouldRender(now) {
+    if (!Number.isFinite(now)) return false;
+    if (this.targetFps === 60) { this.previous = now; return true; }
+    if (this.previous === null || now < this.previous || now - this.previous > 250) {
+      this.previous = now; return true;
+    }
+    const interval = 1000 / this.targetFps, elapsed = now - this.previous;
+    if (elapsed + .2 < interval) return false;
+    this.previous += Math.max(1, Math.floor((elapsed + .2) / interval)) * interval;
+    return true;
+  }
+}
+return { PHOTOREAL, PRESETS, initialPreset, ResolutionGovernor, FramePacer };
+})();
 // ===== PhotorealPostFX.js =====
 __M.PhotorealPostFX = (() => {
 const { PRESETS } = __M.RenderSettings;
@@ -3288,7 +3317,7 @@ class PhotorealPostFX {
     this.renderer = renderer; this.scene = scene; this.camera = camera; this.P = P;
     this.delta = 0; this.hit = 0; this.cut = false;
     try {
-      this.composer = new P.EffectComposer(renderer, { frameBufferType: THREE.HalfFloatType, multisampling: 0 });
+      this.composer = new P.EffectComposer(renderer, { frameBufferType: THREE.HalfFloatType, multisampling: 0, stencilBuffer: true });
       this.composer.addPass(new P.RenderPass(scene, camera));
       this.ao = new A.N8AOPostPass(scene, camera, innerWidth, innerHeight);
       this.ao.configuration.gammaCorrection = false;
@@ -3650,7 +3679,7 @@ return { BIT, InputState };
 // ===== AfterImageEffect.js =====
 __M.AfterImageEffect = (() => {
 // AfterImageEffect.js — 이전 프레임의 위치·회전·포즈를 링버퍼에 저장하고,
-// 시간차를 둔 고스트 리그 4~8개가 따라오게 하는 잔상 시스템
+// 시간차를 둔 흰 실루엣 최대 3개가 짧게 따라오는 잔상 시스템
 const { buildBoxer, defaultPose, applyPose, copyPose, lerpPose, FIGHTER_SCALE } = __M.Rig;
 
 const BUFFER = 180; // 약 3초 @60fps
@@ -3658,14 +3687,13 @@ const BUFFER = 180; // 약 3초 @60fps
 class AfterImageEffect {
   constructor(scene, charDef, maxGhosts = 8) {
     this.scene = scene;
-    this.max = maxGhosts;
+    this.max = Math.min(3, maxGhosts);
     this.ghosts = [];
-    for (let i = 0; i < maxGhosts; i++) {
-      // 오래된 잔상일수록 푸른 틴트 강하게 → 시간차가 색으로도 읽힘
-      const tint = new THREE.Color().setHSL(0.56, 0.9, 0.7 + 0.2 * (i / maxGhosts));
-      const rig = buildBoxer(charDef, { ghost: true, tint: tint.getHex() });
+    for (let i = 0; i < this.max; i++) {
+      // White silhouette with simplified scalp and no face, props or muscle decals.
+      const rig = buildBoxer(charDef, { ghost: true, tint: 0xffffff });
       rig.root.visible = false;
-      rig.root.traverse((o) => { if (o.isMesh) o.renderOrder = -10 + i; });
+      rig.root.traverse((o) => { if (o.isMesh) o.renderOrder = 10 + (this.max - i); });
       this.ghosts.push(rig);
     }
     // 스냅샷 링버퍼 (GC 회피용 사전 할당)
@@ -3674,6 +3702,7 @@ class AfterImageEffect {
     this.head = 0;   // 다음 쓰기 위치
     this.count = 0;
     this.tmpPose = defaultPose();
+    this.sampleOut = {x:0,y:0,z:0,yaw:0,rx:0,pose:this.tmpPose};
     this.visibleCount = 0;
     this.smoothCount = 0;
   }
@@ -3725,31 +3754,42 @@ class AfterImageEffect {
    * @param interval  잔상 간 시간차 (s)
    * @param strength  전체 불투명도 배율
    */
-  update(time, count, interval, strength = 1) {
+  update(time, count, interval, strength = 1, tint = 0xffffff) {
+    if (strength <= 0) {
+      this.smoothCount = this.visibleCount = 0;
+      for (const ghost of this.ghosts) if (ghost.root.parent) this.scene.remove(ghost.root);
+      return;
+    }
     // 개수 변화는 부드럽게 (갑자기 사라지지 않도록)
-    this.smoothCount += (count - this.smoothCount) * 0.25;
+    this.smoothCount += (Math.min(3, count) - this.smoothCount) * 0.25;
     const n = Math.min(this.max, Math.round(this.smoothCount));
-    this.visibleCount = n;
-    const out = { x: 0, y: 0, z: 0, yaw: 0, rx: 0, pose: this.tmpPose };
+    this.visibleCount = 0;
+    const out = this.sampleOut;
     for (let i = 0; i < this.ghosts.length; i++) {
       const g = this.ghosts[i];
       // 안 보이는 고스트는 씬에서 떼어내 매 프레임 행렬 갱신 비용까지 없앤다
       if (i >= n) { if (g.root.parent) this.scene.remove(g.root); continue; }
-      const tt = time - (i + 1) * interval;
+      const delay = (i + 1) * Math.max(.038, interval);
+      const tt = time - delay;
       if (!this._sample(tt, out)) { if (g.root.parent) this.scene.remove(g.root); continue; }
       if (!g.root.parent) this.scene.add(g.root);
       g.root.visible = true;
       g.root.position.set(out.x, out.y, out.z);
       g.root.rotation.set(out.rx, out.yaw, 0);
       applyPose(g, out.pose);
-      // 오래될수록 투명 + 약간 팽창(흐릿한 느낌) + 외곽선 두꺼워짐
-      const age = (i + 1) / (n + 1);
-      const op = strength * (0.62 * Math.pow(1 - age, 1.3) + 0.06);
+      // Fixed age fade prevents opacity from changing when the requested count changes.
+      // Skip nearly identical poses: idle history must never accumulate into a white body.
+      const current = this._snapAt(0);
+      const motion = Math.hypot(out.x-current.x,out.z-current.z)
+        + Math.abs(out.pose.elL-current.pose.elL)*.08 + Math.abs(out.pose.elR-current.pose.elR)*.08
+        + Math.abs(out.pose.shLX-current.pose.shLX)*.10 + Math.abs(out.pose.shRX-current.pose.shRX)*.10
+        + Math.abs(out.pose.waistZ-current.pose.waistZ)*.12;
+      if (motion < .018 || tt < this._snapAt(this.count-1).t) { this.scene.remove(g.root); continue; }
+      const op = Math.min(1, strength) * .14 * Math.exp(-delay * 9);
+      this.visibleCount++;
       g.setOpacity(op);
-      g.setOutline(0.014 + 0.012 * age);
-      // 본체와 같은 축척(FIGHTER_SCALE)을 쓰고, 오래될수록 아주 살짝만 팽창
-      const sc = FIGHTER_SCALE * (1 + 0.035 * age);
-      g.root.scale.set(sc, sc, sc);
+      g.setTint(0xffffff, 0);
+      g.root.scale.setScalar(FIGHTER_SCALE);
     }
   }
 }
@@ -4869,10 +4909,10 @@ class PostFX {
     this.damp = 0;
 
     const size = renderer.getDrawingBufferSize(new THREE.Vector2());
-    const opts = { type: THREE.HalfFloatType, depthBuffer: true, stencilBuffer: false };
+    const opts = { type: THREE.HalfFloatType, depthBuffer: true, stencilBuffer: true };
     this.rtScene = new THREE.WebGLRenderTarget(size.x, size.y, opts);
-    this.rtA = new THREE.WebGLRenderTarget(size.x, size.y, { ...opts, depthBuffer: false });
-    this.rtB = new THREE.WebGLRenderTarget(size.x, size.y, { ...opts, depthBuffer: false });
+    this.rtA = new THREE.WebGLRenderTarget(size.x, size.y, { ...opts, depthBuffer: false, stencilBuffer: false });
+    this.rtB = new THREE.WebGLRenderTarget(size.x, size.y, { ...opts, depthBuffer: false, stencilBuffer: false });
     for (const rt of [this.rtScene, this.rtA, this.rtB]) {
       rt.texture.minFilter = THREE.LinearFilter;
       rt.texture.magFilter = THREE.LinearFilter;
@@ -4920,8 +4960,8 @@ class PostFX {
   }
 
   onHit(power, cx, cy) {
-    this.hitRadial = 0.12 + 0.18 * power;
-    this.hitDamp = 0.6;
+    this.hitRadial = 0.012 + 0.018 * Math.min(1.5, power);
+    this.hitDamp = 0;
     this.compositeMat.uniforms.center.value.set(cx, cy);
   }
 
@@ -4944,7 +4984,7 @@ class PostFX {
     u.samplesMix.value = this.quality > 1 ? 1 : 0;
 
     const damp = (s.dempseyActive ? 0.1 + 0.25 * I : 0) + (s.maxSpeed ? 0.05 : 0);
-    this.damp = this.quality > 0 ? Math.min(0.7, Math.max(damp, this.hitDamp)) : 0;
+    this.damp = 0; // Historical rig silhouettes provide motion without smearing colored frames.
   }
 
   /** 씬 렌더 + 합성. EffectComposer 없이 직접 돌린다 */
@@ -5719,6 +5759,8 @@ class Fighter {
   }
 
   updateVisualFx(rawDt) {
+    const blink = ((this.rtime + this.slot * .73) % 3.9) > 3.81;
+    this.rig.setExpression(this.flash > .45 || this.stagger > .12 ? 'hurt' : blink ? 'blink' : 'focused');
     for (const side of ['L', 'R']) {
       const g = side === 'L' ? this.rig.gloveL : this.rig.gloveR;
       const k = this.squash[side];
@@ -7327,6 +7369,17 @@ __M.FxOverlay = (() => {
 // 화이트 플래시, 히트스톱 만화 임팩트 프레임, 의성어 텍스트, MAX SPEED 비네트
 const SFX_WORDS = ['ドゴォ', 'バキィ', 'ゴッ', 'ドンッ', 'ズガッ', 'バァン'];
 
+// 임팩트 팔레트 (만화 폭발). ring: 바깥/안쪽 링, spikes: 스파이크 교대색, word: 의성어 채움, flash: 화면 플래시
+// 'rainbow' 는 스파이크마다 색상환을 돌린다 (카운터·필살).
+const PALETTES = {
+  hit:     { ring: ['255,255,255', '255,150,30'], spikes: ['255,232,60', '255,140,30', '255,255,255'], word: '255,228,60', flash: '255,240,190' },
+  heavy:   { ring: ['255,240,120', '255,90,30'],  spikes: ['255,210,40', '255,70,40', '255,255,255'],  word: '255,210,40', flash: '255,225,150' },
+  counter: { ring: ['255,255,255', '255,50,120'], spikes: 'rainbow', word: '255,80,150', flash: '255,190,220' },
+  finisher:{ ring: ['255,255,255', '255,40,80'],  spikes: 'rainbow', word: '255,240,90', flash: '255,255,255' },
+  blue:    { ring: ['140,200,255', '80,150,255'], spikes: ['120,200,255', '80,140,255', '255,255,255'], word: '150,210,255', flash: '150,200,255' },
+  pink:    { ring: ['255,200,240', '255,120,200'],spikes: ['255,120,200', '255,200,240', '255,255,255'], word: '255,140,210', flash: '255,210,240' },
+};
+
 class FxOverlay {
   constructor(canvas) {
     this.c = canvas;
@@ -7341,6 +7394,8 @@ class FxOverlay {
     this.carry = 0;
     this.carry2 = 0;
     this.t = 0;
+    this.impactImage = new Image();
+    this.impactImage.src = 'assets/effects/boxing-impact-v2.png';
     this.resize();
   }
 
@@ -7349,14 +7404,23 @@ class FxOverlay {
     this.h = this.c.height = window.innerHeight;
   }
 
+  /**
+   * @param tint 팔레트 이름 ('hit'|'heavy'|'counter'|'finisher'|'blue'|'pink'). 생략 시 power 로 hit/heavy 자동.
+   *             (옛 호출 호환: [r,g,b] 배열은 pink 로)
+   */
   addImpact(x, y, power, maxSpeed, tint = null) {
-    this.impacts.push({ tint,
+    const name = Array.isArray(tint) ? 'pink' : (tint && PALETTES[tint] ? tint : (power >= 0.9 ? 'heavy' : 'hit'));
+    const pal = PALETTES[name];
+    // 만화식 폭발 실루엣: 꼭짓점마다 반지름이 들쭉날쭉한 별 모양
+    const star = []; for (let i = 0; i < 14; i++) star.push(0.55 + Math.random() * 0.45);
+    this.impacts.push({ pal, star,
       x, y, power, age: 0, rot: Math.random() * Math.PI * 2,
       word: SFX_WORDS[Math.floor(Math.random() * SFX_WORDS.length)],
       wordRot: (Math.random() - 0.5) * 0.5, maxSpeed,
     });
-    this.flash = Math.max(this.flash, 0.3 + 0.5 * power);
-    this.flashRGB = '255,255,255';
+    if (this.impacts.length > 6) this.impacts.shift();
+    this.flash = Math.max(this.flash, .025 + .035 * Math.min(1, power));
+    this.flashRGB = pal.flash;
   }
 
   /** 화면 위치에 짧은 텍스트 팝업 (예: 피함!) */
@@ -7477,55 +7541,22 @@ class FxOverlay {
       ctx.restore();
     }
 
-    // ---- 임팩트 링 / 버스트 / 의성어 ----
+    // Compact contact flash. Depth-correct white contact sprite is rendered by HitSparks;
+    // this screen layer keeps only a brief, low-opacity accent without a huge ring or text.
     for (let i = this.impacts.length - 1; i >= 0; i--) {
-      const im = this.impacts[i];
-      im.age += dt;
-      const T = 0.42;
-      if (im.age > T) { this.impacts.splice(i, 1); continue; }
-      const k = im.age / T;
-      const e = 1 - Math.pow(1 - k, 3);
-      const P = im.power;
-      // 링
-      const rad = Math.max(1, 30 + (220 + 200 * P) * e);
-      ctx.lineWidth = Math.max(0.5, (18 + 10 * P) * (1 - k));
-      const c1 = im.tint === 'blue' ? '140,200,255' : '255,255,255', c2 = im.tint === 'blue' ? '80,150,255' : '255,170,60';
-      ctx.strokeStyle = `rgba(${c1},${(1 - k) * 0.95})`;
-      ctx.beginPath(); ctx.arc(im.x, im.y, rad, 0, Math.PI * 2); ctx.stroke();
-      ctx.lineWidth = Math.max(0.5, 6 * (1 - k));
-      ctx.strokeStyle = `rgba(${c2},${(1 - k) * 0.9})`;
-      ctx.beginPath(); ctx.arc(im.x, im.y, rad * 0.72, 0, Math.PI * 2); ctx.stroke();
-      // 버스트 스파이크
-      const spikes = 14;
-      for (let j = 0; j < spikes; j++) {
-        const ang = im.rot + (j / spikes) * Math.PI * 2;
-        const L = (130 + 260 * P) * e * (0.6 + 0.4 * Math.abs(Math.sin(j * 2.7)));
-        const wdt = (14 + 10 * P) * (1 - k);
-        ctx.fillStyle = j % 3 === 0 ? `rgba(${c2},${(1 - k)})` : `rgba(${c1},${(1 - k)})`;
-        ctx.beginPath();
-        ctx.moveTo(im.x + Math.cos(ang) * 20, im.y + Math.sin(ang) * 20);
-        ctx.lineTo(im.x + Math.cos(ang + 0.06) * (20 + wdt), im.y + Math.sin(ang + 0.06) * (20 + wdt));
-        ctx.lineTo(im.x + Math.cos(ang) * (20 + L), im.y + Math.sin(ang) * (20 + L));
-        ctx.lineTo(im.x + Math.cos(ang - 0.06) * (20 + wdt), im.y + Math.sin(ang - 0.06) * (20 + wdt));
-        ctx.closePath(); ctx.fill();
+      const im = this.impacts[i]; im.age += dt;
+      const duration = .12;
+      if (im.age >= duration) { this.impacts.splice(i, 1); continue; }
+      const k = im.age / duration;
+      const radius = Math.min(w,h) * (.018 + .012 * Math.min(1.5,im.power));
+      ctx.save();ctx.translate(im.x, im.y);ctx.rotate(im.wordRot * .4);
+      ctx.globalAlpha = .22 * Math.pow(1-k,2);
+      if (this.impactImage.complete && this.impactImage.naturalWidth) {
+        ctx.drawImage(this.impactImage, -radius, -radius*.50, radius*2, radius);
+      } else {
+        ctx.fillStyle = '#fff';ctx.beginPath();ctx.ellipse(0,0,radius*.4,radius*.10,0,0,Math.PI*2);ctx.fill();
       }
-      // 의성어
-      if (im.age < 0.4) {
-        const pop = k < 0.2 ? 1.6 - 3 * k : 1;
-        const size = (60 + 60 * P) * pop;
-        ctx.save();
-        ctx.translate(im.x + 60, im.y - 50);
-        ctx.rotate(im.wordRot);
-        ctx.font = `900 ${size}px "Noto Sans JP", "Hiragino Sans", sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.lineJoin = 'round';
-        ctx.lineWidth = 12;
-        ctx.strokeStyle = `rgba(0,0,0,${1 - k * 0.8})`;
-        ctx.strokeText(im.word, 0, 0);
-        ctx.fillStyle = im.maxSpeed ? `rgba(255,220,80,${1 - k * 0.8})` : `rgba(255,255,255,${1 - k * 0.8})`;
-        ctx.fillText(im.word, 0, 0);
-        ctx.restore();
-      }
+      ctx.restore();
     }
 
     // ---- 텍스트 팝업 ----
@@ -7558,9 +7589,9 @@ class FxOverlay {
 
     // ---- 화이트 플래시 ----
     if (this.flash > 0.01) {
-      ctx.fillStyle = `rgba(${this.flashRGB},${Math.min(1, this.flash)})`;
+      ctx.fillStyle = `rgba(${this.flashRGB},${Math.min(.12, this.flash)})`;
       ctx.fillRect(0, 0, w, h);
-      this.flash *= Math.exp(-dt * 16);
+      this.flash *= Math.exp(-dt * 30);
     }
   }
 }
@@ -8606,6 +8637,9 @@ const _sep = new THREE.Vector3();
 const SPAWNS = [[0, 2.4], [0, -2.4], [2.4, 0], [-2.4, 0]];
 const AUDIO_FWD = ['whoosh', 'swoosh', 'impact', 'bassHit', 'riser', 'maxSpeedHit', 'stagger', 'ko', 'block', 'chargeUp', 'finisherWind', 'finisherHit', 'counter', 'cheer', 'engine', 'clang', 'nyang', 'shutter'];
 const SNAP_HZ = 30;
+// 만화 색종이 스파크 팔레트 (배열이면 입자마다 랜덤)
+const HIT_CONFETTI = [new THREE.Color(1, 0.92, 0.25), new THREE.Color(1, 0.55, 0.15), new THREE.Color(1, 1, 1), new THREE.Color(1, 0.3, 0.35)];
+const RAINBOW = [new THREE.Color(1, 0.25, 0.3), new THREE.Color(1, 0.6, 0.1), new THREE.Color(1, 0.95, 0.2), new THREE.Color(0.3, 1, 0.5), new THREE.Color(0.25, 0.75, 1), new THREE.Color(0.75, 0.35, 1), new THREE.Color(1, 1, 1)];
 
 class Game {
   constructor() {
@@ -8613,7 +8647,7 @@ class Game {
     // WebGL2 를 못 만드는 환경(카톡·인스타 등 인앱 브라우저, 구형 iOS, GPU 차단)이면 three 가 여기서 던진다.
     // 게스트가 초대 링크를 메신저 안에서 여는 경우가 대표적 — 새 창에 안내를 띄우고 게임 초기화를 중단한다.
     try {
-      this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+      this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, stencil: true, powerPreference: 'high-performance' });
     } catch (e) {
       if (window.__glFail) window.__glFail(e && e.message ? e.message : String(e));
       throw e;
@@ -8655,8 +8689,8 @@ class Game {
     this.voice = new VoiceManager(this.audio);
     this.subs.voice = this.voice;
 
-    this.trailL = new Ribbon(this.scene, { maxPoints: 18, width: 0.2, color: 0xffb060, coreColor: 0xffffff });
-    this.trailR = new Ribbon(this.scene, { maxPoints: 18, width: 0.2, color: 0xffb060, coreColor: 0xffffff });
+    this.trailL = new Ribbon(this.scene, { maxPoints: 12, width: 0.045, color: 0xffffff, coreColor: 0xffffff });
+    this.trailR = new Ribbon(this.scene, { maxPoints: 12, width: 0.045, color: 0xffffff, coreColor: 0xffffff });
     this.headTrail = new Ribbon(this.scene, { maxPoints: 40, width: 0.025, color: 0x2090ff, coreColor: 0xbfe8ff, opacity: 0.55 });
     this.ghostFx = {};   // defKey → AfterImageEffect (지연 생성)
     this.sparks = new HitSparks(this.scene);
@@ -9642,7 +9676,7 @@ class Game {
     this.post.quality = q; this.fx.quality = q;
     this.renderer.setPixelRatio(q === 2 ? Math.min(window.devicePixelRatio, 1.25) : q === 1 ? 1 : Math.min(1, window.devicePixelRatio * 0.75));
     this.renderer.shadowMap.enabled = q === 2;
-    for (const k in this.ghostFx) this.ghostFx[k].max = q === 2 ? this.ghostFx[k].ghosts.length : Math.max(3, Math.floor(this.ghostFx[k].ghosts.length / 2));
+    for (const k in this.ghostFx) this.ghostFx[k].max = q === 2 ? this.ghostFx[k].ghosts.length : Math.min(2, this.ghostFx[k].ghosts.length);
     this.onResize();
     const el = document.getElementById('netinfo');
     if (el) el.dataset.q = q;
@@ -9743,8 +9777,8 @@ class Game {
     if (res.downed) {
       // ---- 쓰러지는 상대에게 추가타: 몸이 날아가고, 코치가 말린다 ----
       this.audio.impact(0.6 + 0.4 * P, 'body'); if (P > 0.8) this.audio.bassHit();
-      this.sparks.burst(pos, dir, 18 + Math.round(20 * P), new THREE.Color(1, 0.9, 0.7), 1.4, 0.5);
-      this.fx.addImpact(px, py, 0.6 * P, false);
+      this.sparks.burst(pos, dir, 18 + Math.round(20 * P), HIT_CONFETTI, 1.4, 0.5);
+      this.fx.addImpact(px, py, 0.6 * P, false, 'heavy');
       if (target) target.flash = 1;
       this.stopPair(ev, 0.04); if (mine) { this.camCtl.onHit(dir, 0.6 + 0.4 * P); const cb = this.coachBrains[ev.a]; if (cb) cb.onDownedHit(); }
       return;
@@ -9810,18 +9844,19 @@ class Game {
     this.ring.cheer(); this.audio.cheer(P);
     if (involved && target) this.voice.hurt(ev.b, target.defKey, P);
     if (target) target.flash = 1;
-    if (ev.launch) { this.camCtl.shakeAmp = Math.max(this.camCtl.shakeAmp, 0.15); this.camCtl.fovPunch = -10; this.stopPair(ev, 0, 0.45, 0.35); this.audio.bassHit(); this.sparks.burst(pos, new THREE.Vector3(0, 1, 0), 24, new THREE.Color(1, 0.85, 0.5), 1.6, 0.5); }
+    if (ev.launch) { this.camCtl.shakeAmp = Math.max(this.camCtl.shakeAmp, 0.15); this.camCtl.fovPunch = -10; this.stopPair(ev, 0, 0.45, 0.35); this.audio.bassHit(); this.sparks.burst(pos, new THREE.Vector3(0, 1, 0), 30, RAINBOW, 1.7, 0.55); }
     if (ev.liver) { this.stopPair(ev, 0.12); this.audio.bassHit(); if (hurt) this.subs.show('ぐ…息が…！', { duration: 1.1, mid: true }); else if (mine) this.subs.show('リバーが入った…！', { duration: 1.0 }); }
     if (ev.kind && !ev.finisher && (mine || hurt) && !ev.liver) { const sp = SPECIALS[ev.kind]; if (sp && Math.random() < 0.6) this.subs.show(sp.name + (ev.counter ? '、カウンター！！' : '！！'), { duration: 1.0, mid: true, speaker: mine ? 'player' : 'opp' }); }
     // 땀방울/스파크: 머리 타격은 위로 흩뿌리고, 보디는 낮고 넓게
     const n = Math.round(14 + 26 * P + (ev.counter || ev.finisher ? 30 : 0));
-    const col = ev.counter || ev.finisher ? new THREE.Color(1, 0.75, 0.35) : body ? new THREE.Color(0.9, 0.95, 1) : new THREE.Color(1, 1, 1);
+    const col = ev.counter || ev.finisher ? RAINBOW : body ? [new THREE.Color(0.6, 0.9, 1), new THREE.Color(1, 1, 1), new THREE.Color(0.5, 0.7, 1)] : HIT_CONFETTI;
     this.sparks.burst(pos, dir, n, col, body ? 0.9 : 1.2 + 0.6 * P, body ? 0.5 : 0.55);
 
     if (ev.finisher) {
       this.stopPair(ev, 0.22, 1.1, 0.18);
       this.camCtl.onCounter(dir); this.camCtl.shakeAmp = 0.4;
-      this.fx.addImpact(px, py, 1.6, true); this.fx.flash = 1.0;
+      this.fx.addImpact(px, py, 1.6, true, 'finisher'); this.fx.flash = 1.0;
+      this.sparks.burst(pos, dir, 40, RAINBOW, 1.8, 0.7);
       this.post.onHit(1.6, uv.x, uv.y);
       this.audio.finisherHit();
       if (involved) this.subs.show(ev.charge >= 2 ? 'ぶっ飛べぇぇぇっ！！！' : 'ぶっ飛べぇっ！！', { duration: 1.8, strong: true, speaker: mine ? 'player' : 'opp' });
@@ -9829,7 +9864,8 @@ class Game {
     } else if (ev.counter) {
       this.stopPair(ev, 0.17, 0.75, 0.3);
       this.camCtl.onCounter(dir);
-      this.fx.addImpact(px, py, 1.3, true);
+      this.fx.addImpact(px, py, 1.3, true, 'counter');
+      this.sparks.burst(pos, dir, 30, RAINBOW, 1.6, 0.6);
       if (hurt) this.fx.hurtFlash(1.2); else this.fx.flash = 0.8;
       this.post.onHit(1.2, uv.x, uv.y);
       this.audio.counter();
@@ -10389,13 +10425,16 @@ class Game {
       let count = 0, interval = f.dempsey.ghostInterval, strength = 1;
       if (f === view || f === opp) {
         if (attacking) {
-          count = f.finisher || f.ultT > 0 || f.rollT > 0 ? 7 : 5;
+          count = f.finisher || f.ultT > 0 || f.rollT > 0 ? 3 : 2;
           interval = f.rollT > 0 ? 0.022 : 0.026;
           strength = f.finisher || f.ultT > 0 ? 1.15 : 1;
         }
-        if (f.dempsey.maxSpeed && attacking) { count = Math.max(count, 7); strength = 1.15; }
+        if (f.dempsey.maxSpeed && attacking) { count = Math.max(count, 3); strength = 1.15; }
       }
-      g.update(this.mode === 'client' ? this.realTime : f.time, count, interval, strength);
+      // Near-camera fade intentionally removes body depth. Suppress trails of either
+      // fighter in that case so historical silhouettes cannot show through the body.
+      if (view._fade < .999 || opp._fade < .999) { count=0; strength=0; }
+      g.update(tNow, count, interval, strength, 0xffffff);
     }
 
     // 트레일 (시점 인물)
@@ -10407,6 +10446,9 @@ class Game {
       if (lActive) this.trailL.push(view.gloveL); else if (!pu) this.trailL.clear();
       if (rActive) this.trailR.push(view.gloveR); else if (!pu) this.trailR.clear();
       if (d.blend > 0) this.headTrail.push(view.headPos); else this.headTrail.clear();
+      // Short white glove arcs keep the punching arm readable.
+      const tc = 0xffffff;
+      this.trailL.setColor(tc); this.trailR.setColor(tc);
       this.trailL.update(rawDt, this.camera, !!lActive);
       this.trailR.update(rawDt, this.camera, !!rActive);
       this.headTrail.update(rawDt, this.camera, d.active && I > 0.15);
@@ -10509,6 +10551,88 @@ class Game {
 
 window.game = new Game();
 return {  };
+})();
+// ===== BatchRig.js =====
+__M.BatchRig = (() => {
+
+// Retain the gameplay transform hierarchy; draw its rigid parts as one skinned mesh.
+// One weight per vertex reproduces existing joint motion without changing topology.
+function batchRig(rig, { ghost = false } = {}) {
+  const root = rig.root;
+  root.updateMatrixWorld(true);
+  const anchors = new Set(Object.values(rig).filter(value => value?.isObject3D));
+  const protectedNodes = new Set(ghost ? [] : [rig.gloveL, rig.gloveR]);
+  const candidates = [];
+  const canMerge = object => object.isMesh && !Array.isArray(object.material) &&
+    (object.material.isMeshPhysicalMaterial || (ghost && object.material.isMeshBasicMaterial)) &&
+    !object.material.map && (ghost || !object.material.transparent);
+  root.traverse(object => {
+    if (!canMerge(object)) return;
+    for (let parent = object; parent && parent !== root; parent = parent.parent) if (protectedNodes.has(parent)) return;
+    // Do not hide retained text planes or transparent accessories under a merged parent.
+    let retainedChild = false;
+    object.traverse(child => { if (child !== object && child.isMesh && !canMerge(child)) retainedChild = true; });
+    if (!retainedChild) candidates.push(object);
+  });
+  if (candidates.length < 2) return;
+  const targets = [], groups = new Map(), inverseRoot = root.matrixWorld.clone().invert();
+  const matrix = new THREE.Matrix4();
+  for (const object of candidates) {
+    let anchor = object;
+    while (!anchors.has(anchor)) anchor = anchor.parent;
+    let boneIndex = targets.indexOf(anchor);
+    if (boneIndex < 0) { boneIndex = targets.length; targets.push(anchor); }
+    const material = object.material;
+    const key = [material.roughness, material.metalness, material.sheen, material.clearcoat,
+      material.clearcoatRoughness, material.side, material.emissive?.getHex()].join(':');
+    if (!groups.has(key)) {
+      const shared = material.clone(); shared.color.set(0xffffff); shared.sheenColor?.set(0xffffff); shared.vertexColors = true;
+      groups.set(key, {material:shared, geometries:[]});
+    }
+    const geometry = object.geometry.index ? object.geometry.toNonIndexed() : object.geometry.clone();
+    matrix.multiplyMatrices(inverseRoot, object.matrixWorld); geometry.applyMatrix4(matrix);
+    // All source primitives share only position/normal/uv after this normalization.
+    for (const name of Object.keys(geometry.attributes)) if (!['position','normal','uv'].includes(name)) geometry.deleteAttribute(name);
+    const count = geometry.attributes.position.count;
+    const colors = new Float32Array(count * 3), indices = new Uint16Array(count * 4), weights = new Float32Array(count * 4);
+    for (let i = 0; i < count; i++) {
+      colors[i*3] = material.color.r; colors[i*3+1] = material.color.g; colors[i*3+2] = material.color.b;
+      indices[i*4] = boneIndex; weights[i*4] = 1;
+    }
+    if (!geometry.attributes.uv) geometry.setAttribute('uv',new THREE.Float32BufferAttribute(new Float32Array(count*2),2));
+    geometry.setAttribute('color',new THREE.BufferAttribute(colors,3));
+    geometry.setAttribute('skinIndex',new THREE.BufferAttribute(indices,4));
+    geometry.setAttribute('skinWeight',new THREE.BufferAttribute(weights,4));
+    groups.get(key).geometries.push(geometry);
+  }
+  const mergedGroups = [], materials = [];
+  for (const group of groups.values()) {
+    const geometry = mergeGeometries(group.geometries,false);
+    for (const source of group.geometries) source.dispose();
+    mergedGroups.push(geometry); materials.push(group.material);
+  }
+  const geometry = mergeGeometries(mergedGroups,true);
+  for (const part of mergedGroups) part.dispose();
+  const bones = targets.map(target => { const bone = new THREE.Bone(); bone.matrixAutoUpdate = false; bone.matrixWorld.copy(target.matrixWorld); return bone; });
+  const skeleton = new THREE.Skeleton(bones);
+  const mesh = new THREE.SkinnedMesh(geometry,materials);
+  mesh.name = 'Batched boxer'; mesh.castShadow = mesh.receiveShadow = !ghost;
+  mesh.frustumCulled = false; // Animated bounds; root is hidden by the game's bench logic.
+  mesh.bind(skeleton,root.matrixWorld);
+  const sync = () => {
+    for (let i=0;i<targets.length;i++) bones[i].matrixWorld.copy(targets[i].matrixWorld);
+    skeleton.update();
+  };
+  mesh.onBeforeRender = sync; mesh.onBeforeShadow = sync;
+  root.add(mesh);
+  const mergedMaterials = new Set(candidates.map(object=>object.material));
+  const retainedMaterials = rig.bodyMats.filter(material=>!mergedMaterials.has(material));
+  rig.bodyMats.splice(0,rig.bodyMats.length,...retainedMaterials,...materials);
+  for (const object of candidates) object.visible = false;
+  // Original meshes remain as lightweight transform anchors, retaining hitbox references.
+  rig.batch = {mesh,skeleton,targets,sourceMeshes:candidates};
+}
+return { batchRig };
 })();
 </script>
 </body>

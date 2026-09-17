@@ -37,6 +37,9 @@ const _sep = new THREE.Vector3();
 const SPAWNS = [[0, 2.4], [0, -2.4], [2.4, 0], [-2.4, 0]];
 const AUDIO_FWD = ['whoosh', 'swoosh', 'impact', 'bassHit', 'riser', 'maxSpeedHit', 'stagger', 'ko', 'block', 'chargeUp', 'finisherWind', 'finisherHit', 'counter', 'cheer', 'engine', 'clang', 'nyang', 'shutter'];
 const SNAP_HZ = 30;
+// 만화 색종이 스파크 팔레트 (배열이면 입자마다 랜덤)
+const HIT_CONFETTI = [new THREE.Color(1, 0.92, 0.25), new THREE.Color(1, 0.55, 0.15), new THREE.Color(1, 1, 1), new THREE.Color(1, 0.3, 0.35)];
+const RAINBOW = [new THREE.Color(1, 0.25, 0.3), new THREE.Color(1, 0.6, 0.1), new THREE.Color(1, 0.95, 0.2), new THREE.Color(0.3, 1, 0.5), new THREE.Color(0.25, 0.75, 1), new THREE.Color(0.75, 0.35, 1), new THREE.Color(1, 1, 1)];
 
 class Game {
   constructor() {
@@ -44,7 +47,7 @@ class Game {
     // WebGL2 를 못 만드는 환경(카톡·인스타 등 인앱 브라우저, 구형 iOS, GPU 차단)이면 three 가 여기서 던진다.
     // 게스트가 초대 링크를 메신저 안에서 여는 경우가 대표적 — 새 창에 안내를 띄우고 게임 초기화를 중단한다.
     try {
-      this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+      this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, stencil: true, powerPreference: 'high-performance' });
     } catch (e) {
       if (window.__glFail) window.__glFail(e && e.message ? e.message : String(e));
       throw e;
@@ -86,8 +89,8 @@ class Game {
     this.voice = new VoiceManager(this.audio);
     this.subs.voice = this.voice;
 
-    this.trailL = new Ribbon(this.scene, { maxPoints: 18, width: 0.2, color: 0xffb060, coreColor: 0xffffff });
-    this.trailR = new Ribbon(this.scene, { maxPoints: 18, width: 0.2, color: 0xffb060, coreColor: 0xffffff });
+    this.trailL = new Ribbon(this.scene, { maxPoints: 12, width: 0.045, color: 0xffffff, coreColor: 0xffffff });
+    this.trailR = new Ribbon(this.scene, { maxPoints: 12, width: 0.045, color: 0xffffff, coreColor: 0xffffff });
     this.headTrail = new Ribbon(this.scene, { maxPoints: 40, width: 0.025, color: 0x2090ff, coreColor: 0xbfe8ff, opacity: 0.55 });
     this.ghostFx = {};   // defKey → AfterImageEffect (지연 생성)
     this.sparks = new HitSparks(this.scene);
@@ -1073,7 +1076,7 @@ class Game {
     this.post.quality = q; this.fx.quality = q;
     this.renderer.setPixelRatio(q === 2 ? Math.min(window.devicePixelRatio, 1.25) : q === 1 ? 1 : Math.min(1, window.devicePixelRatio * 0.75));
     this.renderer.shadowMap.enabled = q === 2;
-    for (const k in this.ghostFx) this.ghostFx[k].max = q === 2 ? this.ghostFx[k].ghosts.length : Math.max(3, Math.floor(this.ghostFx[k].ghosts.length / 2));
+    for (const k in this.ghostFx) this.ghostFx[k].max = q === 2 ? this.ghostFx[k].ghosts.length : Math.min(2, this.ghostFx[k].ghosts.length);
     this.onResize();
     const el = document.getElementById('netinfo');
     if (el) el.dataset.q = q;
@@ -1174,8 +1177,8 @@ class Game {
     if (res.downed) {
       // ---- 쓰러지는 상대에게 추가타: 몸이 날아가고, 코치가 말린다 ----
       this.audio.impact(0.6 + 0.4 * P, 'body'); if (P > 0.8) this.audio.bassHit();
-      this.sparks.burst(pos, dir, 18 + Math.round(20 * P), new THREE.Color(1, 0.9, 0.7), 1.4, 0.5);
-      this.fx.addImpact(px, py, 0.6 * P, false);
+      this.sparks.burst(pos, dir, 18 + Math.round(20 * P), HIT_CONFETTI, 1.4, 0.5);
+      this.fx.addImpact(px, py, 0.6 * P, false, 'heavy');
       if (target) target.flash = 1;
       this.stopPair(ev, 0.04); if (mine) { this.camCtl.onHit(dir, 0.6 + 0.4 * P); const cb = this.coachBrains[ev.a]; if (cb) cb.onDownedHit(); }
       return;
@@ -1241,18 +1244,19 @@ class Game {
     this.ring.cheer(); this.audio.cheer(P);
     if (involved && target) this.voice.hurt(ev.b, target.defKey, P);
     if (target) target.flash = 1;
-    if (ev.launch) { this.camCtl.shakeAmp = Math.max(this.camCtl.shakeAmp, 0.15); this.camCtl.fovPunch = -10; this.stopPair(ev, 0, 0.45, 0.35); this.audio.bassHit(); this.sparks.burst(pos, new THREE.Vector3(0, 1, 0), 24, new THREE.Color(1, 0.85, 0.5), 1.6, 0.5); }
+    if (ev.launch) { this.camCtl.shakeAmp = Math.max(this.camCtl.shakeAmp, 0.15); this.camCtl.fovPunch = -10; this.stopPair(ev, 0, 0.45, 0.35); this.audio.bassHit(); this.sparks.burst(pos, new THREE.Vector3(0, 1, 0), 30, RAINBOW, 1.7, 0.55); }
     if (ev.liver) { this.stopPair(ev, 0.12); this.audio.bassHit(); if (hurt) this.subs.show('ぐ…息が…！', { duration: 1.1, mid: true }); else if (mine) this.subs.show('リバーが入った…！', { duration: 1.0 }); }
     if (ev.kind && !ev.finisher && (mine || hurt) && !ev.liver) { const sp = SPECIALS[ev.kind]; if (sp && Math.random() < 0.6) this.subs.show(sp.name + (ev.counter ? '、カウンター！！' : '！！'), { duration: 1.0, mid: true, speaker: mine ? 'player' : 'opp' }); }
     // 땀방울/스파크: 머리 타격은 위로 흩뿌리고, 보디는 낮고 넓게
     const n = Math.round(14 + 26 * P + (ev.counter || ev.finisher ? 30 : 0));
-    const col = ev.counter || ev.finisher ? new THREE.Color(1, 0.75, 0.35) : body ? new THREE.Color(0.9, 0.95, 1) : new THREE.Color(1, 1, 1);
+    const col = ev.counter || ev.finisher ? RAINBOW : body ? [new THREE.Color(0.6, 0.9, 1), new THREE.Color(1, 1, 1), new THREE.Color(0.5, 0.7, 1)] : HIT_CONFETTI;
     this.sparks.burst(pos, dir, n, col, body ? 0.9 : 1.2 + 0.6 * P, body ? 0.5 : 0.55);
 
     if (ev.finisher) {
       this.stopPair(ev, 0.22, 1.1, 0.18);
       this.camCtl.onCounter(dir); this.camCtl.shakeAmp = 0.4;
-      this.fx.addImpact(px, py, 1.6, true); this.fx.flash = 1.0;
+      this.fx.addImpact(px, py, 1.6, true, 'finisher'); this.fx.flash = 1.0;
+      this.sparks.burst(pos, dir, 40, RAINBOW, 1.8, 0.7);
       this.post.onHit(1.6, uv.x, uv.y);
       this.audio.finisherHit();
       if (involved) this.subs.show(ev.charge >= 2 ? 'ぶっ飛べぇぇぇっ！！！' : 'ぶっ飛べぇっ！！', { duration: 1.8, strong: true, speaker: mine ? 'player' : 'opp' });
@@ -1260,7 +1264,8 @@ class Game {
     } else if (ev.counter) {
       this.stopPair(ev, 0.17, 0.75, 0.3);
       this.camCtl.onCounter(dir);
-      this.fx.addImpact(px, py, 1.3, true);
+      this.fx.addImpact(px, py, 1.3, true, 'counter');
+      this.sparks.burst(pos, dir, 30, RAINBOW, 1.6, 0.6);
       if (hurt) this.fx.hurtFlash(1.2); else this.fx.flash = 0.8;
       this.post.onHit(1.2, uv.x, uv.y);
       this.audio.counter();
@@ -1820,13 +1825,16 @@ class Game {
       let count = 0, interval = f.dempsey.ghostInterval, strength = 1;
       if (f === view || f === opp) {
         if (attacking) {
-          count = f.finisher || f.ultT > 0 || f.rollT > 0 ? 7 : 5;
+          count = f.finisher || f.ultT > 0 || f.rollT > 0 ? 3 : 2;
           interval = f.rollT > 0 ? 0.022 : 0.026;
           strength = f.finisher || f.ultT > 0 ? 1.15 : 1;
         }
-        if (f.dempsey.maxSpeed && attacking) { count = Math.max(count, 7); strength = 1.15; }
+        if (f.dempsey.maxSpeed && attacking) { count = Math.max(count, 3); strength = 1.15; }
       }
-      g.update(this.mode === 'client' ? this.realTime : f.time, count, interval, strength);
+      // Near-camera fade intentionally removes body depth. Suppress trails of either
+      // fighter in that case so historical silhouettes cannot show through the body.
+      if (view._fade < .999 || opp._fade < .999) { count=0; strength=0; }
+      g.update(tNow, count, interval, strength, 0xffffff);
     }
 
     // 트레일 (시점 인물)
@@ -1838,6 +1846,9 @@ class Game {
       if (lActive) this.trailL.push(view.gloveL); else if (!pu) this.trailL.clear();
       if (rActive) this.trailR.push(view.gloveR); else if (!pu) this.trailR.clear();
       if (d.blend > 0) this.headTrail.push(view.headPos); else this.headTrail.clear();
+      // Short white glove arcs keep the punching arm readable.
+      const tc = 0xffffff;
+      this.trailL.setColor(tc); this.trailR.setColor(tc);
       this.trailL.update(rawDt, this.camera, !!lActive);
       this.trailR.update(rawDt, this.camera, !!rActive);
       this.headTrail.update(rawDt, this.camera, d.active && I > 0.15);

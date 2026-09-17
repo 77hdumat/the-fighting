@@ -21,3 +21,7 @@ The HDR is intentionally a small, lossless Radiance file (524,337 bytes), not KT
 | N8AO | 1.9.4 | [ISC](https://github.com/N8python/n8ao/blob/main/LICENSE) |
 
 The new mode reuses existing characters, generated canvas art and voice behavior. Their pre-existing rights are outside this new rendering-asset inventory. No new anime artwork or voice recordings were added.
+
+## Manga character visual update (2026-09-17)
+
+`assets/effects/boxing-impact-v2.png` is a new white contact-flash texture generated with the built-in image generation tool and resized to 256×256 RGBA PNG. The generation prompt and SHA-256 checksum are recorded in `assets/effects/manifest.json`. It is connected to the game's pooled 3D contact flashes and small overlay accent. Character loft surfaces, skinning and face ink are procedural project code in `js/Anatomy.js` and `js/Rig.js`; no external 3D model was downloaded. Existing local character references and the user-specified screenshot informed the visual changes.

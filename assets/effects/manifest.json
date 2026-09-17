@@ -1,0 +1,14 @@
+{
+  "generator": "built-in image_gen.imagegen; resized with sips",
+  "prompt": "Compact hand inked Japanese boxing manga contact flash. Tiny compressed white almond core, five short tapered white rays, transparent square background. Pure white monochrome, no black outline, no text, no character, no big glow. Centered burst with transparent padding.",
+  "assets": [
+    {
+      "file": "boxing-impact-v2.png",
+      "bytes": 12266,
+      "sha256": "084fc568e539f9d4665f4c6428ba6ecd6c3b2552c23f6730beb0ae272902a775",
+      "width": 256,
+      "height": 256,
+      "format": "RGBA PNG"
+    }
+  ]
+}

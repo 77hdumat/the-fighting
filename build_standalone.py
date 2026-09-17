@@ -13,6 +13,12 @@ for asset in asset_manifest['assets']:
     data = (asset_dir / asset['file']).read_bytes()
     if len(data) != asset['bytes'] or hashlib.sha256(data).hexdigest() != asset['sha256']:
         raise RuntimeError('Asset checksum mismatch: ' + asset['file'])
+effect_dir = root / 'assets' / 'effects'
+effect_manifest = json.loads((effect_dir / 'manifest.json').read_text())
+for asset in effect_manifest['assets']:
+    data = (effect_dir / asset['file']).read_bytes()
+    if len(data) != asset['bytes'] or hashlib.sha256(data).hexdigest() != asset['sha256']:
+        raise RuntimeError('Effect asset checksum mismatch: ' + asset['file'])
 js = root / 'js'
 mods = {}
 for f in js.glob('*.js'):

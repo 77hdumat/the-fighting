@@ -23,9 +23,10 @@ const _side = new THREE.Vector3();
 const _camDir = new THREE.Vector3();
 
 export class Ribbon {
-  constructor(scene, { maxPoints = 24, width = 0.16, color = 0xffffff, coreColor = 0xffffff, opacity = 1 } = {}) {
+  constructor(scene, { maxPoints = 12, width = 0.045, color = 0xffffff, coreColor = 0xffffff, opacity = 1 } = {}) {
+    maxPoints = Math.min(12, maxPoints);
     this.maxPoints = maxPoints;
-    this.width = width;
+    this.width = Math.min(.055, width);
     this.points = [];
     for (let i = 0; i < maxPoints; i++) this.points.push(new THREE.Vector3());
     this.len = 0;
@@ -48,7 +49,7 @@ export class Ribbon {
     this.mat = new THREE.ShaderMaterial({
       uniforms: { color: { value: new THREE.Color(color) }, coreColor: { value: new THREE.Color(coreColor) }, opacity: { value: opacity } },
       vertexShader: VERT, fragmentShader: FRAG,
-      transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+      transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.NormalBlending, toneMapped: false,
     });
     this.mesh = new THREE.Mesh(geo, this.mat);
     this.mesh.frustumCulled = false;
@@ -65,10 +66,11 @@ export class Ribbon {
   }
 
   clear() { this.len = 0; }
+  setColor(hex) { const u = this.mat.uniforms.color.value; if (u.getHex() !== hex) u.set(hex); }
 
   update(dt, camera, active) {
     this.targetStrength = active ? 1 : 0;
-    this.strength += (this.targetStrength - this.strength) * Math.min(1, dt * (active ? 20 : 8));
+    this.strength += (this.targetStrength - this.strength) * Math.min(1, dt * (active ? 30 : 28));
     if (this.strength < 0.02 || this.len < 2) { this.mesh.visible = false; return; }
     this.mesh.visible = true;
     camera.getWorldDirection(_camDir);
@@ -82,11 +84,11 @@ export class Ribbon {
       if (_tan.lengthSq() < 1e-8) _tan.set(0, 1, 0);
       _side.crossVectors(_tan, _camDir).normalize();
       const f = 1 - k / (n - 1);
-      const w = this.width * (0.25 + 0.75 * f);
+      const w = this.width * Math.sin(Math.PI * (.08 + .84 * f));
       const o = i * 6;
       this.pos[o] = p.x - _side.x * w; this.pos[o + 1] = p.y - _side.y * w; this.pos[o + 2] = p.z - _side.z * w;
       this.pos[o + 3] = p.x + _side.x * w; this.pos[o + 4] = p.y + _side.y * w; this.pos[o + 5] = p.z + _side.z * w;
-      const a = Math.pow(f, 1.4) * this.strength * (i < n ? 1 : 0);
+      const a = .42 * Math.pow(f, 1.8) * this.strength * (i < n ? 1 : 0);
       this.alpha[i * 2] = a; this.alpha[i * 2 + 1] = a;
     }
     this.geo.attributes.position.needsUpdate = true;

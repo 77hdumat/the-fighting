@@ -8,6 +8,8 @@
   canvas { display:block; }
   #ui { position:fixed; left:10px; top:10px; z-index:2; font:12px ui-monospace,monospace; color:#ddd; }
   #ui button { font:inherit; padding:3px 8px; margin-right:4px; background:#222736; color:#ddd; border:1px solid #3a4152; cursor:pointer; }
+  #poses { position:fixed; left:10px; bottom:12px; z-index:2; color:#ddd; font:13px sans-serif; }
+  #poses button { padding:7px 12px; margin:3px; border:1px solid #596273; color:#eee; background:#252b36; cursor:pointer; }
   #ui button.on { background:#c8241f; border-color:#e0574f; }
 </style>
 <script type="importmap">
@@ -19,11 +21,13 @@
 </head>
 <body>
 <div id="ui"></div>
+<div id="poses">자세 확인 </div>
 <script type="module">
 import * as THREE from 'three';
-import { CHARACTERS, buildBoxer, defaultPose, applyPose, FIGHTER_SCALE } from './js/Rig.js';
+import { applyPunchToPose } from './js/Punch.js';
+import { COACH_DEFS, CHARACTERS, buildBoxer, defaultPose, applyPose, FIGHTER_SCALE } from './js/Rig.js';
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, stencil: true });
 renderer.setPixelRatio(Math.min(2, devicePixelRatio));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
@@ -51,7 +55,7 @@ floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
 
 const camera = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.1, 100);
 
-const KEYS = ['ippo', 'mashiba', 'miyata', 'sendo'];
+const KEYS = Object.keys(CHARACTERS);
 const rigs = KEYS.map((k, i) => {
   const rig = buildBoxer(CHARACTERS[k]);
   rig.root.position.x = (i - (KEYS.length - 1) / 2) * 1.15;
@@ -66,10 +70,10 @@ const rigs = KEYS.map((k, i) => {
 // 뷰 프리셋 — 실제 본 월드 좌표에서 계산한다 (하드코딩하면 체형 파라미터가 바뀔 때 어긋난다)
 const V3 = THREE.Vector3;
 const worldOf = (obj) => obj.getWorldPosition(new V3());
-const VIEWS = [{ label: '전신 4인', build: () => ({ target: new V3(0, 0.95, 0), dist: 5.2, fov: 30, up: 0.4 }) }];
+const VIEWS = [{ label: '전체 10인', build: () => ({ target: new V3(0, 0.95, 0), dist: 12.8, fov: 30, up: 0.4 }) }];
 for (const [i, key] of KEYS.entries()) {
   const up = key.toUpperCase();
-  VIEWS.push({ label: up + ' 전신', build: () => ({ target: worldOf(rigs[i].hips), dist: 3.0, fov: 28, up: 0.15 }) });
+  VIEWS.push({ label: up + ' 전신', build: () => ({ target: worldOf(rigs[i].hips), dist: 4.4, fov: 30, up: 0.16 }) });
   VIEWS.push({ label: up + ' 상반신', build: () => ({ target: worldOf(rigs[i].chest), dist: 1.6, fov: 30, up: 0.12 }) });
   VIEWS.push({ label: up + ' 얼굴', build: () => ({ target: worldOf(rigs[i].headMesh), dist: 0.78, fov: 26, up: 0.02 }) });
 }
@@ -100,7 +104,22 @@ addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); paint();
 });
 paint();
-window.__rigview = { scene, camera, renderer, rigs, paint,
+const poseLabels = ['정면', '측면', '가드', '스트레이트', '훅'];
+function setPose(label) {
+  for(const rig of rigs) {
+    const p=defaultPose();
+    if(label==='정면'||label==='측면') {
+      for(const key of ['hipsRotY','waistX','waistY','headX','headY','shLX','shLY','shLZ','shRX','shRY','shRZ','elL','elR'])p[key]=0;
+    }
+    if(label==='스트레이트'||label==='훅') applyPunchToPose(p,{side:'L',type:label==='훅'?'hook':'straight',t:.5,dur:1});
+    applyPose(rig,p);rig.root.rotation.y=label==='측면'?Math.PI/2:0;
+  }
+  applyView();paint();
+}
+for(const label of poseLabels) {
+  const button=document.createElement('button');button.textContent=label;button.onclick=()=>setPose(label);document.getElementById('poses').appendChild(button);
+}
+window.__rigview = { scene, camera, renderer, rigs, paint, setPose,
   setView: label => { view = VIEWS.find(v => v.label === label) || VIEWS[0]; applyView(); paint(); },
   views: VIEWS.map(v => v.label) };
 window.__ready = true;

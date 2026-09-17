@@ -1,6 +1,5 @@
 // AfterImageEffect.js — 이전 프레임의 위치·회전·포즈를 링버퍼에 저장하고,
-// 시간차를 둔 고스트 리그 4~8개가 따라오게 하는 잔상 시스템
-import * as THREE from 'three';
+// 시간차를 둔 흰 실루엣 최대 3개가 짧게 따라오는 잔상 시스템
 import { buildBoxer, defaultPose, applyPose, copyPose, lerpPose, FIGHTER_SCALE } from './Rig.js';
 
 const BUFFER = 180; // 약 3초 @60fps
@@ -8,14 +7,13 @@ const BUFFER = 180; // 약 3초 @60fps
 export class AfterImageEffect {
   constructor(scene, charDef, maxGhosts = 8) {
     this.scene = scene;
-    this.max = maxGhosts;
+    this.max = Math.min(3, maxGhosts);
     this.ghosts = [];
-    for (let i = 0; i < maxGhosts; i++) {
-      // 오래된 잔상일수록 푸른 틴트 강하게 → 시간차가 색으로도 읽힘
-      const tint = new THREE.Color().setHSL(0.56, 0.9, 0.7 + 0.2 * (i / maxGhosts));
-      const rig = buildBoxer(charDef, { ghost: true, tint: tint.getHex() });
+    for (let i = 0; i < this.max; i++) {
+      // White silhouette with simplified scalp and no face, props or muscle decals.
+      const rig = buildBoxer(charDef, { ghost: true, tint: 0xffffff });
       rig.root.visible = false;
-      rig.root.traverse((o) => { if (o.isMesh) o.renderOrder = -10 + i; });
+      rig.root.traverse((o) => { if (o.isMesh) o.renderOrder = 10 + (this.max - i); });
       this.ghosts.push(rig);
     }
     // 스냅샷 링버퍼 (GC 회피용 사전 할당)
@@ -24,6 +22,7 @@ export class AfterImageEffect {
     this.head = 0;   // 다음 쓰기 위치
     this.count = 0;
     this.tmpPose = defaultPose();
+    this.sampleOut = {x:0,y:0,z:0,yaw:0,rx:0,pose:this.tmpPose};
     this.visibleCount = 0;
     this.smoothCount = 0;
   }
@@ -75,31 +74,42 @@ export class AfterImageEffect {
    * @param interval  잔상 간 시간차 (s)
    * @param strength  전체 불투명도 배율
    */
-  update(time, count, interval, strength = 1) {
+  update(time, count, interval, strength = 1, tint = 0xffffff) {
+    if (strength <= 0) {
+      this.smoothCount = this.visibleCount = 0;
+      for (const ghost of this.ghosts) if (ghost.root.parent) this.scene.remove(ghost.root);
+      return;
+    }
     // 개수 변화는 부드럽게 (갑자기 사라지지 않도록)
-    this.smoothCount += (count - this.smoothCount) * 0.25;
+    this.smoothCount += (Math.min(3, count) - this.smoothCount) * 0.25;
     const n = Math.min(this.max, Math.round(this.smoothCount));
-    this.visibleCount = n;
-    const out = { x: 0, y: 0, z: 0, yaw: 0, rx: 0, pose: this.tmpPose };
+    this.visibleCount = 0;
+    const out = this.sampleOut;
     for (let i = 0; i < this.ghosts.length; i++) {
       const g = this.ghosts[i];
       // 안 보이는 고스트는 씬에서 떼어내 매 프레임 행렬 갱신 비용까지 없앤다
       if (i >= n) { if (g.root.parent) this.scene.remove(g.root); continue; }
-      const tt = time - (i + 1) * interval;
+      const delay = (i + 1) * Math.max(.038, interval);
+      const tt = time - delay;
       if (!this._sample(tt, out)) { if (g.root.parent) this.scene.remove(g.root); continue; }
       if (!g.root.parent) this.scene.add(g.root);
       g.root.visible = true;
       g.root.position.set(out.x, out.y, out.z);
       g.root.rotation.set(out.rx, out.yaw, 0);
       applyPose(g, out.pose);
-      // 오래될수록 투명 + 약간 팽창(흐릿한 느낌) + 외곽선 두꺼워짐
-      const age = (i + 1) / (n + 1);
-      const op = strength * (0.62 * Math.pow(1 - age, 1.3) + 0.06);
+      // Fixed age fade prevents opacity from changing when the requested count changes.
+      // Skip nearly identical poses: idle history must never accumulate into a white body.
+      const current = this._snapAt(0);
+      const motion = Math.hypot(out.x-current.x,out.z-current.z)
+        + Math.abs(out.pose.elL-current.pose.elL)*.08 + Math.abs(out.pose.elR-current.pose.elR)*.08
+        + Math.abs(out.pose.shLX-current.pose.shLX)*.10 + Math.abs(out.pose.shRX-current.pose.shRX)*.10
+        + Math.abs(out.pose.waistZ-current.pose.waistZ)*.12;
+      if (motion < .018 || tt < this._snapAt(this.count-1).t) { this.scene.remove(g.root); continue; }
+      const op = Math.min(1, strength) * .14 * Math.exp(-delay * 9);
+      this.visibleCount++;
       g.setOpacity(op);
-      g.setOutline(0.014 + 0.012 * age);
-      // 본체와 같은 축척(FIGHTER_SCALE)을 쓰고, 오래될수록 아주 살짝만 팽창
-      const sc = FIGHTER_SCALE * (1 + 0.035 * age);
-      g.root.scale.set(sc, sc, sc);
+      g.setTint(0xffffff, 0);
+      g.root.scale.setScalar(FIGHTER_SCALE);
     }
   }
 }
