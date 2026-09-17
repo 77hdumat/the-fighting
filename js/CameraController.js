@@ -60,15 +60,17 @@ export class CameraController {
     const I = ctx.intensity;
 
     // --- 추적 카메라: 내 캐릭터 바로 뒤 (살짝 오른쪽), 시선은 나와 타겟 사이 → 둘 다 프레임에 ---
-    // 시야 방향(yaw)은 경기 시작 때 상대를 바라본 방향으로 고정한다. 상대가 돌아다녀도, 타겟이 바뀌어도 돌지 않는다
-    // (매번 따라 돌면 시야가 왔다갔다 하고 WASD 방향도 같이 바뀐다). 상대가 거의 등 뒤(110°+)로 간 채 1초 넘게 머물 때만 천천히 따라간다.
+    // 시야 방향(yaw)은 '내 등 뒤' — 내 캐릭터가 바라보는(=타겟) 방향을 천천히 따라간다.
+    // 작은 흔들림(8° 이내)은 무시하고, 초당 최대 100° 로만 돌아 시야가 휙휙 바뀌지 않는다. 연출용 카메라 이동은 없다.
     const wantYaw = Math.atan2(f.x, f.z);
-    if (!this.initialized || this.orbitYaw === undefined) { this.orbitYaw = wantYaw; this._offT = 0; }
+    if (!this.initialized || this.orbitYaw === undefined) this.orbitYaw = wantYaw;
     else {
       let dy = wantYaw - this.orbitYaw;
       while (dy > Math.PI) dy -= Math.PI * 2; while (dy < -Math.PI) dy += Math.PI * 2;
-      this._offT = Math.abs(dy) > 1.9 ? (this._offT || 0) + dt : 0;
-      if (this._offT > 1.2) { const maxTurn = 0.8 * dt; this.orbitYaw += Math.max(-maxTurn, Math.min(maxTurn, dy)); }
+      if (Math.abs(dy) > 0.14) {
+        const maxTurn = 1.75 * dt;
+        this.orbitYaw += Math.max(-maxTurn, Math.min(maxTurn, dy * Math.min(1, dt * 2.5)));
+      }
     }
     const bx = Math.sin(this.orbitYaw), bz = Math.cos(this.orbitYaw);     // 부드러운 전방
     const sx = bz, sz = -bx;                                               // 부드러운 좌측

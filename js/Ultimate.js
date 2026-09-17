@@ -90,18 +90,53 @@ function makeSnack(i) {
   return g;
 }
 
+// ---- 릴스 촬영 스태프: 검은 옷 + 캡 + 카메라. 촬영 후 한 대씩 귀싸대기 ----
+function makeStaff() {
+  const g = new THREE.Group();
+  const black = 0x15151c, skin = 0xfff6d0;
+  const legL = outlined(new THREE.CylinderGeometry(0.05, 0.05, 0.62, 8), black, g, new THREE.Vector3(-0.09, 0.31, 0));
+  const legR = outlined(new THREE.CylinderGeometry(0.05, 0.05, 0.62, 8), black, g, new THREE.Vector3(0.09, 0.31, 0));
+  const torso = outlined(new THREE.BoxGeometry(0.34, 0.5, 0.2), black, g, new THREE.Vector3(0, 0.88, 0));
+  const head = outlined(new THREE.SphereGeometry(0.13, 12, 10), skin, g, new THREE.Vector3(0, 1.28, 0));
+  const cap = outlined(new THREE.CylinderGeometry(0.14, 0.145, 0.09, 12), black, g, new THREE.Vector3(0, 1.38, 0));
+  const brim = outlined(new THREE.BoxGeometry(0.2, 0.02, 0.14), black, g, new THREE.Vector3(0, 1.345, 0.14));
+  // 왼팔: 카메라를 얼굴 앞에 든다
+  const armL = new THREE.Group(); armL.position.set(-0.2, 1.1, 0); g.add(armL);
+  outlined(new THREE.CylinderGeometry(0.04, 0.04, 0.34, 8), skin, armL, new THREE.Vector3(0.05, -0.02, 0.2)).rotation.x = Math.PI / 2;
+  const cam = new THREE.Group(); cam.position.set(0.12, 0.1, 0.36); armL.add(cam);
+  outlined(new THREE.BoxGeometry(0.2, 0.13, 0.12), black, cam);
+  const lens = outlined(new THREE.CylinderGeometry(0.045, 0.05, 0.08, 10), 0xffffff, cam, new THREE.Vector3(0.02, 0, 0.09)); lens.rotation.x = Math.PI / 2;
+  const rec = outlined(new THREE.SphereGeometry(0.018, 8, 6), 0xff2d2d, cam, new THREE.Vector3(-0.07, 0.08, 0));
+  // 오른팔: 어깨 피벗 — 싸대기용
+  const armR = new THREE.Group(); armR.position.set(0.2, 1.1, 0); g.add(armR);
+  const upper = outlined(new THREE.CylinderGeometry(0.04, 0.04, 0.36, 8), skin, armR, new THREE.Vector3(0.06, -0.16, 0));
+  const hand = outlined(new THREE.BoxGeometry(0.1, 0.13, 0.04), skin, armR, new THREE.Vector3(0.06, -0.38, 0));
+  armR.rotation.z = -0.25;
+  g.userData = { armR, armL, cam, rec, legL, legR };
+  return g;
+}
+
+// ---- 떼로 날아오는 오토바이 (간략 모델: 메시 7개) ----
+function makeBikeLite() {
+  const b = new THREE.Group();
+  const bodies = [0xf4f6f8, 0xd3391c, 0x1f6fd0, 0x18181e, 0xffc400];
+  const body = bodies[Math.floor(Math.random() * bodies.length)];
+  outlined(new THREE.BoxGeometry(1.0, 0.3, 0.34), body, b, new THREE.Vector3(0, 0.68, 0));
+  const tank = outlined(new THREE.SphereGeometry(0.26, 10, 8), body, b, new THREE.Vector3(-0.02, 0.86, 0)); tank.scale.set(1.25, 0.72, 0.95);
+  const cowl = outlined(new THREE.ConeGeometry(0.22, 0.46, 8), body, b, new THREE.Vector3(-0.66, 0.88, 0)); cowl.rotation.z = Math.PI / 2 + 0.25;
+  outlined(new THREE.BoxGeometry(0.42, 0.14, 0.3), 0x18181e, b, new THREE.Vector3(0.34, 0.86, 0));
+  for (const sx of [-1, 1]) outlined(new THREE.TorusGeometry(0.33, 0.1, 6, 14), 0x18181e, b, new THREE.Vector3(sx * 0.66, 0.34, 0));
+  const head = outlined(new THREE.SphereGeometry(0.12, 8, 6), 0xfff6d0, b, new THREE.Vector3(-0.78, 0.9, 0));   // 헤드라이트
+  return b;
+}
+
 export class UltimateFx {
   constructor(scene, audio, fx, camera = null) {
     this.scene = scene; this.audio = audio; this.fx = fx; this.cam = camera;
     this.active = [];
-    // 상주 조명 (릴스 링라이트용). 항상 장면에 있어 조명 개수가 변하지 않는다 → 필살기 첫 사용 시 전체 셰이더 재컴파일 없음
-    this.light = new THREE.PointLight(0xfff0c0, 0, 6);
-    this.light.position.set(0, -50, 0);
-    scene.add(this.light);
-    this._lightBusy = false;
     // 예열: 필살기 소품이 쓰는 재질(그림자 포함)을 첫 프레임부터 그려 두어 셰이더가 미리 컴파일되게 한다
     const warm = new THREE.Group();
-    for (const c of [0x15151c, 0xfff4cf, 0xff4f8b, 0xe0b064, 0xffffff, 0x6b4a32, 0x8fd6f2, 0xfff6d0]) {
+    for (const c of [0x15151c, 0xfff4cf, 0xff4f8b, 0xe0b064, 0xffffff, 0x6b4a32, 0x8fd6f2, 0xfff6d0, 0xff2d2d, 0xd3391c, 0x1f6fd0, 0x18181e, 0xffc400, 0xf4f6f8]) {
       const m = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.01, 0.01), TOON(c));
       m.castShadow = true; warm.add(m);
     }
@@ -113,7 +148,6 @@ export class UltimateFx {
 
   _release(it) {
     this.scene.remove(it.root);
-    if (it.ownsLight) { this._lightBusy = false; this.light.intensity = 0; this.light.position.set(0, -50, 0); }
     // 공유 재질은 남긴다 (프로그램 캐시 유지). 지오메트리와 개별 복제 재질만 정리
     it.root.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material && !o.material.userData.shared) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
   }
@@ -145,12 +179,21 @@ export class UltimateFx {
     rec.position.set(-0.045, 0.1, 0.002); screen.add(rec);
     item.rec = rec;
     g.add(phone); item.phone = phone;
-    // 링라이트 (촬영 조명)
-    const ring = own(outlined(new THREE.TorusGeometry(0.34, 0.05, 8, 24), 0xfff4cf, g));
-    if (ring.material.emissive) { ring.material.emissive.set(0xfff0b0); ring.material.emissiveIntensity = 1.4; }
-    item.ring = ring;
-    // 조명은 장면에 상주하는 것을 빌려 쓴다 — 조명을 새로 넣으면 장면의 모든 재질이 셰이더를 다시 컴파일해 1초쯤 멈춘다
-    if (!this._lightBusy) { this._lightBusy = true; item.light = this.light; item.ownsLight = true; }
+    // 촬영 스태프 5명: 상대를 둘러싸고 카메라를 든다 → 촬영이 끝나면 한 명씩 다가와 귀싸대기 → 사라진다
+    item.staff = [];
+    const base = attacker ? Math.atan2(attacker.pos.x - item.tp.x, attacker.pos.z - item.tp.z) : 0;   // 상대→촬영자 방향
+    // 카메라가 촬영자 등 뒤에 있으므로 스태프는 상대의 옆·건너편에만 (카메라 앞을 가리지 않게)
+    const offs = [-1.05, -1.95, 1.05, 1.95, Math.PI];
+    offs.forEach((off, i) => {
+      const st = makeStaff();
+      const ang = base + off;
+      st.position.set(item.tp.x + Math.sin(ang) * 1.35, 0, item.tp.z + Math.cos(ang) * 1.35);
+      st.lookAt(item.tp.x, 0, item.tp.z);
+      st.scale.setScalar(0.001);
+      g.add(st);
+      item.staff.push({ m: st, ang, order: i, slapAt: 1.75 + i * 0.28, phase: 'film', t: 0, sgn: i % 2 ? 1 : -1 });
+    });
+    item.staffScale = 0.7;   // 파이터와 같은 축소 비율
     // 떠오르는 하트 / 좋아요
     item.hearts = [];
     for (let i = 0; i < 16; i++) {
@@ -164,14 +207,16 @@ export class UltimateFx {
   _buildSnackRain(item) {
     // 정주원: 하늘에서 소금빵·호두과자가 쏟아진다
     item.parts = [];
-    for (let i = 0; i < 46; i++) {
+    // 120개가 3초 내내 우수수 (두 겹: 넓게 흩뿌리는 것 + 상대 머리 위로 집중)
+    for (let i = 0; i < 120; i++) {
       const sn = makeSnack(i);
-      const ang = Math.random() * Math.PI * 2, rr = Math.random() * 1.25;
-      sn.position.set(item.tp.x + Math.cos(ang) * rr, 4.6 + Math.random() * 4.6, item.tp.z + Math.sin(ang) * rr);
+      const focus = i % 3 === 0;
+      const ang = Math.random() * Math.PI * 2, rr = Math.random() * (focus ? 0.5 : 1.7);
+      sn.position.set(item.tp.x + Math.cos(ang) * rr, 4.2 + Math.random() * 6.5, item.tp.z + Math.sin(ang) * rr);
       sn.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
-      sn.scale.setScalar(1.0 + Math.random() * 0.6);
+      sn.scale.setScalar(0.9 + Math.random() * 0.7);
       item.root.add(sn);
-      item.parts.push({ m: sn, delay: 0.1 + i * 0.05, vy: 0, spin: new THREE.Vector3((Math.random() - 0.5) * 7, (Math.random() - 0.5) * 7, (Math.random() - 0.5) * 7), landed: 0 });
+      item.parts.push({ m: sn, delay: 0.05 + i * 0.022, vy: 0, spin: new THREE.Vector3((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8), landed: 0, pull: focus ? 1.5 : 0.35 });
     }
   }
 
@@ -307,6 +352,17 @@ export class UltimateFx {
     b.scale.setScalar(0.92);
     g.add(b); item.bike = b;
     item.from = b.position.clone();
+    // 첫 대가 박힌 뒤, 촬영자 등 뒤 하늘에서 오토바이 떼가 줄줄이 날아와 상대를 들이받는다
+    item.swarm = [];
+    for (let i = 0; i < 24; i++) {
+      const sb = makeBikeLite();
+      const sc = 0.42 + Math.random() * 0.16;
+      sb.visible = false; sb.scale.setScalar(sc);
+      g.add(sb);
+      // 카메라(촬영자 등 뒤)를 뚫고 지나가지 않게 좌우 위쪽 하늘에서 비스듬히 날아든다
+      const sideSign = i % 2 ? 1 : -1;
+      item.swarm.push({ m: sb, at: 1.5 + i * 0.06, t: -1, side: sideSign * (1.8 + Math.random() * 2.6), h: 2.8 + Math.random() * 3.2, back: 0.5 + Math.random() * 2.2, spin: (Math.random() - 0.5) * 10, sc });
+    }
   }
 
   update(dt, camShake) {
@@ -339,15 +395,49 @@ export class UltimateFx {
       it.phone.rotation.z += Math.sin(u * 7) * 0.03;
       if (it.rec) it.rec.visible = Math.sin(u * 9) > -0.2;    // REC 점멸
     }
-    // 링라이트: 상대 앞쪽에서 비춘다
-    if (it.ring && att) {
-      const aim = new THREE.Vector3().subVectors(tp, att.pos).setY(0).normalize();
-      const rp = tp.clone().addScaledVector(aim, -0.95).add(new THREE.Vector3(0, 1.5, 0));
-      it.ring.position.lerp(rp, Math.min(1, dt * 6));
-      it.ring.lookAt(tp.x, 1.2, tp.z);
-      const on = Math.min(1, u / 0.3) * (u > it.dur - 0.5 ? Math.max(0, (it.dur - u) / 0.5) : 1);
-      it.ring.scale.setScalar(0.6 + 0.4 * on);
-      if (it.light) { it.light.position.copy(it.ring.position); it.light.intensity = 9 * on; }
+    // 스태프: 등장 → 촬영(카메라 들고 흔들흔들, REC 점멸) → 순서대로 다가가 싸대기 → 펑 하고 사라짐
+    for (const st of it.staff || []) {
+      const m = st.m, ud = m.userData;
+      const pop = Math.min(1, Math.max(0, (u - 0.1 - st.order * 0.06) / 0.25));
+      const bob = Math.sin(u * 6 + st.order) * 0.03;
+      if (st.phase === 'film') {
+        m.scale.setScalar(Math.max(0.001, it.staffScale * (1 - Math.pow(1 - pop, 3))));
+        m.position.y = bob;
+        ud.armL.rotation.x = -0.15 + Math.sin(u * 4 + st.order * 2) * 0.05;
+        ud.rec.visible = Math.sin(u * 8 + st.order) > 0;
+        m.lookAt(tp.x, 0, tp.z);
+        if (u >= st.slapAt - 0.32) { st.phase = 'approach'; st.t = 0; st.from = m.position.clone(); }
+      } else if (st.phase === 'approach') {
+        st.t += dt;
+        const k = Math.min(1, st.t / 0.22), e = 1 - Math.pow(1 - k, 2);
+        const want = tp.clone().add(new THREE.Vector3(Math.sin(st.ang), 0, Math.cos(st.ang)).multiplyScalar(0.5));
+        m.position.lerpVectors(st.from, want, e); m.position.y = Math.abs(Math.sin(k * Math.PI * 2)) * 0.12;   // 두 발짝 콩콩
+        ud.legL.rotation.x = Math.sin(k * Math.PI * 4) * 0.5; ud.legR.rotation.x = -Math.sin(k * Math.PI * 4) * 0.5;
+        ud.armL.rotation.x = -0.15 + 0.9 * e;                    // 카메라 내리고
+        ud.armR.rotation.x = -2.2 * e; ud.armR.rotation.z = -0.25 - 1.3 * e;   // 손 크게 치켜들고
+        m.lookAt(tp.x, 0, tp.z);
+        if (u >= st.slapAt) { st.phase = 'slap'; st.t = 0; }
+      } else if (st.phase === 'slap') {
+        st.t += dt;
+        const k = Math.min(1, st.t / 0.09);
+        ud.armR.rotation.x = -2.2 + 2.6 * k; ud.armR.rotation.z = -1.55 + 2.3 * k;   // 휘두르기
+        m.rotation.y += 0; m.position.y = 0;
+        if (!st.hit && k >= 1) {
+          st.hit = true;
+          this.audio.impact(0.7, 'hook');
+          if (this.fx) {
+            this.fx.flash = Math.max(this.fx.flash || 0, 0.18);
+            if (this.cam) { const v = new THREE.Vector3(tp.x, 1.45, tp.z).project(this.cam); this.fx.addPopup((v.x * 0.5 + 0.5) * this.fx.w + st.sgn * 60, (1 - (v.y * 0.5 + 0.5)) * this.fx.h - 30, st.order === it.staff.length - 1 ? '짝!!!' : '짝!', 'groggy'); }
+          }
+          if (it.target && it.target.react) { it.target.react.headY = st.sgn * 0.95; it.target.react.headZ = -st.sgn * 0.3; }
+        }
+        if (st.t > 0.3) { st.phase = 'gone'; st.t = 0; }
+      } else if (st.phase === 'gone') {
+        st.t += dt;
+        const k = Math.min(1, st.t / 0.18);
+        const S = it.staffScale; m.scale.set(Math.max(0.001, S * (1 + 0.6 * k)), Math.max(0.001, S * (1 - k)), Math.max(0.001, S * (1 + 0.6 * k)));   // 납작하게 펑
+        if (k >= 1) m.visible = false;
+      }
     }
     // 하트가 상대 주변에서 떠오른다 (좋아요 폭발)
     for (const h of it.hearts) {
@@ -377,13 +467,14 @@ export class UltimateFx {
       if (p.landed) { p.landed += dt; p.m.scale.multiplyScalar(Math.max(0.0001, 1 - dt * 2.4)); if (p.landed > 0.5) p.m.visible = false; continue; }
       p.vy -= 24 * dt;
       p.m.position.y += p.vy * dt;
-      p.m.position.x += (tp.x - p.m.position.x) * Math.min(1, dt * 1.5);
-      p.m.position.z += (tp.z - p.m.position.z) * Math.min(1, dt * 1.5);
+      const pull = p.pull || 1.5;
+      p.m.position.x += (tp.x - p.m.position.x) * Math.min(1, dt * pull);
+      p.m.position.z += (tp.z - p.m.position.z) * Math.min(1, dt * pull);
       p.m.rotation.x += p.spin.x * dt; p.m.rotation.y += p.spin.y * dt; p.m.rotation.z += p.spin.z * dt;
       if (p.m.position.y <= 0.32) {
         p.m.position.y = 0.32; p.landed = 0.0001;
-        this.audio.impact(0.4, 'follow');
-        if (this.fx) this.fx.flash = Math.max(this.fx.flash || 0, 0.08);
+        // 착지음은 40ms 에 한 번만 (120개가 겹치면 소리가 뭉개진다)
+        if (!it._lastThud || it.t - it._lastThud > 0.04) { it._lastThud = it.t; this.audio.impact(0.4, 'follow'); if (this.fx) this.fx.flash = Math.max(this.fx.flash || 0, 0.08); }
       }
     }
   }
@@ -537,6 +628,41 @@ export class UltimateFx {
       b.rotation.z += dt * 2.4 * spin;
       b.rotation.x += (Math.PI / 2 - b.rotation.x) * Math.min(1, dt * 2);
       if (u > 3.4) { const f = Math.max(0, 1 - (u - 3.4) / 0.9); b.scale.setScalar(Math.max(0.001, 0.92 * f)); }
+    }
+    // ---- 오토바이 떼 ----
+    for (const sw of it.swarm || []) {
+      if (u < sw.at) continue;
+      const m = sw.m;
+      if (sw.t < 0) {
+        sw.t = 0; m.visible = true;
+        sw.from = base.clone().addScaledVector(fwd, -sw.back).add(new THREE.Vector3(fwd.z * sw.side, sw.h, -fwd.x * sw.side));
+        m.position.copy(sw.from);
+        if (!it._lastRev || u - it._lastRev > 0.3) { it._lastRev = u; this.audio.engine(1.1); }
+      }
+      sw.t += dt;
+      if (!sw.hit) {
+        const k = Math.min(1, sw.t / 0.48);
+        const target = new THREE.Vector3(tp.x + fwd.z * sw.side * 0.12, 0.9, tp.z - fwd.x * sw.side * 0.12);
+        m.position.lerpVectors(sw.from, target, k);
+        m.position.y += Math.sin(k * Math.PI) * 1.1;
+        m.rotation.y = Math.atan2(fwd.x, fwd.z) + Math.PI / 2 + sw.side * 0.15;
+        m.rotation.z += dt * sw.spin; m.rotation.x += dt * 1.5;
+        if (k >= 1) {
+          sw.hit = true; sw.life = 0;
+          sw.vel = new THREE.Vector3(fwd.x * (2 + Math.random() * 3) + (Math.random() - 0.5) * 5, 3 + Math.random() * 3.5, fwd.z * (2 + Math.random() * 3) + (Math.random() - 0.5) * 5);
+          if (!it._lastCrash || u - it._lastCrash > 0.07) {
+            it._lastCrash = u; this.audio.impact(0.85, 'hook'); this.audio.clang(0.9);
+            if (this.fx) this.fx.flash = Math.max(this.fx.flash || 0, 0.22);
+          }
+        }
+      } else {
+        // 튕겨 나가 굴러가다 사라진다
+        sw.vel.y -= 18 * dt; m.position.addScaledVector(sw.vel, dt);
+        if (m.position.y < 0.3) { m.position.y = 0.3; sw.vel.y *= -0.35; sw.vel.x *= 0.7; sw.vel.z *= 0.7; }
+        m.rotation.z += dt * sw.spin * 0.5;
+        sw.life += dt;
+        if (sw.life > 0.75) { const f = Math.max(0, 1 - (sw.life - 0.75) / 0.35); m.scale.setScalar(Math.max(0.001, sw.sc * f)); if (f <= 0) m.visible = false; }
+      }
     }
   }
 
