@@ -115,6 +115,7 @@ export class Fighter {
     this.rattle = 0;
     this.airY = 0; this.airV = 0;      // 띄워짐 (가젤/스매시)
     this.ko = false; this.koT = 0; this.koSpin = 0; this.koAngle = 0; this.koLift = 0;
+    this.koFly = false; this.koLandT = -1;   // KO: 위로 붕 떠서 뒤로 날아가다 뒤통수부터 떨어진다
     this.combo = 0; this.comboTimer = 0;
     this.inputSeq = []; this.seqT = 0;   // 콤비네이션 입력 기록
     this.target = null;
@@ -649,6 +650,11 @@ export class Fighter {
     this.dempsey.consume();
     this.finisher = null; this.punch = null;
     this.audio.ko();
+    // 위로 붕 떠올라 뒤로 날아간다 (마지막 타격 방향 = 지금 밀리고 있는 방향, 없으면 내 뒤쪽)
+    const dir = this.knock.lengthSq() > 1e-4 ? this.knock.clone().setY(0).normalize() : this.forward.clone().negate();
+    this.knock.copy(dir).multiplyScalar(4.2);
+    this.airV = Math.max(this.airV, 5.2); this.airY = Math.max(this.airY, 0.001);
+    this.koFly = true; this.koLandT = -1; this.koLift = 0;
   }
 
   /** 팀전에서 같은 편인가 (난투는 team === null 이라 항상 false) */
@@ -708,7 +714,8 @@ export class Fighter {
     // (자동 전진/거리 유지 제거 — 제자리에서도 롤/스탠스 가능, 이동은 전부 WASD)
     if (this.backstep > 0) { this.backstep -= dt; this.pos.addScaledVector(this.forward, -4.2 * dt); }
     this.pos.addScaledVector(this.knock, dt);
-    this.knock.multiplyScalar(Math.exp(-dt * (this.stagger > 0 ? 9 : 6.5)));
+    // KO 로 떠 있는 동안은 공중에서 거의 안 줄어든다 (뒤로 시원하게 날아가게)
+    this.knock.multiplyScalar(Math.exp(-dt * (this.ko && this.koFly ? 1.1 : this.stagger > 0 ? 9 : 6.5)));
     // 띄워짐
     if (this.airY > 0 || this.airV > 0) {
       this.airV -= 14 * dt; this.airY += this.airV * dt;
@@ -1481,14 +1488,30 @@ export class Fighter {
       if (this.downT <= 0) { this.downT = 0; this.rig.root.rotation.x = 0; this.staggerImmune = 2.5; this.hitCount = 0; this.groggy = 0; }
     } else if (this.ko) {
       this.koT += dt;
-      const k = Math.min(1, this.koT / 0.75), e = k * k;
-      this.rig.root.rotation.x = e * Math.PI * 0.5;      // 뒤로 벌러덩
       this.koAngle += this.koSpin * dt; this.koSpin *= Math.exp(-dt * 3);
-      this.koLift = Math.max(0, this.koLift - dt * 1.6);
-      p.hipsY += this.koLift * 0.6;
-      this.knock.multiplyScalar(Math.exp(-dt * 3));
-      p.shLX = -0.4 + e * 1.3; p.shRX = -0.4 + e * 1.3; p.elL = -0.5; p.elR = -0.5;
-      p.shLZ = 0.6; p.shRZ = -0.6; p.headX = -0.4; p.waistX = 0; p.thighLX = -0.2; p.thighRX = -0.2; p.shinL = 0.5; p.shinR = 0.4;
+      if (this.koFly && this.airY > 0) {
+        // 공중: 몸이 뒤로 젖혀지며 수평이 된다. 팔은 위로 휘날리고 다리는 앞으로 뜬다
+        const u = Math.min(1, this.koT / 0.55), e = 1 - (1 - u) * (1 - u);
+        this.rig.root.rotation.x = e * Math.PI * 0.55;   // 뒤통수가 먼저 바닥을 향하도록 살짝 더 젖힌다
+        p.shLX = -1.5; p.shRX = -1.4; p.elL = -0.35; p.elR = -0.3; p.shLZ = 1.0; p.shRZ = -1.0;
+        p.headX = -0.7; p.waistX = -0.25;
+        p.thighLX = -0.55; p.thighRX = -0.75; p.shinL = 0.9; p.shinR = 0.7;
+      } else {
+        if (this.koFly) { this.koFly = false; this.koLandT = 0; this.koLift = 0.32; this.rattle = Math.max(this.rattle, 0.8); this.knock.multiplyScalar(0.35); }   // 착지음은 공중 물리(airY 착지)가 낸다
+        if (this.koLandT >= 0) this.koLandT += dt;
+        // 착지: 뒤통수를 찧고 튕겼다가 눕는다 (머리 쪽이 잠깐 들렸다 내려온다)
+        const L = Math.max(0, this.koLandT), bounce = Math.sin(L * 15) * Math.exp(-L * 5.5) * 0.14;
+        const settle = this.koLandT < 0 ? Math.min(1, this.koT / 0.75) : Math.min(1, L / 0.35), e = settle * settle;
+        this.rig.root.rotation.x = this.koLandT >= 0 ? Math.PI * 0.5 + bounce + (1 - e) * Math.PI * 0.05 : e * Math.PI * 0.5;
+        this.koLift = Math.max(0, this.koLift - dt * 1.6);
+        p.hipsY += this.koLift * 0.6;
+        this.knock.multiplyScalar(Math.exp(-dt * 3));
+        // 팔다리가 툭 떨어진다
+        const m = (a, b) => a + (b - a) * e;
+        p.shLX = m(-1.5, 0.9); p.shRX = m(-1.4, 0.9); p.elL = m(-0.35, -0.5); p.elR = m(-0.3, -0.5); p.shLZ = m(1.0, 0.6); p.shRZ = m(-1.0, -0.6);
+        p.headX = m(-0.7, -0.4); p.waistX = m(-0.25, 0);
+        p.thighLX = m(-0.55, -0.2); p.thighRX = m(-0.75, -0.2); p.shinL = m(0.9, 0.5); p.shinR = m(0.7, 0.4);
+      }
     } else if (this.fallT <= 0 && !(this.ko && this.fallY > 0.01)) { this.rig.root.rotation.x = 0; this.koAngle = 0; }
 
     this._applyNow(p);

@@ -4,11 +4,22 @@ import * as THREE from 'three';
 
 const easeOut = (x) => 1 - Math.pow(1 - x, 3);
 
-// 링 조명은 바닥 근처만 비추므로, 낙하물은 자체 발광을 섞어 어디서든 또렷하게 보이게 한다
-const TOON = (c, opts = {}) => {
-  const col = new THREE.Color(c);
-  return new THREE.MeshToonMaterial({ color: c, emissive: col.clone().multiplyScalar(0.55), ...opts });
+// 링 조명은 바닥 근처만 비추므로, 낙하물은 자체 발광을 섞어 어디서든 또렷하게 보이게 한다.
+// 재질은 색별로 캐시해 재사용한다: 필살기마다 새 재질을 만들고 끝나면 dispose 하면 three 가 셰이더 프로그램까지 버려서
+// 다음 필살기 때 다시 컴파일한다 (첫 사용 시 화면이 1초쯤 멈추던 원인 중 하나). 개별로 색·투명도를 바꿀 메시는 clone() 해서 쓴다.
+const TOON_CACHE = new Map();
+const TOON = (c) => {
+  let m = TOON_CACHE.get(c);
+  if (!m) {
+    const col = new THREE.Color(c);
+    m = new THREE.MeshToonMaterial({ color: c, emissive: col.clone().multiplyScalar(0.55) });
+    m.userData.shared = true;
+    TOON_CACHE.set(c, m);
+  }
+  return m;
 };
+/** 개별 조정(발광·투명도)이 필요한 메시용: 공유 재질을 복제 (같은 프로그램을 쓰므로 컴파일은 없다) */
+const own = (mesh) => { mesh.material = mesh.material.clone(); mesh.material.userData.shared = false; return mesh; };
 
 function outlined(geo, color, group, pos, scale = 1) {
   const m = new THREE.Mesh(geo, TOON(color));
@@ -83,6 +94,28 @@ export class UltimateFx {
   constructor(scene, audio, fx, camera = null) {
     this.scene = scene; this.audio = audio; this.fx = fx; this.cam = camera;
     this.active = [];
+    // 상주 조명 (릴스 링라이트용). 항상 장면에 있어 조명 개수가 변하지 않는다 → 필살기 첫 사용 시 전체 셰이더 재컴파일 없음
+    this.light = new THREE.PointLight(0xfff0c0, 0, 6);
+    this.light.position.set(0, -50, 0);
+    scene.add(this.light);
+    this._lightBusy = false;
+    // 예열: 필살기 소품이 쓰는 재질(그림자 포함)을 첫 프레임부터 그려 두어 셰이더가 미리 컴파일되게 한다
+    const warm = new THREE.Group();
+    for (const c of [0x15151c, 0xfff4cf, 0xff4f8b, 0xe0b064, 0xffffff, 0x6b4a32, 0x8fd6f2, 0xfff6d0]) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.01, 0.01), TOON(c));
+      m.castShadow = true; warm.add(m);
+    }
+    warm.add(makeBubble('warm', '#ffffff', '#1a1a22'));
+    warm.position.set(0, -60, 0);          // 화면엔 절대 안 보이는 위치
+    warm.traverse((o) => { o.frustumCulled = false; });
+    scene.add(warm);
+  }
+
+  _release(it) {
+    this.scene.remove(it.root);
+    if (it.ownsLight) { this._lightBusy = false; this.light.intensity = 0; this.light.position.set(0, -50, 0); }
+    // 공유 재질은 남긴다 (프로그램 캐시 유지). 지오메트리와 개별 복제 재질만 정리
+    it.root.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material && !o.material.userData.shared) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
   }
 
   /** kind: 'reels' | 'barbell' | 'bike' */
@@ -113,11 +146,11 @@ export class UltimateFx {
     item.rec = rec;
     g.add(phone); item.phone = phone;
     // 링라이트 (촬영 조명)
-    const ring = outlined(new THREE.TorusGeometry(0.34, 0.05, 8, 24), 0xfff4cf, g);
+    const ring = own(outlined(new THREE.TorusGeometry(0.34, 0.05, 8, 24), 0xfff4cf, g));
     if (ring.material.emissive) { ring.material.emissive.set(0xfff0b0); ring.material.emissiveIntensity = 1.4; }
     item.ring = ring;
-    const light = new THREE.PointLight(0xfff0c0, 0, 6);
-    g.add(light); item.light = light;
+    // 조명은 장면에 상주하는 것을 빌려 쓴다 — 조명을 새로 넣으면 장면의 모든 재질이 셰이더를 다시 컴파일해 1초쯤 멈춘다
+    if (!this._lightBusy) { this._lightBusy = true; item.light = this.light; item.ownsLight = true; }
     // 떠오르는 하트 / 좋아요
     item.hearts = [];
     for (let i = 0; i < 16; i++) {
@@ -160,7 +193,7 @@ export class UltimateFx {
     const cup = outlined(new THREE.CylinderGeometry(0.1, 0.08, 0.22, 12), 0xf3f1ec, cafe, new THREE.Vector3(-0.45, 0.94, 0.1));
     item.steam = [];
     for (let i = 0; i < 6; i++) {
-      const p2 = outlined(new THREE.SphereGeometry(0.05, 8, 6), 0xffffff, cafe, new THREE.Vector3(-0.45, 1.1, 0.1));
+      const p2 = own(outlined(new THREE.SphereGeometry(0.05, 8, 6), 0xffffff, cafe, new THREE.Vector3(-0.45, 1.1, 0.1)));
       p2.material.transparent = true; p2.material.opacity = 0.7;
       item.steam.push({ m: p2, t: i * 0.25 });
     }
@@ -178,7 +211,7 @@ export class UltimateFx {
     });
     item.cut = makeBubble('그래서 어쩌라고.', '#12131a', '#8fd6f2'); item.cut.visible = false; item.cut.scale.setScalar(1.25); g.add(item.cut);
     // 차단 이펙트: 가로로 그어지는 파란 칼선
-    const slash = outlined(new THREE.BoxGeometry(2.6, 0.09, 0.09), 0x8fd6f2, g);
+    const slash = own(outlined(new THREE.BoxGeometry(2.6, 0.09, 0.09), 0x8fd6f2, g));
     if (slash.material.emissive) { slash.material.emissive.set(0x8fd6f2); slash.material.emissiveIntensity = 1.6; }
     slash.visible = false; g.add(slash); item.slash = slash;
     // 깨진 조각
@@ -254,7 +287,7 @@ export class UltimateFx {
     }
     const bar = outlined(new THREE.CylinderGeometry(0.028, 0.028, 0.66, 8), BLACK, b, new THREE.Vector3(-0.5, 1.04, 0));
     bar.rotation.x = Math.PI / 2;
-    const head = outlined(new THREE.SphereGeometry(0.13, 12, 10), 0xfff6d0, b, new THREE.Vector3(-0.78, 0.9, 0));
+    const head = own(outlined(new THREE.SphereGeometry(0.13, 12, 10), 0xfff6d0, b, new THREE.Vector3(-0.78, 0.9, 0)));
     head.scale.set(0.8, 1, 1);
     if (head.material.emissive) { head.material.emissive.set(0xffd98a); head.material.emissiveIntensity = 1.2; }
     // 엠블럼 (파랑/흰 4분할 원)
@@ -288,8 +321,7 @@ export class UltimateFx {
       else if (it.kind === 'barbell') this._updRack(it, dt, tp);
       else if (it.kind === 'bike') this._updBike(it, dt, tp);
       if (it.t > it.dur + 1.4) {
-        this.scene.remove(it.root);
-        it.root.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+        this._release(it);
         this.active.splice(i, 1);
       }
     }
@@ -509,7 +541,7 @@ export class UltimateFx {
   }
 
   clear() {
-    for (const it of this.active) this.scene.remove(it.root);
+    for (const it of this.active) this._release(it);
     this.active.length = 0;
   }
 }

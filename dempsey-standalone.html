@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta name="build-id" content="1789621140">
+<meta name="build-id" content="1789623692">
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -539,7 +539,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   }
 }
 </script>
-<script>window.__BUILD_ID = "1789621140";</script>
+<script>window.__BUILD_ID = "1789623692";</script>
 </head>
 <body>
   <canvas id="gl" tabindex="0"></canvas>
@@ -1632,11 +1632,22 @@ __M.Ultimate = (() => {
 
 const easeOut = (x) => 1 - Math.pow(1 - x, 3);
 
-// 링 조명은 바닥 근처만 비추므로, 낙하물은 자체 발광을 섞어 어디서든 또렷하게 보이게 한다
-const TOON = (c, opts = {}) => {
-  const col = new THREE.Color(c);
-  return new THREE.MeshToonMaterial({ color: c, emissive: col.clone().multiplyScalar(0.55), ...opts });
+// 링 조명은 바닥 근처만 비추므로, 낙하물은 자체 발광을 섞어 어디서든 또렷하게 보이게 한다.
+// 재질은 색별로 캐시해 재사용한다: 필살기마다 새 재질을 만들고 끝나면 dispose 하면 three 가 셰이더 프로그램까지 버려서
+// 다음 필살기 때 다시 컴파일한다 (첫 사용 시 화면이 1초쯤 멈추던 원인 중 하나). 개별로 색·투명도를 바꿀 메시는 clone() 해서 쓴다.
+const TOON_CACHE = new Map();
+const TOON = (c) => {
+  let m = TOON_CACHE.get(c);
+  if (!m) {
+    const col = new THREE.Color(c);
+    m = new THREE.MeshToonMaterial({ color: c, emissive: col.clone().multiplyScalar(0.55) });
+    m.userData.shared = true;
+    TOON_CACHE.set(c, m);
+  }
+  return m;
 };
+/** 개별 조정(발광·투명도)이 필요한 메시용: 공유 재질을 복제 (같은 프로그램을 쓰므로 컴파일은 없다) */
+const own = (mesh) => { mesh.material = mesh.material.clone(); mesh.material.userData.shared = false; return mesh; };
 
 function outlined(geo, color, group, pos, scale = 1) {
   const m = new THREE.Mesh(geo, TOON(color));
@@ -1711,6 +1722,28 @@ class UltimateFx {
   constructor(scene, audio, fx, camera = null) {
     this.scene = scene; this.audio = audio; this.fx = fx; this.cam = camera;
     this.active = [];
+    // 상주 조명 (릴스 링라이트용). 항상 장면에 있어 조명 개수가 변하지 않는다 → 필살기 첫 사용 시 전체 셰이더 재컴파일 없음
+    this.light = new THREE.PointLight(0xfff0c0, 0, 6);
+    this.light.position.set(0, -50, 0);
+    scene.add(this.light);
+    this._lightBusy = false;
+    // 예열: 필살기 소품이 쓰는 재질(그림자 포함)을 첫 프레임부터 그려 두어 셰이더가 미리 컴파일되게 한다
+    const warm = new THREE.Group();
+    for (const c of [0x15151c, 0xfff4cf, 0xff4f8b, 0xe0b064, 0xffffff, 0x6b4a32, 0x8fd6f2, 0xfff6d0]) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.01, 0.01), TOON(c));
+      m.castShadow = true; warm.add(m);
+    }
+    warm.add(makeBubble('warm', '#ffffff', '#1a1a22'));
+    warm.position.set(0, -60, 0);          // 화면엔 절대 안 보이는 위치
+    warm.traverse((o) => { o.frustumCulled = false; });
+    scene.add(warm);
+  }
+
+  _release(it) {
+    this.scene.remove(it.root);
+    if (it.ownsLight) { this._lightBusy = false; this.light.intensity = 0; this.light.position.set(0, -50, 0); }
+    // 공유 재질은 남긴다 (프로그램 캐시 유지). 지오메트리와 개별 복제 재질만 정리
+    it.root.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material && !o.material.userData.shared) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
   }
 
   /** kind: 'reels' | 'barbell' | 'bike' */
@@ -1741,11 +1774,11 @@ class UltimateFx {
     item.rec = rec;
     g.add(phone); item.phone = phone;
     // 링라이트 (촬영 조명)
-    const ring = outlined(new THREE.TorusGeometry(0.34, 0.05, 8, 24), 0xfff4cf, g);
+    const ring = own(outlined(new THREE.TorusGeometry(0.34, 0.05, 8, 24), 0xfff4cf, g));
     if (ring.material.emissive) { ring.material.emissive.set(0xfff0b0); ring.material.emissiveIntensity = 1.4; }
     item.ring = ring;
-    const light = new THREE.PointLight(0xfff0c0, 0, 6);
-    g.add(light); item.light = light;
+    // 조명은 장면에 상주하는 것을 빌려 쓴다 — 조명을 새로 넣으면 장면의 모든 재질이 셰이더를 다시 컴파일해 1초쯤 멈춘다
+    if (!this._lightBusy) { this._lightBusy = true; item.light = this.light; item.ownsLight = true; }
     // 떠오르는 하트 / 좋아요
     item.hearts = [];
     for (let i = 0; i < 16; i++) {
@@ -1788,7 +1821,7 @@ class UltimateFx {
     const cup = outlined(new THREE.CylinderGeometry(0.1, 0.08, 0.22, 12), 0xf3f1ec, cafe, new THREE.Vector3(-0.45, 0.94, 0.1));
     item.steam = [];
     for (let i = 0; i < 6; i++) {
-      const p2 = outlined(new THREE.SphereGeometry(0.05, 8, 6), 0xffffff, cafe, new THREE.Vector3(-0.45, 1.1, 0.1));
+      const p2 = own(outlined(new THREE.SphereGeometry(0.05, 8, 6), 0xffffff, cafe, new THREE.Vector3(-0.45, 1.1, 0.1)));
       p2.material.transparent = true; p2.material.opacity = 0.7;
       item.steam.push({ m: p2, t: i * 0.25 });
     }
@@ -1806,7 +1839,7 @@ class UltimateFx {
     });
     item.cut = makeBubble('그래서 어쩌라고.', '#12131a', '#8fd6f2'); item.cut.visible = false; item.cut.scale.setScalar(1.25); g.add(item.cut);
     // 차단 이펙트: 가로로 그어지는 파란 칼선
-    const slash = outlined(new THREE.BoxGeometry(2.6, 0.09, 0.09), 0x8fd6f2, g);
+    const slash = own(outlined(new THREE.BoxGeometry(2.6, 0.09, 0.09), 0x8fd6f2, g));
     if (slash.material.emissive) { slash.material.emissive.set(0x8fd6f2); slash.material.emissiveIntensity = 1.6; }
     slash.visible = false; g.add(slash); item.slash = slash;
     // 깨진 조각
@@ -1882,7 +1915,7 @@ class UltimateFx {
     }
     const bar = outlined(new THREE.CylinderGeometry(0.028, 0.028, 0.66, 8), BLACK, b, new THREE.Vector3(-0.5, 1.04, 0));
     bar.rotation.x = Math.PI / 2;
-    const head = outlined(new THREE.SphereGeometry(0.13, 12, 10), 0xfff6d0, b, new THREE.Vector3(-0.78, 0.9, 0));
+    const head = own(outlined(new THREE.SphereGeometry(0.13, 12, 10), 0xfff6d0, b, new THREE.Vector3(-0.78, 0.9, 0)));
     head.scale.set(0.8, 1, 1);
     if (head.material.emissive) { head.material.emissive.set(0xffd98a); head.material.emissiveIntensity = 1.2; }
     // 엠블럼 (파랑/흰 4분할 원)
@@ -1916,8 +1949,7 @@ class UltimateFx {
       else if (it.kind === 'barbell') this._updRack(it, dt, tp);
       else if (it.kind === 'bike') this._updBike(it, dt, tp);
       if (it.t > it.dur + 1.4) {
-        this.scene.remove(it.root);
-        it.root.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+        this._release(it);
         this.active.splice(i, 1);
       }
     }
@@ -2137,11 +2169,151 @@ class UltimateFx {
   }
 
   clear() {
-    for (const it of this.active) this.scene.remove(it.root);
+    for (const it of this.active) this._release(it);
     this.active.length = 0;
   }
 }
 return { UltimateFx };
+})();
+// ===== AuraFx.js =====
+__M.AuraFx = (() => {
+// AuraFx.js — 필살기 게이지 MAX 오라 (드래곤볼 초사이어인 스타일: 몸을 감싸고 위로 치솟는 황금 불꽃 + 발밑 파동).
+// 상태(dempsey.maxSpeed)는 스냅샷으로 동기화되므로 호스트·게스트·상대 화면 모두에서 똑같이 보인다.
+// 파이터(슬롯)마다 불꽃 껍질 메시 하나 + 바닥 파동 하나. 텍스처 없이 셰이더 노이즈만 써서 저사양에서도 싸다.
+
+const NOISE = /* glsl */`
+  float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float vnoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);
+  }
+  float fbm(vec2 p) { return vnoise(p) * 0.55 + vnoise(p * 2.1 + 7.3) * 0.3 + vnoise(p * 4.3 + 2.9) * 0.15; }
+`;
+
+const FLAME_VERT = /* glsl */`
+  uniform float uTime; uniform float uPulse;
+  varying vec2 vUv; varying float vRim;
+  ${NOISE}
+  void main() {
+    vUv = uv;
+    vec3 p = position;
+    // 불꽃 혀: 위로 갈수록 크게 일렁이며 바깥으로 벌어진다
+    float a = atan(p.z, p.x);
+    float n = fbm(vec2(a * 1.6 + 3.0, uv.y * 2.2 - uTime * 2.4));
+    float flick = (n - 0.5) * (0.25 + 0.9 * uv.y);
+    p.xz *= 1.0 + flick + uPulse * 0.08;
+    p.y += (n - 0.5) * 0.35 * uv.y + uPulse * 0.1 * uv.y;
+    vec4 mv = modelViewMatrix * vec4(p, 1.0);
+    vec3 nrm = normalize(normalMatrix * normal);
+    vRim = 1.0 - abs(dot(normalize(-mv.xyz), nrm));
+    gl_Position = projectionMatrix * mv;
+  }`;
+const FLAME_FRAG = /* glsl */`
+  uniform float uTime; uniform float uFade; uniform vec3 uCore; uniform vec3 uEdge;
+  varying vec2 vUv; varying float vRim;
+  ${NOISE}
+  void main() {
+    float x = vUv.x, y = vUv.y;
+    // 위로 흐르는 불꽃 노이즈
+    vec2 q = vec2(x * 7.0, y * 3.2 - uTime * 3.0);
+    float n = fbm(q) * 0.7 + fbm(vec2(x * 13.0 + 5.0, y * 5.5 - uTime * 4.6)) * 0.3;
+    // 아래는 촘촘하고 위로 갈수록 문턱이 높아져 혀처럼 찢어진다
+    float t = 0.28 + 0.34 * y;
+    float mask = smoothstep(t, t + 0.2, n);
+    float bottom = smoothstep(0.0, 0.08, y) * (1.0 - smoothstep(0.75, 1.0, y));
+    // 실루엣 가장자리(카메라 접선)에서 진하고 몸 앞쪽은 얇게 — 몸을 '감싸는' 느낌
+    float rim = 0.35 + 0.65 * vRim;
+    float a = mask * bottom * rim * uFade;
+    // 안쪽은 흰노랑, 바깥·위쪽은 황금/주황
+    float hot = smoothstep(0.62, 0.95, n) * (1.0 - y * 0.6);
+    vec3 col = mix(uEdge, uCore, hot);
+    gl_FragColor = vec4(col * (1.0 + 0.7 * hot), a);
+  }`;
+
+const GROUND_VERT = /* glsl */`varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+const GROUND_FRAG = /* glsl */`
+  uniform float uTime; uniform float uFade; uniform vec3 uEdge;
+  varying vec2 vUv;
+  ${NOISE}
+  void main() {
+    vec2 c = vUv - 0.5; float d = length(c) * 2.0; float ang = atan(c.y, c.x);
+    // 바깥으로 퍼지는 충격파 링 + 중심 빛
+    float wave = fract(uTime * 0.9);
+    float ring = smoothstep(wave - 0.08, wave, d) * (1.0 - smoothstep(wave, wave + 0.06, d)) * (1.0 - wave);
+    float glow = (1.0 - smoothstep(0.0, 0.55, d)) * 0.5;
+    float jag = 0.7 + 0.3 * vnoise(vec2(ang * 3.0 + uTime * 2.0, uTime));
+    float a = (ring * 0.8 + glow * jag * 0.5) * uFade;
+    gl_FragColor = vec4(uEdge, a);
+  }`;
+
+class AuraFx {
+  constructor(scene) {
+    this.scene = scene;
+    this.items = {};     // slot → { group, flame, ground, uniforms, fade, pulse }
+    this.time = 0;
+    // 불꽃 껍질: 몸을 감싸는 둥근 아래 → 위로 갈수록 좁아지고 셰이더가 혀 모양으로 찢는다
+    this.flameGeo = new THREE.CylinderGeometry(0.28, 0.6, 2.1, 48, 14, true);
+    this.flameGeo.translate(0, 1.0, 0);
+    this.groundGeo = new THREE.PlaneGeometry(3.0, 3.0);
+    this.groundGeo.rotateX(-Math.PI / 2);
+  }
+
+  _make() {
+    const uniforms = {
+      uTime: { value: 0 }, uFade: { value: 0 }, uPulse: { value: 0 },
+      uCore: { value: new THREE.Color(1.0, 0.98, 0.75) },   // 안쪽: 흰노랑
+      uEdge: { value: new THREE.Color(1.0, 0.58, 0.06) },   // 바깥: 황금·주황
+    };
+    const flame = new THREE.Mesh(this.flameGeo, new THREE.ShaderMaterial({
+      uniforms, vertexShader: FLAME_VERT, fragmentShader: FLAME_FRAG,
+      transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, fog: false,
+    }));
+    const ground = new THREE.Mesh(this.groundGeo, new THREE.ShaderMaterial({
+      uniforms, vertexShader: GROUND_VERT, fragmentShader: GROUND_FRAG,
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+    }));
+    ground.position.y = 0.02;
+    const group = new THREE.Group();
+    group.add(flame, ground);
+    group.visible = false;
+    flame.renderOrder = ground.renderOrder = 5;
+    flame.frustumCulled = ground.frustumCulled = false;
+    this.scene.add(group);
+    return { group, flame, ground, uniforms, fade: 0, pulse: 0 };
+  }
+
+  /** 매 프레임: MAX 인 파이터에게 오라를 켜고(페이드 인), 아니면 끈다(페이드 아웃) */
+  update(dt, fighters) {
+    this.time += dt;
+    const seen = new Set();
+    for (const f of fighters) {
+      const it = this.items[f.slot] || (this.items[f.slot] = this._make());
+      seen.add(f.slot);
+      const on = !!(f.dempsey && f.dempsey.maxSpeed) && !f.ko && !f.benched && !f.falling && f.downT <= 0 && !f.ultVictimT;
+      const target = on ? 1 : 0;
+      it.fade += (target - it.fade) * Math.min(1, dt / (on ? 0.25 : 0.15));
+      if (it.fade < 0.01 && !on) { it.fade = 0; it.group.visible = false; continue; }
+      it.group.visible = true;
+      it.group.position.set(f.pos.x, f.airY - (f.fallY || 0), f.pos.z);
+      // 캐릭터 체격에 맞춘다 (작은 캐릭터는 작은 오라)
+      const prop = f.def && f.def.prop ? f.def.prop : null;
+      const h = prop ? prop.height : 1, w = prop ? Math.max(prop.torsoW, prop.armR) : 1;
+      it.group.scale.set(0.95 * w, 0.9 * h, 0.95 * w);
+      // 공격 중엔 오라가 더 크게 타오른다 (펀치·필살기)
+      const attacking = !!f.punch || !!f.finisher || f.ultT > 0;
+      it.pulse += ((attacking ? 1 : 0) - it.pulse) * Math.min(1, dt / 0.12);
+      it.uniforms.uPulse.value = it.pulse;
+      it.uniforms.uTime.value = this.time + f.slot * 7.7;
+      it.uniforms.uFade.value = it.fade * (0.85 + 0.15 * Math.sin(this.time * 9.0 + f.slot)) * (1 + 0.3 * it.pulse);
+    }
+    for (const k in this.items) if (!seen.has(+k)) this.items[k].group.visible = false;
+  }
+
+  clear() {
+    for (const k in this.items) { this.items[k].fade = 0; this.items[k].pulse = 0; this.items[k].group.visible = false; }
+  }
+}
+return { AuraFx };
 })();
 // ===== IppoModel.js =====
 __M.IppoModel = (() => {
@@ -5711,6 +5883,7 @@ class Fighter {
     this.rattle = 0;
     this.airY = 0; this.airV = 0;      // 띄워짐 (가젤/스매시)
     this.ko = false; this.koT = 0; this.koSpin = 0; this.koAngle = 0; this.koLift = 0;
+    this.koFly = false; this.koLandT = -1;   // KO: 위로 붕 떠서 뒤로 날아가다 뒤통수부터 떨어진다
     this.combo = 0; this.comboTimer = 0;
     this.inputSeq = []; this.seqT = 0;   // 콤비네이션 입력 기록
     this.target = null;
@@ -6245,6 +6418,11 @@ class Fighter {
     this.dempsey.consume();
     this.finisher = null; this.punch = null;
     this.audio.ko();
+    // 위로 붕 떠올라 뒤로 날아간다 (마지막 타격 방향 = 지금 밀리고 있는 방향, 없으면 내 뒤쪽)
+    const dir = this.knock.lengthSq() > 1e-4 ? this.knock.clone().setY(0).normalize() : this.forward.clone().negate();
+    this.knock.copy(dir).multiplyScalar(4.2);
+    this.airV = Math.max(this.airV, 5.2); this.airY = Math.max(this.airY, 0.001);
+    this.koFly = true; this.koLandT = -1; this.koLift = 0;
   }
 
   /** 팀전에서 같은 편인가 (난투는 team === null 이라 항상 false) */
@@ -6304,7 +6482,8 @@ class Fighter {
     // (자동 전진/거리 유지 제거 — 제자리에서도 롤/스탠스 가능, 이동은 전부 WASD)
     if (this.backstep > 0) { this.backstep -= dt; this.pos.addScaledVector(this.forward, -4.2 * dt); }
     this.pos.addScaledVector(this.knock, dt);
-    this.knock.multiplyScalar(Math.exp(-dt * (this.stagger > 0 ? 9 : 6.5)));
+    // KO 로 떠 있는 동안은 공중에서 거의 안 줄어든다 (뒤로 시원하게 날아가게)
+    this.knock.multiplyScalar(Math.exp(-dt * (this.ko && this.koFly ? 1.1 : this.stagger > 0 ? 9 : 6.5)));
     // 띄워짐
     if (this.airY > 0 || this.airV > 0) {
       this.airV -= 14 * dt; this.airY += this.airV * dt;
@@ -7077,14 +7256,30 @@ class Fighter {
       if (this.downT <= 0) { this.downT = 0; this.rig.root.rotation.x = 0; this.staggerImmune = 2.5; this.hitCount = 0; this.groggy = 0; }
     } else if (this.ko) {
       this.koT += dt;
-      const k = Math.min(1, this.koT / 0.75), e = k * k;
-      this.rig.root.rotation.x = e * Math.PI * 0.5;      // 뒤로 벌러덩
       this.koAngle += this.koSpin * dt; this.koSpin *= Math.exp(-dt * 3);
-      this.koLift = Math.max(0, this.koLift - dt * 1.6);
-      p.hipsY += this.koLift * 0.6;
-      this.knock.multiplyScalar(Math.exp(-dt * 3));
-      p.shLX = -0.4 + e * 1.3; p.shRX = -0.4 + e * 1.3; p.elL = -0.5; p.elR = -0.5;
-      p.shLZ = 0.6; p.shRZ = -0.6; p.headX = -0.4; p.waistX = 0; p.thighLX = -0.2; p.thighRX = -0.2; p.shinL = 0.5; p.shinR = 0.4;
+      if (this.koFly && this.airY > 0) {
+        // 공중: 몸이 뒤로 젖혀지며 수평이 된다. 팔은 위로 휘날리고 다리는 앞으로 뜬다
+        const u = Math.min(1, this.koT / 0.55), e = 1 - (1 - u) * (1 - u);
+        this.rig.root.rotation.x = e * Math.PI * 0.55;   // 뒤통수가 먼저 바닥을 향하도록 살짝 더 젖힌다
+        p.shLX = -1.5; p.shRX = -1.4; p.elL = -0.35; p.elR = -0.3; p.shLZ = 1.0; p.shRZ = -1.0;
+        p.headX = -0.7; p.waistX = -0.25;
+        p.thighLX = -0.55; p.thighRX = -0.75; p.shinL = 0.9; p.shinR = 0.7;
+      } else {
+        if (this.koFly) { this.koFly = false; this.koLandT = 0; this.koLift = 0.32; this.rattle = Math.max(this.rattle, 0.8); this.knock.multiplyScalar(0.35); }   // 착지음은 공중 물리(airY 착지)가 낸다
+        if (this.koLandT >= 0) this.koLandT += dt;
+        // 착지: 뒤통수를 찧고 튕겼다가 눕는다 (머리 쪽이 잠깐 들렸다 내려온다)
+        const L = Math.max(0, this.koLandT), bounce = Math.sin(L * 15) * Math.exp(-L * 5.5) * 0.14;
+        const settle = this.koLandT < 0 ? Math.min(1, this.koT / 0.75) : Math.min(1, L / 0.35), e = settle * settle;
+        this.rig.root.rotation.x = this.koLandT >= 0 ? Math.PI * 0.5 + bounce + (1 - e) * Math.PI * 0.05 : e * Math.PI * 0.5;
+        this.koLift = Math.max(0, this.koLift - dt * 1.6);
+        p.hipsY += this.koLift * 0.6;
+        this.knock.multiplyScalar(Math.exp(-dt * 3));
+        // 팔다리가 툭 떨어진다
+        const m = (a, b) => a + (b - a) * e;
+        p.shLX = m(-1.5, 0.9); p.shRX = m(-1.4, 0.9); p.elL = m(-0.35, -0.5); p.elR = m(-0.3, -0.5); p.shLZ = m(1.0, 0.6); p.shRZ = m(-1.0, -0.6);
+        p.headX = m(-0.7, -0.4); p.waistX = m(-0.25, 0);
+        p.thighLX = m(-0.55, -0.2); p.thighRX = m(-0.75, -0.2); p.shinL = m(0.9, 0.5); p.shinR = m(0.7, 0.4);
+      }
     } else if (this.fallT <= 0 && !(this.ko && this.fallY > 0.01)) { this.rig.root.rotation.x = 0; this.koAngle = 0; }
 
     this._applyNow(p);
@@ -8771,6 +8966,7 @@ const { Coaches } = __M.Coaches;
 const { Intro } = __M.Intro;
 const { CHARACTERS, CHARACTER_ORDER, HIDDEN_ORDER } = __M.Rig;
 const { buildPortraits } = __M.Portraits;
+const { AuraFx } = __M.AuraFx;
 const { KITS, SPECIALS } = __M.Specials;
 const { TouchControls, isTouchDevice } = __M.Touch;
 const { Music } = __M.Music;
@@ -8781,6 +8977,8 @@ const _prevHead = new THREE.Vector3();
 const _camF = new THREE.Vector3();
 const _camR = new THREE.Vector3();
 const _sep = new THREE.Vector3();
+const _up = new THREE.Vector3(0, 1, 0);
+const _auraGold = new THREE.Color(1, 0.85, 0.35);
 const SPAWNS = [[0, 2.4], [0, -2.4], [2.4, 0], [-2.4, 0]];
 const AUDIO_FWD = ['whoosh', 'swoosh', 'impact', 'bassHit', 'riser', 'maxSpeedHit', 'stagger', 'ko', 'block', 'chargeUp', 'finisherWind', 'finisherHit', 'counter', 'cheer', 'engine', 'clang', 'nyang', 'shutter'];
 const SNAP_HZ = 45;   // 호스트→게스트 스냅샷 주기. 재생 지연은 (주기 + 지터) 이므로 올릴수록 게스트 응답성이 좋아진다 (대역폭 ∝ 주기)
@@ -8844,6 +9042,7 @@ class Game {
     this.ghostFx = {};   // defKey → AfterImageEffect (지연 생성)
     this.sparks = new HitSparks(this.scene);
     this.ultFx = new UltimateFx(this.scene, this.audio, this.fx, this.camera);
+    this.auraFx = new AuraFx(this.scene);   // 게이지 MAX 오로라 (전원 화면에 보인다)
     // 거리감 보조: 내 발밑에 리치 반경 링 (상대가 사거리 안이면 붉게)
     this.reachRing = new THREE.Mesh(new THREE.RingGeometry(0.92, 1.0, 48), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide }));
     this.reachRing.rotation.x = -Math.PI / 2; this.reachRing.position.y = 0.015; this.reachRing.visible = false;
@@ -8875,7 +9074,12 @@ class Game {
     this.headVel = new THREE.Vector2();
     this.move = new THREE.Vector3();
     // 적응형 품질: 평균 프레임시간이 나쁘면 자동으로 단계 하향 (2 풀 → 1 → 0). Q 키로 수동 순환
-    this.quality = 2; this.frameAvg = 16; this.qualityCool = 0; this.hudAccum = 0;
+    // 지난 세션에서 적응된 품질로 시작한다 (매번 HIGH 로 시작하면 첫 판 내내 버벅이다 두 번째 판부터 괜찮아지는 현상). 모바일 첫 실행은 MID
+    let q0 = this.isTouch ? 1 : 2;
+    try { const sv = localStorage.getItem('dr-quality'); if (sv !== null && sv !== '') q0 = Math.max(0, Math.min(2, +sv)); } catch (e) {}
+    this.quality = q0; this.frameAvg = 16; this.qualityCool = 0; this.hudAccum = 0;
+    this._qFirst = true;   // 첫 하향은 빨리 (쿨타임 6초 → 2초)
+    if (!PHOTOREAL && this.quality !== 2) { const sub = this.subs; this.subs = { show() {} }; this.setQuality(this.quality); this.subs = sub; }   // 저장된 품질을 렌더러에 반영 (자막 없이)
     if (PHOTOREAL || new URLSearchParams(location.search).has('profile')) {
       this.renderFoundation = new RenderFoundation(this);
       this.renderFoundation.init().catch((error) => {
@@ -9672,8 +9876,12 @@ class Game {
     for (const f of this.fighters) if (!f.isAI) this.coachBrains[f.slot] = new CoachBrain();
     document.getElementById('coach').classList.add('hidden');
     this.hitStop = 0; this.slowMo = 0; this.snaps = []; this.playT = null; this._pred = null;
+    this._lastRecv = 0; this._lastRecvTs = 0; this.jitter = undefined; this._sendGap = 0;   // 지터 통계는 판마다 새로 (지난 판 마지막 스냅샷과의 간격이 지터로 오인되지 않게)
     if (this.ultFx) this.ultFx.clear();
+    if (this.auraFx) this.auraFx.clear();
     this.camCtl.initialized = false;
+    // 셰이더 예열: 새 파이터·잔상·스파크 재질을 등장씬 동안 백그라운드로 컴파일해 둔다 (첫 타격·첫 필살기 때 멈춤 방지)
+    try { const r = this.renderer.compileAsync ? this.renderer.compileAsync(this.scene, this.camera) : null; if (r && r.catch) r.catch(() => {}); } catch (e) {}
   }
 
   resetMatch() { this.buildFighters(this.cfg); if (this.ring && this.ring.reset) this.ring.reset(); this.over = false; this.music.setDuck(1); this.music.play('battle'); if (this.mode === 'solo') document.getElementById('netinfo').textContent = this.soloLabel(); document.getElementById('next-overlay').classList.add('hidden'); this.hud.showKO(false); this.beginIntro(); }
@@ -9822,6 +10030,7 @@ class Game {
       return;
     }
     this.quality = q;
+    try { localStorage.setItem('dr-quality', String(q)); } catch (e) {}
     this.post.quality = q; this.fx.quality = q;
     this.renderer.setPixelRatio(q === 2 ? Math.min(window.devicePixelRatio, 1.25) : q === 1 ? 1 : Math.min(1, window.devicePixelRatio * 0.75));
     this.renderer.shadowMap.enabled = q === 2;
@@ -10114,7 +10323,7 @@ class Game {
     this.frameAvg += (rawDt * 1000 - this.frameAvg) * 0.05;
     this.qualityCool -= rawDt;
     if (!PHOTOREAL && this.qualityCool <= 0) {
-      if (this.frameAvg > 24 && this.quality > 0) { this.setQuality(this.quality - 1); this.qualityCool = 6; }
+      if (this.frameAvg > 24 && this.quality > 0) { this.setQuality(this.quality - 1); this.qualityCool = this._qFirst ? 2 : 6; this._qFirst = false; }
       else if (this.frameAvg < 13 && this.quality < 2 && this.autoQuality !== false) { this.setQuality(this.quality + 1); this.qualityCool = 10; }
     }
     const input = this.input;
@@ -10341,6 +10550,9 @@ class Game {
     if (this._lastRecv) {
       const dev = Math.abs((now - this._lastRecv) - (ts - this._lastRecvTs));
       this.jitter = this.jitter === undefined ? dev : this.jitter * 0.88 + dev * 0.12;
+      // 호스트의 실제 송신 간격 (느린 폰 호스트는 SNAP_HZ 보다 드물게 보낸다 → 재생 지연도 그만큼 잡아야 끊기지 않는다)
+      const gap = Math.min(200, ts - this._lastRecvTs);
+      this._sendGap = this._sendGap ? this._sendGap * 0.9 + gap * 0.1 : gap;
     }
     this._lastRecv = now; this._lastRecvTs = ts;
     this.snaps.push({ recv: now, ts, d: m });
@@ -10422,7 +10634,7 @@ class Game {
     if (n === 1) { const s0 = latest.d.f; this.fighters.forEach((f, i) => f.applySnapshot(s0[i], s0[i], 1)); return; }
 
     // 재생 지연: 스냅샷 간격 1개 + 지터 여유. RTT 는 지터가 아니므로 더하지 않는다 (회선이 깨끗하면 ~30ms)
-    const interval = 1000 / SNAP_HZ;
+    const interval = Math.max(1000 / SNAP_HZ, this._sendGap || 0);
     const delay = Math.min(160, Math.max(24, interval + 4 + (this.jitter || 4) * 2));
     if (this.playT === undefined || this.playT === null) this.playT = latest.ts - delay;
 
@@ -10558,6 +10770,16 @@ class Game {
         }
         if (dd.maxSpeed && !f._maxBurst) { f._maxBurst = true; for (let k = 0; k < 3; k++) this.sparks.burst(f.chestPos, new THREE.Vector3(Math.cos(k * 2.1), 0.3, Math.sin(k * 2.1)), 30, new THREE.Color(1, 0.85, 0.4), 2.2, 0.6); }
       } else f._maxBurst = false;
+      // MAX 오라 (초사이어인): 몸 주위에서 황금 불티가 위로 솟는다 — 오라 셰이더(AuraFx)와 같이 전원 화면에 보인다
+      if (dd.maxSpeed && !f.ko && !f.benched && f.downT <= 0 && !f.falling) {
+        f._auraAcc = (f._auraAcc || 0) + rawDt * (this.quality === 0 ? 7 : 16);
+        while (f._auraAcc >= 1) {
+          f._auraAcc -= 1;
+          const a = Math.random() * Math.PI * 2, r = 0.2 + Math.random() * 0.35, h = f.def.prop ? f.def.prop.height : 1;
+          const pos = new THREE.Vector3(f.pos.x + Math.cos(a) * r, 0.1 + Math.random() * 1.3 * h, f.pos.z + Math.sin(a) * r);
+          this.sparks.burst(pos, _up, 1, _auraGold, 0.9 + Math.random() * 0.9, 0.3);
+        }
+      }
       // 카메라와 내 캐릭터 사이를 가리는 다른 파이터는 반투명
       if (f !== view) {
         const dc = f.chestPos.distanceTo(this.camera.position);
@@ -10578,6 +10800,7 @@ class Game {
     }
     this.sparks.update(rawDt);
     this.ultFx.update(rawDt);
+    this.auraFx.update(rawDt, this.fighters);
 
     // 잔상: 전원 기록, 시점 인물 + 상대만 표시
     for (const f of this.fighters) {

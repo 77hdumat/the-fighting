@@ -24,6 +24,7 @@ import { Coaches } from './Coaches.js';
 import { Intro } from './Intro.js';
 import { CHARACTERS, CHARACTER_ORDER, HIDDEN_ORDER } from './Rig.js';
 import { buildPortraits } from './Portraits.js';
+import { AuraFx } from './AuraFx.js';
 import { KITS, SPECIALS } from './Specials.js';
 import { TouchControls, isTouchDevice } from './Touch.js';
 import { Music } from './Music.js';
@@ -34,6 +35,8 @@ const _prevHead = new THREE.Vector3();
 const _camF = new THREE.Vector3();
 const _camR = new THREE.Vector3();
 const _sep = new THREE.Vector3();
+const _up = new THREE.Vector3(0, 1, 0);
+const _auraGold = new THREE.Color(1, 0.85, 0.35);
 const SPAWNS = [[0, 2.4], [0, -2.4], [2.4, 0], [-2.4, 0]];
 const AUDIO_FWD = ['whoosh', 'swoosh', 'impact', 'bassHit', 'riser', 'maxSpeedHit', 'stagger', 'ko', 'block', 'chargeUp', 'finisherWind', 'finisherHit', 'counter', 'cheer', 'engine', 'clang', 'nyang', 'shutter'];
 const SNAP_HZ = 45;   // 호스트→게스트 스냅샷 주기. 재생 지연은 (주기 + 지터) 이므로 올릴수록 게스트 응답성이 좋아진다 (대역폭 ∝ 주기)
@@ -97,6 +100,7 @@ class Game {
     this.ghostFx = {};   // defKey → AfterImageEffect (지연 생성)
     this.sparks = new HitSparks(this.scene);
     this.ultFx = new UltimateFx(this.scene, this.audio, this.fx, this.camera);
+    this.auraFx = new AuraFx(this.scene);   // 게이지 MAX 오로라 (전원 화면에 보인다)
     // 거리감 보조: 내 발밑에 리치 반경 링 (상대가 사거리 안이면 붉게)
     this.reachRing = new THREE.Mesh(new THREE.RingGeometry(0.92, 1.0, 48), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide }));
     this.reachRing.rotation.x = -Math.PI / 2; this.reachRing.position.y = 0.015; this.reachRing.visible = false;
@@ -128,7 +132,12 @@ class Game {
     this.headVel = new THREE.Vector2();
     this.move = new THREE.Vector3();
     // 적응형 품질: 평균 프레임시간이 나쁘면 자동으로 단계 하향 (2 풀 → 1 → 0). Q 키로 수동 순환
-    this.quality = 2; this.frameAvg = 16; this.qualityCool = 0; this.hudAccum = 0;
+    // 지난 세션에서 적응된 품질로 시작한다 (매번 HIGH 로 시작하면 첫 판 내내 버벅이다 두 번째 판부터 괜찮아지는 현상). 모바일 첫 실행은 MID
+    let q0 = this.isTouch ? 1 : 2;
+    try { const sv = localStorage.getItem('dr-quality'); if (sv !== null && sv !== '') q0 = Math.max(0, Math.min(2, +sv)); } catch (e) {}
+    this.quality = q0; this.frameAvg = 16; this.qualityCool = 0; this.hudAccum = 0;
+    this._qFirst = true;   // 첫 하향은 빨리 (쿨타임 6초 → 2초)
+    if (!PHOTOREAL && this.quality !== 2) { const sub = this.subs; this.subs = { show() {} }; this.setQuality(this.quality); this.subs = sub; }   // 저장된 품질을 렌더러에 반영 (자막 없이)
     if (PHOTOREAL || new URLSearchParams(location.search).has('profile')) {
       this.renderFoundation = new RenderFoundation(this);
       this.renderFoundation.init().catch((error) => {
@@ -925,8 +934,12 @@ class Game {
     for (const f of this.fighters) if (!f.isAI) this.coachBrains[f.slot] = new CoachBrain();
     document.getElementById('coach').classList.add('hidden');
     this.hitStop = 0; this.slowMo = 0; this.snaps = []; this.playT = null; this._pred = null;
+    this._lastRecv = 0; this._lastRecvTs = 0; this.jitter = undefined; this._sendGap = 0;   // 지터 통계는 판마다 새로 (지난 판 마지막 스냅샷과의 간격이 지터로 오인되지 않게)
     if (this.ultFx) this.ultFx.clear();
+    if (this.auraFx) this.auraFx.clear();
     this.camCtl.initialized = false;
+    // 셰이더 예열: 새 파이터·잔상·스파크 재질을 등장씬 동안 백그라운드로 컴파일해 둔다 (첫 타격·첫 필살기 때 멈춤 방지)
+    try { const r = this.renderer.compileAsync ? this.renderer.compileAsync(this.scene, this.camera) : null; if (r && r.catch) r.catch(() => {}); } catch (e) {}
   }
 
   resetMatch() { this.buildFighters(this.cfg); if (this.ring && this.ring.reset) this.ring.reset(); this.over = false; this.music.setDuck(1); this.music.play('battle'); if (this.mode === 'solo') document.getElementById('netinfo').textContent = this.soloLabel(); document.getElementById('next-overlay').classList.add('hidden'); this.hud.showKO(false); this.beginIntro(); }
@@ -1075,6 +1088,7 @@ class Game {
       return;
     }
     this.quality = q;
+    try { localStorage.setItem('dr-quality', String(q)); } catch (e) {}
     this.post.quality = q; this.fx.quality = q;
     this.renderer.setPixelRatio(q === 2 ? Math.min(window.devicePixelRatio, 1.25) : q === 1 ? 1 : Math.min(1, window.devicePixelRatio * 0.75));
     this.renderer.shadowMap.enabled = q === 2;
@@ -1367,7 +1381,7 @@ class Game {
     this.frameAvg += (rawDt * 1000 - this.frameAvg) * 0.05;
     this.qualityCool -= rawDt;
     if (!PHOTOREAL && this.qualityCool <= 0) {
-      if (this.frameAvg > 24 && this.quality > 0) { this.setQuality(this.quality - 1); this.qualityCool = 6; }
+      if (this.frameAvg > 24 && this.quality > 0) { this.setQuality(this.quality - 1); this.qualityCool = this._qFirst ? 2 : 6; this._qFirst = false; }
       else if (this.frameAvg < 13 && this.quality < 2 && this.autoQuality !== false) { this.setQuality(this.quality + 1); this.qualityCool = 10; }
     }
     const input = this.input;
@@ -1594,6 +1608,9 @@ class Game {
     if (this._lastRecv) {
       const dev = Math.abs((now - this._lastRecv) - (ts - this._lastRecvTs));
       this.jitter = this.jitter === undefined ? dev : this.jitter * 0.88 + dev * 0.12;
+      // 호스트의 실제 송신 간격 (느린 폰 호스트는 SNAP_HZ 보다 드물게 보낸다 → 재생 지연도 그만큼 잡아야 끊기지 않는다)
+      const gap = Math.min(200, ts - this._lastRecvTs);
+      this._sendGap = this._sendGap ? this._sendGap * 0.9 + gap * 0.1 : gap;
     }
     this._lastRecv = now; this._lastRecvTs = ts;
     this.snaps.push({ recv: now, ts, d: m });
@@ -1675,7 +1692,7 @@ class Game {
     if (n === 1) { const s0 = latest.d.f; this.fighters.forEach((f, i) => f.applySnapshot(s0[i], s0[i], 1)); return; }
 
     // 재생 지연: 스냅샷 간격 1개 + 지터 여유. RTT 는 지터가 아니므로 더하지 않는다 (회선이 깨끗하면 ~30ms)
-    const interval = 1000 / SNAP_HZ;
+    const interval = Math.max(1000 / SNAP_HZ, this._sendGap || 0);
     const delay = Math.min(160, Math.max(24, interval + 4 + (this.jitter || 4) * 2));
     if (this.playT === undefined || this.playT === null) this.playT = latest.ts - delay;
 
@@ -1811,6 +1828,16 @@ class Game {
         }
         if (dd.maxSpeed && !f._maxBurst) { f._maxBurst = true; for (let k = 0; k < 3; k++) this.sparks.burst(f.chestPos, new THREE.Vector3(Math.cos(k * 2.1), 0.3, Math.sin(k * 2.1)), 30, new THREE.Color(1, 0.85, 0.4), 2.2, 0.6); }
       } else f._maxBurst = false;
+      // MAX 오라 (초사이어인): 몸 주위에서 황금 불티가 위로 솟는다 — 오라 셰이더(AuraFx)와 같이 전원 화면에 보인다
+      if (dd.maxSpeed && !f.ko && !f.benched && f.downT <= 0 && !f.falling) {
+        f._auraAcc = (f._auraAcc || 0) + rawDt * (this.quality === 0 ? 7 : 16);
+        while (f._auraAcc >= 1) {
+          f._auraAcc -= 1;
+          const a = Math.random() * Math.PI * 2, r = 0.2 + Math.random() * 0.35, h = f.def.prop ? f.def.prop.height : 1;
+          const pos = new THREE.Vector3(f.pos.x + Math.cos(a) * r, 0.1 + Math.random() * 1.3 * h, f.pos.z + Math.sin(a) * r);
+          this.sparks.burst(pos, _up, 1, _auraGold, 0.9 + Math.random() * 0.9, 0.3);
+        }
+      }
       // 카메라와 내 캐릭터 사이를 가리는 다른 파이터는 반투명
       if (f !== view) {
         const dc = f.chestPos.distanceTo(this.camera.position);
@@ -1831,6 +1858,7 @@ class Game {
     }
     this.sparks.update(rawDt);
     this.ultFx.update(rawDt);
+    this.auraFx.update(rawDt, this.fighters);
 
     // 잔상: 전원 기록, 시점 인물 + 상대만 표시
     for (const f of this.fighters) {
