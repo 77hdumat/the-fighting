@@ -46,6 +46,11 @@ export class HitSparks {
       const sprite = new THREE.Sprite(material);sprite.visible=false;sprite.renderOrder=30;scene.add(sprite);return {sprite,life:0};
     });
     this.flashHead=0;
+    const windTexture=new THREE.TextureLoader().load('assets/effects/boxing-wind-v1.png');windTexture.colorSpace=THREE.SRGBColorSpace;
+    this.windBursts=Array.from({length:6},()=>{
+      const material=new THREE.SpriteMaterial({map:windTexture,transparent:true,opacity:0,depthTest:true,depthWrite:false,toneMapped:false});
+      const sprite=new THREE.Sprite(material);sprite.visible=false;scene.add(sprite);return {sprite,life:0,duration:.24,scale:1};
+    });this.windHead=0;
     const streakGeo=new THREE.BufferGeometry();this.streakPositions=new Float32Array(MAX*6);this.streakAlpha=new Float32Array(MAX*2);
     streakGeo.setAttribute('position',new THREE.BufferAttribute(this.streakPositions,3));streakGeo.setAttribute('alpha',new THREE.BufferAttribute(this.streakAlpha,1));
     this.streaks=new THREE.LineSegments(streakGeo,new THREE.ShaderMaterial({vertexShader:'attribute float alpha; varying float a; void main(){a=alpha;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',fragmentShader:'varying float a;void main(){gl_FragColor=vec4(1.,1.,1.,a);}',transparent:true,depthWrite:false,depthTest:true}));
@@ -61,8 +66,15 @@ export class HitSparks {
    * @param color THREE.Color 또는 입자별로 선택할 팔레트 배열
    * @param speed 초기 속도 배율
    */
+  sweep(pos,dir,size=.5,rotation=null,duration=.24) {
+    const f=this.windBursts[this.windHead++%this.windBursts.length];f.duration=duration;f.life=duration;f.scale=.55+size*.85;
+    f.sprite.position.copy(pos).addScaledVector(dir,-.08);f.sprite.material.rotation=rotation??(Math.atan2(dir.z,dir.x)+Math.random()*.7);
+    f.sprite.material.opacity=.65;f.sprite.visible=true;f.sprite.scale.setScalar(f.scale);
+  }
+
   burst(pos, dir, n = 20, color = new THREE.Color(1, 1, 1), speed = 1, size = 0.5) {
     if(n>=6){const f=this.flashes[this.flashHead++%this.flashes.length];f.life=.10;f.sprite.visible=true;f.sprite.position.copy(pos).addScaledVector(dir,.025);f.sprite.scale.set(.20+Math.min(size,.6)*.15,.10+Math.min(size,.6)*.08,1);f.sprite.material.opacity=.70;}
+    if(n>=18)this.sweep(pos,dir,size);
     n=Math.min(80,n);
     const colors = Array.isArray(color) && color.length ? color : null;
     for (let k = 0; k < n; k++) {
@@ -85,6 +97,7 @@ export class HitSparks {
 
   update(dt) {
     for(const f of this.flashes){f.life=Math.max(0,f.life-dt);f.sprite.visible=f.life>0;f.sprite.material.opacity=.70*(f.life/.10)**2;}
+    for(const f of this.windBursts){f.life=Math.max(0,f.life-dt);const k=f.life/f.duration;f.sprite.visible=k>0;f.sprite.material.opacity=.65*k*k;f.sprite.scale.setScalar(f.scale*(1+(1-k)*.65));}
     for (let i = 0; i < MAX; i++) {
       if (this.life[i] <= 0) { this.size[i] = 0; this.streakAlpha[i*2]=this.streakAlpha[i*2+1]=0; continue; }
       this.life[i] -= dt;
@@ -94,8 +107,8 @@ export class HitSparks {
       if (this.pos[o + 1] < 0.01) { this.pos[o + 1] = 0.01; this.vel[o + 1] *= -0.3; this.vel[o] *= 0.7; this.vel[o + 2] *= 0.7; }
       const k = Math.max(0, this.life[i] / this.maxLife[i]);
       this.size[i] = this.baseSize[i] * k;
-      for(let axis=0;axis<3;axis++){this.streakPositions[i*6+axis]=this.pos[o+axis];this.streakPositions[i*6+3+axis]=this.pos[o+axis]-this.vel[o+axis]*.025*k;}
-      this.streakAlpha[i*2]=k*.40;this.streakAlpha[i*2+1]=0;
+      for(let axis=0;axis<3;axis++){this.streakPositions[i*6+axis]=this.pos[o+axis];this.streakPositions[i*6+3+axis]=this.pos[o+axis]-this.vel[o+axis]*.055*k;}
+      this.streakAlpha[i*2]=k*.65;this.streakAlpha[i*2+1]=0;
       if (this.life[i] <= 0) this.size[i] = 0;
     }
     this.streaks.geometry.attributes.position.needsUpdate=true;this.streaks.geometry.attributes.alpha.needsUpdate=true;

@@ -25,3 +25,11 @@ The new mode reuses existing characters, generated canvas art and voice behavior
 ## Manga character visual update (2026-09-17)
 
 `assets/effects/boxing-impact-v2.png` is a new white contact-flash texture generated with the built-in image generation tool and resized to 256×256 RGBA PNG. The generation prompt and SHA-256 checksum are recorded in `assets/effects/manifest.json`. It is connected to the game's pooled 3D contact flashes and small overlay accent. Character loft surfaces, skinning and face ink are procedural project code in `js/Anatomy.js` and `js/Rig.js`; no external 3D model was downloaded. Existing local character references and the user-specified screenshot informed the visual changes.
+
+## Arena surfaces and air-cutting effects — 2026-09-17
+
+`assets/environment/ring-canvas-v1.jpg`, `assets/environment/sandstone-v1.jpg`, and `assets/effects/boxing-wind-v1.png` were generated for this project with the built-in image generation tool, then resized/converted using sips. Generation prompts, sizes and SHA-256 checksums are in the environment/effects manifests, which the standalone build validates. They supply actual game surface detail and pooled wind effects. Arena architecture, curved ropes, strata geometry, woven bump textures and layered glove ribbons are original procedural code. No external model, photograph or reference artwork was bundled.
+
+## User-supplied IPPO reference reconstruction
+
+The IPPO mesh in `js/IppoModel.js`, head sculpt in `js/Anatomy.js`, procedural face ink and batched hair in `js/Rig.js`, and `assets/models/ippo-reference-v1.glb` were made from the user-supplied IPPO reference. They reconstruct the depicted fictional character; this is not a claim to ownership of the character or the supplied artwork. The reference image is kept only in ignored local QA files. The exported GLB uses portable PBR materials; the native game and `ippo.html` retain the authored toon shader. No external source-game model was downloaded.

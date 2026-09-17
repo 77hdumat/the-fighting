@@ -1,0 +1,23 @@
+{
+  "generator": "built-in image_gen.imagegen; resized to 1024 and converted to JPEG quality 85 with sips",
+  "assets": [
+    {
+      "file": "sandstone-v1.jpg",
+      "bytes": 548190,
+      "sha256": "ffbee1d58f75998058f972931879f8080849864b5f36b02cd806f05bb1c32bab",
+      "width": 1024,
+      "height": 1024,
+      "format": "JPEG",
+      "prompt": "Use case: photorealistic-natural. Asset type: seamless square diffuse albedo texture for the flat top surface of a sandstone plateau in a 3D boxing game. Top-down orthographic surface only, fine warm gray taupe sandstone mineral grain, gentle irregular layered stone coloration, scattered very small natural hairline fissures, worn matte rough rock, realistic scale. Entire square filled edge to edge with the same natural stone surface; edges must tile seamlessly. Neutral flat diffuse lighting without baked shadows, no directional lighting or perspective. Restrained low contrast, no huge polygon cracks, no circular blobs, no symbols, no objects, no ground scene, no text, no painted marks, no watermark."
+    },
+    {
+      "file": "ring-canvas-v1.jpg",
+      "bytes": 484937,
+      "sha256": "a8e966cd40cdfa49fb0b87304733a3e4d55ab405813ebb5f8a640815e7ff0218",
+      "width": 1024,
+      "height": 1024,
+      "format": "JPEG",
+      "prompt": "Use case: photorealistic-natural. Asset type: seamless square albedo texture for a real boxing ring canvas mat in a 3D manga boxing game. Top-down orthographic flat surface only. Warm off-white tightly woven cotton duck canvas fabric, tiny visible natural woven thread grain, very subtle rubbed dusty gray wear in the fibers, clean professional arena canvas. Entire square filled edge to edge with uniform fabric, seamless tile edges. Neutral diffuse lighting, absolutely no folds, no large stains, no logos, no letters, no objects, no perspective, no baked cast shadows, no dark borders, no watermark. Fine understated texture suitable for a 10-meter game floor with a separate printed logo added by code."
+    }
+  ]
+}

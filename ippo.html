@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IPPO · 3D 모델</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#151821;color:#eee;font:14px system-ui,sans-serif;overflow:hidden}canvas{display:block;width:100%;height:100%}header{position:fixed;top:20px;left:24px;z-index:2}h1{font:italic 900 32px Impact,sans-serif;margin:0 0 4px}select{background:#282d39;color:#eee;border:1px solid #555a69;border-radius:5px;padding:6px;margin:6px 0}header p{margin:0;color:#b7b9c4}.download{position:fixed;right:20px;top:24px;color:#fff;background:#9b252a;padding:12px 16px;border-radius:6px;text-decoration:none;z-index:2}nav{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:6px;flex-wrap:wrap;justify-content:center;width:min(660px,96vw);background:#151821dd;padding:10px;border-radius:9px}button{border:1px solid #555a69;background:#282d39;color:#eee;padding:9px 13px;border-radius:5px;cursor:pointer}button.on{background:#a72c30;border-color:#cd5153}#error{position:fixed;top:100px;left:24px;right:24px;color:#ffb8a4}@media(max-width:500px){header{top:16px;left:16px}h1{font-size:25px}.download{font-size:12px;right:12px;top:20px;padding:10px}nav{bottom:10px}button{padding:8px 10px}}
+</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
+</head>
+<body>
+<header><h1 id="character-name">IPPO</h1><select id="character" aria-label="캐릭터 선택"></select><p>드래그로 회전 · 스크롤로 확대</p></header>
+<a class="download" href="assets/models/ippo-reference-v1.glb" download>3D 모델 다운로드</a>
+<nav id="controls" aria-label="모델 자세"><button data-pose="front" class="on">정면</button><button data-pose="side">측면</button><button data-pose="guard">가드</button><button data-pose="straight">스트레이트</button><button data-pose="hook">훅</button><button id="motion">동작 재생</button><button id="frame">전신 보기</button></nav>
+<p id="error" role="alert"></p>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {CHARACTERS,buildBoxer,defaultPose,applyPose,POSE_KEYS} from './js/Rig.js';
+import {applyPunchToPose} from './js/Punch.js';
+try{
+ const renderer=new THREE.WebGLRenderer({antialias:true,stencil:true});renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));renderer.setSize(innerWidth,innerHeight);renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=.92;renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;document.body.append(renderer.domElement);
+ const scene=new THREE.Scene();scene.background=new THREE.Color(0x171a23);const camera=new THREE.PerspectiveCamera(32,innerWidth/innerHeight,.05,30);
+ let rig=buildBoxer(CHARACTERS.ippo);const modelCache=new Map([['ippo',rig]]);scene.add(rig.root);
+ const select=document.querySelector('#character');for(const [id,def]of Object.entries(CHARACTERS)){const option=document.createElement('option');option.value=id;option.textContent=def.name;select.append(option);}
+ select.onchange=()=>{scene.remove(rig.root);if(!modelCache.has(select.value))modelCache.set(select.value,buildBoxer(CHARACTERS[select.value]));rig=modelCache.get(select.value);scene.add(rig.root);document.querySelector('#character-name').textContent=rig.def.name;document.title=rig.def.name+' · 3D 모델';document.querySelector('.download').hidden=select.value!=='ippo';window.__ippoViewer.rig=rig;frame();};
+ const key=new THREE.DirectionalLight(0xffe0ad,2);key.position.set(-3,5,4);key.castShadow=true;key.shadow.mapSize.set(1024,1024);key.shadow.camera.left=-2;key.shadow.camera.right=2;key.shadow.camera.top=2;key.shadow.camera.bottom=-2;key.shadow.bias=-.0003;scene.add(key);
+ const fill=new THREE.DirectionalLight(0x9daecb,.55);fill.position.set(3,2,1);scene.add(fill);scene.add(new THREE.HemisphereLight(0xcec6b9,0x26201c,.35));
+ const floor=new THREE.Mesh(new THREE.PlaneGeometry(20,20),new THREE.MeshStandardMaterial({color:0x292c33,roughness:1}));floor.rotation.x=-Math.PI/2;floor.receiveShadow=true;floor.position.y=-.005;scene.add(floor);
+ const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.minDistance=.75;controls.maxDistance=4;controls.maxPolarAngle=Math.PI*.64;controls.minPolarAngle=Math.PI*.18;controls.enablePan=false;
+ let pose='front',motion=false,full=false,start=performance.now();
+ function frame(){const scale=rig.root.scale.y,top=(.80+.07*rig.def.prop.neck+.17*rig.def.prop.headS*rig.def.prop.headY)*scale+rig.hips.position.y*scale,hip=rig.hips.position.y*scale,center=full?top*.50:(top+hip)*.5,span=full?top:top-hip+.10,dist=Math.max(full?2.65:2.15,span/(2*Math.tan(THREE.MathUtils.degToRad(camera.fov*.5)))*1.14)*Math.max(1,.70/camera.aspect);controls.target.set(0,center,0);camera.position.set(pose==='side'?dist:0,center+.07,pose==='side'?0:dist);controls.update();}frame();
+ document.querySelectorAll('[data-pose]').forEach(button=>button.onclick=()=>{pose=button.dataset.pose;start=performance.now();document.querySelectorAll('[data-pose]').forEach(b=>b.classList.toggle('on',b===button));frame();});
+ document.querySelector('#motion').onclick=e=>{motion=!motion;e.target.classList.toggle('on',motion);e.target.textContent=motion?'동작 정지':'동작 재생';start=performance.now();};
+ document.querySelector('#frame').onclick=e=>{full=!full;e.target.textContent=full?'상반신 보기':'전신 보기';frame();};
+ function paint(now){const p=defaultPose();if(pose==='front'||pose==='side')for(const k of POSE_KEYS)p[k]=0;if(pose==='straight'||pose==='hook')applyPunchToPose(p,{side:'L',type:pose,t:motion?((now-start)/650)%1:.46,dur:1});applyPose(rig,p);controls.update();renderer.render(scene,camera);requestAnimationFrame(paint);}requestAnimationFrame(paint);
+ addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);frame();});
+ window.__ippoViewer={rig,renderer,scene,camera,controls};window.__ready=true;
+}catch(error){document.querySelector('#error').textContent='모델을 표시하지 못했습니다. 새로고침하거나 다른 브라우저에서 열어 주세요.';console.error(error);}
+</script>
+</body>
+</html>

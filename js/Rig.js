@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { torsoGeometry, sculptHead, hairLock, limbGeometry, attachLimb, attachTorso } from './Anatomy.js';
+import { attachIppoBody, ippoHairGeometry, ippoFaceTexture } from './IppoModel.js';
 
 // Soft three-region ramp: shadows, warm midtones, lit planes.
 // 원작 화면에서 추출한 명암 분포에 맞춰 그림자 단을 더 깊게, 경계를 더 좁게 잡는다.
@@ -43,7 +44,7 @@ const TONE_GRADE_GLSL = /* glsl */`
   float baseLum = max(dot(uBaseColor, LUMA), 1e-4);
   float illumination = clamp(dot(gl_FragColor.rgb, LUMA) / baseLum, 0.0, 1.25);
   float formLight = .56 + .48 * dot(nrm, normalize(vec3(-.45,.72,.65)));
-  float shade = mix(illumination, formLight, uGrade * .65);
+  float shade = mix(illumination, formLight, uGrade * uFormWeight);
 
   // Soft transitions retain comic planes without hard black muscle borders.
   vec3 toned = mix(uShadowColor, uMidColor, smoothstep(0.36, 0.58, shade));
@@ -75,6 +76,9 @@ const TONE_GRADE_GLSL = /* glsl */`
     band = smoothstep(0.55, 0.78, band);
     gl_FragColor.rgb += vec3(0.06, 0.055, 0.05) * band * 0.12;
   }
+  #ifdef USE_COLOR
+    gl_FragColor.rgb *= vColor;
+  #endif
 }`;
 
 // 노멀 방향으로 밀어낸 뒷면 렌더링 = 두께 일정한 검은 외곽선
@@ -105,15 +109,16 @@ function makeOutlineMaterial(ghost, thickness = 0.014) {
 }
 
 // ---- 캐릭터 정의 ----
-// 주인공: 작고 다부진 인파이터 (검은 뻗친 머리, 굵은 눈썹, 초록/흰 트렁크, 빨간 글러브)
+// 주인공: 작고 다부진 인파이터 (첨부 레퍼런스의 흰/빨간 트렁크, 검은 헤어, 빨간 글러브)
 // 상대: 장신·마른 히트맨 (흑발 슬릭백, 가늘게 찢어진 눈, 다크 트렁크, 검은 글러브, 플리커 잽)
 export const CHARACTERS = {
   ippo: {
-    name: 'IPPO', gender: 'm', skin: 0xf0caad, trunks: 0x1c8d4a, trunksTrim: 0xf7f7f7, trunksText: 'IPPO',
-    ramp: { lit: 0xf0caad, mid: 0xd88f6b, shadow: 0xa25334 },
-    gloves: 0xc8241f, hair: 0x0f0c0d, shoes: 0xc92626, shoesTrim: 0xffffff,
-    hairStyle: 'spiky', brows: 'thick', eyes: 'round', mouth: 'grit',
-    prop: { height: 0.95, torsoW: 1.14, torsoD: 1.12, armR: 1.18, armLen: 0.96, legR: 1.12, legLen: 0.95, headS: 1.02, headY: 1.0, neck: 0.9, muscle: 1 },
+    name: 'IPPO', gender: 'm', skin: 0xf0caad, trunks: 0xf1eee6, trunksTrim: 0xb72b2d, trunksText: 'IPPO',
+    referenceIppo: true,
+    ramp: { lit: 0xf0c293, mid: 0xcf8e53, shadow: 0x854926 },
+    gloves: 0xc8241f, hair: 0x20201e, shoes: 0xc92626, shoesTrim: 0xffffff,
+    hairStyle: 'ippo-reference', brows: 'thick', eyes: 'round', mouth: 'grit',
+    prop: { height: 0.95, torsoW: 1.14, torsoD: 1.12, armR: 1.18, armLen: 0.96, legR: 1.12, legLen: 0.95, headS: .98, headY: 1.10, neck: 1.0, muscle: 1 },
     hp: 140, powerMul: 1.05, speedMul: 1.05, style: 'infighter', guardMax: 110, guardRegen: 1.0, weaveCd: 1.2,
   },
   mashiba: {
@@ -307,7 +312,7 @@ function geometriesFor(def) {
   const P = def.prop;
   const G = {
     pelvis: new RoundedBoxGeometry(0.36 * P.torsoW, 0.24, 0.26 * P.torsoD, 4, 0.08),
-    band: new RoundedBoxGeometry(0.38 * P.torsoW, 0.06, 0.28 * P.torsoD, 2, 0.02),
+    band: new RoundedBoxGeometry(0.38 * P.torsoW, def.referenceIppo?.105:.06, 0.28 * P.torsoD, 2, 0.02),
     stripe: new THREE.BoxGeometry(0.03, 0.2, 0.05),
     // 어깨(위) 넓고 허리(아래) 좁은 역삼각형. muscle 이 높을수록 차이를 크게 준다
     torso: torsoGeometry(P, def),
@@ -335,6 +340,7 @@ function geometriesFor(def) {
     spikeBig: hairLock(0.058 * P.headS, 0.235 * P.headS),          // 크게 뻗치는 머리칼
     strand: hairLock(0.041 * P.headS, 0.30 * P.headS, 0.014),   // 늘어지는 긴 머리칼
     bang: new RoundedBoxGeometry(.27 * P.headS, .075 * P.headS, .055, 4, .025), // 이마 덮는 앞머리
+    ippoHair: ippoHairGeometry(P,def.hairStyle),
   };
   geoCache.set(def, G);
   return G;
@@ -399,147 +405,19 @@ function buildHeldItem(kind, glove, part, sx) {
 // ---- 얼굴 텍스처 ----
 // 원작의 눈은 "얼굴 평면에 그려진 날카로운 도형"이다. 구체를 박아 넣으면 눈알이 튀어나온 인형이 된다.
 // 눈·눈썹·입을 캔버스에 그려서 얼굴 앞면에 감싼다.
-const faceTexCache = new Map();
-function faceTexture(def, expression = 'focused') {
-  const key = [def.name, def.eyes, def.brows, def.mouth, def.gender, expression].join('|');
-  if (faceTexCache.has(key)) return faceTexCache.get(key);
+function faceTexture(def, expression = 'focused') { return ippoFaceTexture(expression,def); }
 
-  const S = 512;
-  const cv = document.createElement('canvas');
-  cv.width = cv.height = S;
-  const c = cv.getContext('2d');
-  c.clearRect(0, 0, S, S);
-
-  const blinking = expression === 'blink';
-  const injured = expression === 'hurt';
-  const narrow = def.eyes === 'narrow';
-  const big = def.eyes === 'big';
-  const round = def.eyes === 'round';
-  const INK = '#120a08';
-
-  // 눈 한 쪽 (sx = -1 왼쪽 / +1 오른쪽). cx, cy 는 캔버스 좌표.
-  const eye = (cx, cy, sx) => {
-    const w = big ? 60 : narrow ? 64 : 62;          // 가로 반폭
-    const h = blinking ? 2 : (big ? 39 : narrow ? 19 : 36) * (injured ? .60 : 1);          // 세로 반높이
-    const tilt = sx * (narrow ? 0.20 : big ? -0.04 : 0.10);   // 눈꼬리 올라감 = 날카로움
-
-    c.save();
-    c.translate(cx, cy);
-    c.rotate(tilt);
-
-    // 흰자 — 위는 직선에 가깝고 아래가 둥근 아몬드 (애니 눈의 기본형)
-    c.beginPath();
-    c.moveTo(-w, -h * 0.35);
-    c.quadraticCurveTo(-w * 0.35, -h * 1.05, w * 0.55, -h * 0.72);
-    c.quadraticCurveTo(w, -h * 0.5, w, -h * 0.1);
-    c.quadraticCurveTo(w * 0.6, h, -w * 0.2, h * 0.95);
-    c.quadraticCurveTo(-w * 0.85, h * 0.7, -w, -h * 0.35);
-    c.closePath();
-    c.fillStyle = '#f7f4f0';
-    c.fill();
-
-    // 홍채/동공 — 크고 어둡게, 아래 눈꺼풀에 닿도록 살짝 내려 앉힌다
-    if (!narrow && !blinking) {
-      const ir = big ? 29 : 26;
-      c.save();
-      c.clip();
-      c.beginPath();
-      c.ellipse(sx * w * 0.08, h * 0.16, ir * 0.82, ir * 1.22, 0, 0, Math.PI * 2);
-      c.fillStyle = big ? '#3a2418' : '#14121a';
-      c.fill();
-      // 홍채 위쪽 그림자 (눈꺼풀이 드리우는 음영)
-      c.beginPath();
-      c.rect(-w, -h * 1.2, w * 2, h * 0.55);
-      c.fillStyle = 'rgba(0,0,0,.30)';
-      c.fill();
-      c.restore();
-
-      // 캐치라이트 — 애니 눈은 반드시 있다. 없으면 눈이 죽는다
-      c.beginPath();
-      c.ellipse(sx * w * 0.08 - sx * ir * 0.34, h * 0.16 - ir * 0.44, ir * 0.26, ir * 0.3, 0, 0, Math.PI * 2);
-      c.fillStyle = '#ffffff';
-      c.fill();
-    } else if (!blinking) {
-      // 가늘게 찢어진 눈: 흰자 없이 검은 선 + 작은 동공
-      c.beginPath();
-      c.ellipse(sx * w * 0.1, 0, w * 0.26, h * 0.85, 0, 0, Math.PI * 2);
-      c.fillStyle = '#14121a';
-      c.fill();
-    }
-
-    // 윗눈꺼풀 — 가장 굵은 선. 이 선 하나가 눈매를 결정한다
-    c.beginPath();
-    c.moveTo(-w * 1.04, -h * 0.34);
-    c.quadraticCurveTo(-w * 0.35, -h * 1.18, w * 0.58, -h * 0.80);
-    c.quadraticCurveTo(w * 1.0, -h * 0.58, w * 1.06, -h * 0.12);
-    c.strokeStyle = INK;
-    c.lineWidth = narrow ? 9 : big ? 10 : 11;
-    c.lineCap = 'round';
-    c.stroke();
-
-    // 아랫눈꺼풀 — 가늘게
-    c.beginPath();
-    c.moveTo(-w * 0.9, -h * 0.2);
-    c.quadraticCurveTo(-w * 0.1, h * 1.0, w * 0.95, -h * 0.05);
-    c.strokeStyle = INK;
-    c.lineWidth = narrow ? 9 : 6;
-    c.stroke();
-    c.restore();
-
-    // 눈썹 — 두꺼울수록 사납다
-    const bw = def.brows === 'thick' ? 20 : 11;
-    const by = cy - (big ? 69 : narrow ? 53 : 66) + (injured ? 12 : 0);
-    c.save();
-    c.beginPath();
-    c.moveTo(cx - sx * 68, by + (narrow ? 26 : 18));
-    c.quadraticCurveTo(cx - sx * 6, by - (narrow ? 16 : 10), cx + sx * 62, by + (narrow ? -6 : 6));
-    c.strokeStyle = INK;
-    c.lineWidth = bw;
-    c.lineCap = 'round';
-    c.stroke();
-    c.restore();
-  };
-
-  eye(S * (def.name === 'MASHIBA' ? 0.31 : 0.30), S * 0.40, -1);
-  eye(S * 0.695, S * 0.40, 1);
-
-  // 입
-  c.beginPath();
-  c.strokeStyle = INK;
-  c.lineWidth = 11;
-  c.lineCap = 'round';
-  if (injured) {
-    c.moveTo(S*.415,S*.762);c.quadraticCurveTo(S*.50,S*.742,S*.585,S*.762);c.lineTo(S*.575,S*.802);c.quadraticCurveTo(S*.50,S*.817,S*.425,S*.802);c.closePath();c.fillStyle='#e8dfd2';c.fill();
-  } else if (def.mouth === 'grin') {
-    c.moveTo(S * 0.40, S * 0.755);
-    c.quadraticCurveTo(S * 0.50, S * 0.825, S * 0.60, S * 0.750);
-  } else {
-    // 이 악문 입 (grit) — 원작 전투 표정
-    c.moveTo(S * 0.415, S * 0.772);
-    c.quadraticCurveTo(S * 0.50, S * 0.748, S * 0.585, S * 0.772);
-  }
-  c.stroke();
-
-  c.strokeStyle='rgba(91,47,33,.70)';c.lineWidth=5;
-  c.beginPath();c.moveTo(255,260);c.quadraticCurveTo(248,302,264,316);c.lineTo(280,312);c.stroke();
-  c.strokeStyle='rgba(102,52,36,.35)';c.lineWidth=4;c.beginPath();c.moveTo(239,417);c.quadraticCurveTo(257,422,273,416);c.stroke();
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
-  faceTexCache.set(key, tex);
-  return tex;
-}
-
-function trunksTextTexture(text, color) {
+function trunksTextTexture(text, color, patch=false) {
   const c = document.createElement('canvas');
   c.width = 256; c.height = 96;
   const g = c.getContext('2d');
   g.clearRect(0, 0, 256, 96);
+  if(patch){g.fillStyle='#eee9dd';g.fillRect(4,4,248,88);g.strokeStyle='#a49583';g.lineWidth=4;g.strokeRect(4,4,248,88);}
   g.font = '900 64px Impact, "Arial Black", sans-serif';
   g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.lineWidth = 8; g.strokeStyle = '#000';
-  g.strokeText(text, 128, 50);
-  g.fillStyle = color;
+  g.lineWidth = patch?1:8; g.strokeStyle = '#000';
+  if(!patch)g.strokeText(text, 128, 50);
+  g.fillStyle = patch?'#181413':color;
   g.fillText(text, 128, 50);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -620,6 +498,7 @@ export function buildBoxer(def, opts = {}) {
         sh.uniforms.uMidColor = { value: ramp.mid };
         sh.uniforms.uShadowColor = { value: ramp.shadow };
         sh.uniforms.uGrade = { value: look.grade };
+        sh.uniforms.uFormWeight = {value:(role==='skin'||role==='face')?.94:.65};
         sh.uniforms.uRim = { value: look.rim };
         sh.uniforms.uSpecPower = { value: look.specPower };
         sh.uniforms.uSpecGain = { value: look.specGain };
@@ -627,7 +506,7 @@ export function buildBoxer(def, opts = {}) {
         sh.uniforms.uHairBand = { value: look.hairBand ? 1 : 0 };
         sh.fragmentShader = `
 uniform vec3 uBaseColor; uniform vec3 uLitColor; uniform vec3 uMidColor; uniform vec3 uShadowColor;
-uniform float uGrade; uniform float uRim; uniform float uSpecPower; uniform float uSpecGain;
+uniform float uGrade; uniform float uFormWeight; uniform float uRim; uniform float uSpecPower; uniform float uSpecGain;
 uniform float uSpecEdge; uniform float uHairBand;
 ` + sh.fragmentShader.replace(
           '#include <tonemapping_fragment>',
@@ -680,8 +559,8 @@ uniform float uSpecEdge; uniform float uHairBand;
   part(G.stripe, def.trunksTrim, hips, 0.185 * P.torsoW, -0.03, 0, false);
   part(G.stripe, def.trunksTrim, hips, -0.185 * P.torsoW, -0.03, 0, false);
   if (!ghost && def.trunksText) {
-    const tp = new THREE.Mesh(new THREE.PlaneGeometry(0.24, 0.09), new THREE.MeshBasicMaterial({ map: trunksTextTexture(def.trunksText, '#' + new THREE.Color(def.trunksTrim).getHexString()), transparent: true, depthWrite: false }));
-    tp.position.set(0, -0.005, 0.13 * P.torsoD + 0.005);
+    const tp = new THREE.Mesh(new THREE.PlaneGeometry(def.referenceIppo?.14:.24,def.referenceIppo?.08:.09), new THREE.MeshBasicMaterial({ map: trunksTextTexture(def.trunksText, '#' + new THREE.Color(def.trunksTrim).getHexString(),def.referenceIppo), transparent: true, depthWrite: false }));
+    tp.position.set(0, def.referenceIppo?.09:-.005, 0.14 * P.torsoD + 0.006);
     hips.add(tp);
   }
 
@@ -743,13 +622,13 @@ uniform float uSpecEdge; uniform float uHairBand;
   const chest = new THREE.Group();
   chest.position.y = 0.52;
   waist.add(chest);
-  const torso = attachTorso(waist, chest, ghost ? G.ghostTorso : G.torso, M(bodyCol, def.bodyColor ? 'cloth' : 'skin'), !ghost);
-  part(G.neck, def.skin, chest, 0, 0.06 * P.neck, 0.02);
+  let torso = attachTorso(waist, chest, ghost ? G.ghostTorso : G.torso, M(bodyCol, def.bodyColor ? 'cloth' : 'skin'), !ghost);
+  if(ghost)part(G.neck, def.skin, chest, 0, 0.06 * P.neck, 0.02);
 
   const armLen = 0.32 * P.armLen;
   const mkArm = (sx) => {
     const shoulder = new THREE.Group();
-    shoulder.position.set(sx * 0.248 * P.torsoW, -0.004, 0);
+    shoulder.position.set(sx * .27 * P.torsoW, -0.004, 0);
     shoulder.rotation.order = 'YZX'; // X(들어올림) → Z(벌림) → Y(휘두름) 순으로 적용
     chest.add(shoulder);
     if (def.oversize) {   // 소매가 팔보다 크다
@@ -777,6 +656,7 @@ uniform float uSpecEdge; uniform float uHairBand;
   };
   const armL = mkArm(1);
   const armR = mkArm(-1);
+  if(!ghost){torso=attachIppoBody(waist,torso,deformers,P,def,M(def.skin,'skin'));bodyMats.push(...(Array.isArray(torso.material)?torso.material:[torso.material]));}
 
   // ---- 머리 / 얼굴 ----
   const headBaseY = 0.02 + 0.07 * P.neck;
@@ -795,114 +675,9 @@ uniform float uSpecEdge; uniform float uHairBand;
   hairCap.rotation.x = -0.32;
   hairCap.scale.set(1.03, P.headY, 1.02);
   if (!ghost) {
-  if (def.hairStyle === 'bobsharp') {
-    // 칼단발: 턱선에서 직선으로 뚝 떨어지는 실루엣 + 일자 앞머리
-    // 옆/뒤를 감싸는 원통형 컷 (아래가 일자로 잘린 느낌)
-    const cut = part(new THREE.CylinderGeometry(0.215 * P.headS, 0.225 * P.headS, 0.26, 18, 1, true, Math.PI * .5, Math.PI), def.hair, head, 0, hy - 0.1, -0.012);
-    cut.material.side = THREE.DoubleSide;
-    cut.scale.set(1, 1, 1.02);
-    const backFill = part(new THREE.BoxGeometry(0.3 * P.headS, 0.26, 0.16), def.hair, head, 0, hy - 0.1, -0.11);
-    // 일자 앞머리 (뱅)
-    const bang = part(new THREE.BoxGeometry(0.3 * P.headS, 0.1, 0.075), def.hair, head, 0, hy + 0.085, 0.112 * P.headS);
-    bang.rotation.x = -0.1;
-  } else if (def.hairStyle === 'bob') {
-    // 단발: 머리통을 감싸는 짧은 컷 + 앞머리 뱅
-    for (const sx of [-1, 1]) {   // 옆머리 (귀 아래까지)
-      const side = part(new THREE.CapsuleGeometry(0.055 * P.headS, 0.16, 4, 10), def.hair, head, sx * 0.155 * P.headS, hy - 0.06, -0.01);
-      side.scale.set(1, 1, 0.75);
-    }
-    const bang = part(new THREE.BoxGeometry(0.26 * P.headS, 0.075, 0.08), def.hair, head, 0, hy + 0.1, 0.108 * P.headS);
-    bang.rotation.x = -0.18;
-  } else if (def.hairStyle === 'long') {
-    // 긴 생머리: 뒤로 길게 흐르는 판 + 양옆 머리카락
-    const back = part(new THREE.CapsuleGeometry(0.115 * P.headS, 0.42, 4, 12), def.hair, head, 0, hy - 0.3, -0.075);
-    back.scale.set(1.15, 1, 0.6);
-    for (const sx of [-1, 1]) {
-      const side = part(new THREE.CapsuleGeometry(0.05 * P.headS, 0.3, 4, 10), def.hair, head, sx * 0.15 * P.headS, hy - 0.16, 0.012);
-      side.scale.set(1, 1, 0.7);
-    }
-    const bang = part(new THREE.BoxGeometry(0.24 * P.headS, 0.06, 0.07), def.hair, head, 0, hy + 0.105, 0.1 * P.headS);
-    bang.rotation.x = -0.25;
-  } else if (def.hairStyle === 'spiky') {
-    // Locks emerge tangentially from one scalp mass; short fringe keeps brows readable.
-    for (let i = 0; i < 10; i++) {
-      const a = i / 10 * Math.PI * 2;
-      const lock = part(G.spikeBig, def.hair, head, Math.cos(a)*.115*P.headS, hy+.145*P.headS, Math.sin(a)*.093*P.headS-.025, false);
-      lock.rotation.set(Math.sin(a)*.85, .15, -Math.cos(a)*.85);
-      lock.scale.set(.90,.65+.12*Math.sin(i*1.7),.85);
-    }
-    for(const [x,tilt] of [[-.10,-.25],[-.045,.2],[.03,-.12],[.09,.35]]){
-      const lock=part(G.spikeBig,def.hair,head,x*P.headS,hy+.126*P.headS,.111*P.headS,false);
-      lock.rotation.set(2.65,0,tilt);lock.scale.set(.58,.33,.50);
-    }
-  } else if (def.hairStyle === 'mane') {
-    // 센도: 뒤·위로 크게 젖혀진 갈기.
-    // 스파이크는 반드시 머리 뒤쪽 아크에만 놓는다 — 원형으로 두르면 앞쪽 가닥이 얼굴을 덮는다
-    const n = 11;
-    for (let i = 0; i < n; i++) {
-      const u = i / (n - 1);                               // 0 = 왼쪽, 1 = 오른쪽
-      const x = (u - 0.5) * 0.235 * P.headS;
-      const z = -0.04 - 0.08 * Math.sin(u * Math.PI);      // 가운데일수록 더 뒤로
-      const s = part(G.spikeBig, def.hair, head, x, hy + 0.145, z);
-      s.rotation.set(-0.95 - 0.22 * Math.sin(u * Math.PI), 0, -(u - 0.5) * 1.15);
-      s.scale.set(1.05, 0.82 + 0.25 * Math.sin(u * Math.PI), 1.05);
-    }
-    // 앞으로 뾰족하게 내려온 앞머리 두 갈래 — 눈을 덮지 않도록 짧고 높게
-    for (const sx of [-1, 1]) {
-      const s = part(G.spikeBig, def.hair, head, sx * 0.082, hy + 0.152, 0.092 * P.headS);
-      s.rotation.set(2.42, 0, -sx * 0.62);
-      s.scale.set(0.72, 0.46, 0.72);
-    }
-  } else if (def.hairStyle === 'longblack') {
-    // 마시바: 정수리에서 뻗치고 얼굴 양옆으로 길게 내려오는 흑발
-    for (let i = 0; i < 7; i++) {
-      const a = Math.PI * 0.5 + (i / 6) * Math.PI * 1.0;
-      const s = part(G.spikeBig, def.hair, head, Math.cos(a) * 0.095, hy + 0.14, Math.sin(a) * 0.08 - 0.05);
-      s.rotation.set(-0.5, 0, -Math.cos(a) * 0.5);
-      s.scale.set(0.80, 0.82, 0.80);
-    }
-    // 얼굴 옆으로 흐르는 긴 머리칼 (턱선 아래까지)
-    for (const sx of [-1, 1]) {
-      for (const [ox, oz, len, tilt] of [[0.155, 0.02, 1.35, 0.10], [0.135, -0.075, 1.6, 0.04]]) {
-        const s = part(G.strand, def.hair, head, sx * ox * P.headS, hy - 0.10, oz);
-        s.rotation.set(0.06, 0, Math.PI + sx * tilt);
-        s.scale.set(0.92, len, 0.85);
-      }
-    }
-    // 관자놀이를 스치는 앞머리 한 가닥 (한쪽으로 쏠림) — 눈은 가리지 않는다
-    const fringe = part(G.strand, def.hair, head, -0.088 * P.headS, hy + 0.088, 0.096 * P.headS);
-    fringe.rotation.set(0.26, 0, Math.PI + 0.46);
-    fringe.scale.set(0.72, 0.42, 0.5);
-  } else if (def.hairStyle === 'bowl') {
-    // 미야타: 이마를 덮는 일자 앞머리 + 귀를 덮는 단정한 중단발
-    // 캡은 눈썹 위에서 멈춰야 한다. 적도 아래까지 내려오면 얼굴을 덮는 검은 헬멧이 된다
-    const bang = part(G.bang, def.hair, head, 0, hy + 0.098, 0.100 * P.headS);
-    bang.rotation.x = -0.16;
-    bang.scale.set(1, 0.78, 0.85);
-    for (const sx of [-1, 1]) {
-      // 옆머리는 뒤쪽에 둔다 — 앞으로 오면 볼을 덮는다
-      const side = part(new THREE.CapsuleGeometry(0.048 * P.headS, 0.13, 4, 10), def.hair, head, sx * 0.158 * P.headS, hy - 0.018, -0.045);
-      side.scale.set(1, 1, 0.8);
-    }
-    // 뒤통수를 덮는 뒷머리
-    const back = part(new THREE.CapsuleGeometry(0.115 * P.headS, 0.10, 4, 12), def.hair, head, 0, hy - 0.035, -0.105 * P.headS);
-    back.scale.set(1.28, 1, 0.72);
-  } else {
-    // 뒤로 넘긴 흑발: 길게 뻗은 뾰족한 머리칼이 뒤/옆으로
-    for (let i = 0; i < 7; i++) {
-      const a = Math.PI * 0.55 + (i / 6) * Math.PI * 0.9;
-      const s = part(G.spike, def.hair, head, Math.cos(a) * 0.1, hy + 0.12, Math.sin(a) * 0.08 - 0.06);
-      s.rotation.set(1.35 - Math.abs(Math.cos(a)) * 0.3, 0, -Math.cos(a) * 0.45);
-      s.scale.set(0.9, 1.7, 0.9);
-    }
-    // 뾰족한 구레나룻
-    for (const sx of [-1, 1]) {
-      const s = part(G.spike, def.hair, head, sx * 0.16, hy - 0.03, 0.05);
-      s.rotation.set(Math.PI, 0, 0);
-      s.scale.set(0.5, 0.8, 0.5);
-    }
+    part(G.ippoHair,def.hair,head,0,hy,0,false);
   }
-  }
+
   // 얼굴: 머리 구면에 딱 맞는 앞면 패치에 눈·눈썹·입 텍스처를 감싼다 (튀어나온 눈알 없음)
   const eyeY = hy + 0.02 * P.headY, eyeZ = 0.14 * P.headS;   // 소품(선글라스 등) 기준점
   let rigFace = null;
@@ -910,8 +685,8 @@ uniform float uSpecEdge; uniform float uHairBand;
     const R = 0.17 * P.headS;
     const faceGeo = sculptHead(new THREE.SphereGeometry(
       R * 1.006, 28, 22,
-      Math.PI * 0.5 - 0.62, 1.24,          // 가로: 얼굴 폭
-      Math.PI * 0.5 - 0.50, 0.94,          // 세로: 이마 ~ 턱
+      Math.PI * 0.5 - .90, 1.80,
+      .83, 1.75,
     ), P, def);
     const faceMesh = new THREE.Mesh(faceGeo, new THREE.MeshBasicMaterial({
       map: faceTexture(def), transparent: true, depthWrite: false,

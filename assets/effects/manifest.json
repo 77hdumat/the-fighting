@@ -9,6 +9,16 @@
       "width": 256,
       "height": 256,
       "format": "RGBA PNG"
+    },
+    {
+      "file": "boxing-wind-v1.png",
+      "bytes": 214495,
+      "sha256": "ebaaa6328c323cecd07c85e2a299e3c73500c54e64674366874eb92922791d42",
+      "width": 512,
+      "height": 512,
+      "format": "RGBA PNG",
+      "generator": "built-in image_gen.imagegen; resized with sips",
+      "prompt": "A single crescent-shaped white air slash with fine parallel ice-blue speed streaks, clean manga swoosh, open center, generous transparent padding. Genuine transparent alpha background. No text, character, black outline, large glow, lens flare or watermark."
     }
   ]
 }

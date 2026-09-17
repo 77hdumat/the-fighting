@@ -1,0 +1,20 @@
+{
+  "generator": "Procedural reference-driven mesh in js/IppoModel.js and js/Anatomy.js; exported by Three.js GLTFExporter",
+  "runtime": "The game and ippo.html use the authored procedural rig and toon shader; GLB is a portable export with PBR materials.",
+  "assets": [
+    {
+      "file": "ippo-reference-v1.glb",
+      "bytes": 2321548,
+      "sha256": "a0146e8e6b3372c30b591d9b88203fe4592bab695dd2e2efedec5c8f54b89045",
+      "format": "binary glTF 2.0",
+      "upperBodyVertices": 18936,
+      "upperBodyTriangles": 37868,
+      "upperBodyBones": 8,
+      "animations": [
+        "Guard",
+        "StraightPunch",
+        "HookPunch"
+      ]
+    }
+  ]
+}

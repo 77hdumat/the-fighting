@@ -31,11 +31,19 @@ export function sculptHead(g,P,def={}){
   const p=g.attributes.position,R=.17*P.headS;
   for(let i=0;i<p.count;i++){
     const x=p.getX(i),y=p.getY(i),z=p.getZ(i),v=y/R;
-    const jaw=1-(def.gender === 'f' ? .29 : P.headY > 1.1 ? .28 : .21)*THREE.MathUtils.smoothstep(-v,.1,.95);
-    const front=Math.max(0,z/R);
-    const bridge=bell(x,0,.020*P.headS)*bell(v,-.12,.22)*.017*P.headS;
-    const socket=(bell(x,.061*P.headS,.028*P.headS)+bell(x,-.061*P.headS,.028*P.headS))*bell(v,.16,.13)*.007*P.headS;
-    p.setXYZ(i,x*jaw,y,z*.91+front*(bell(v,-.10,.45)*.010*P.headS+bridge-socket));
+    {
+      const face=THREE.MathUtils.smoothstep(z/R,.25,.80);
+      const jaw=1-(def.referenceIppo?.26:def.gender==='f'?.30:P.headY>1.1?.28:.23)*THREE.MathUtils.smoothstep(-v,.08,.93);
+      const brow=(bell(x,.062*P.headS,.040)+bell(x,-.062*P.headS,.040))*bell(v,.28,.10)*.009;
+      const socket=(bell(x,.062*P.headS,.030)+bell(x,-.062*P.headS,.030))*bell(v,.13,.13)*.009;
+      const cheek=bell(Math.abs(x),.101*P.headS,.039)*bell(v,-.20,.17)*.008;
+      const bridge=bell(x,0,.016*P.headS)*bell(v,-.06,.31)*(def.gender==='f'?.021:P.headY>1.1&&!def.referenceIppo?.036:.030)*P.headS;
+      const tip=bell(x,0,.021*P.headS)*bell(v,-.28,.085)*.014;
+      const muzzle=bell(x,0,.05)*bell(v,-.52,.20)*.008;
+      const chin=bell(v,-.83,.16)*.011;
+      p.setXYZ(i,x*jaw,y+(v<-.82?(-v-.82)*.015:0),z*.90+face*(brow-socket+cheek+bridge+tip+muzzle+chin));continue;
+    }
+
   }
   g.computeVertexNormals();return g;
 }

@@ -19,6 +19,18 @@ for asset in effect_manifest['assets']:
     data = (effect_dir / asset['file']).read_bytes()
     if len(data) != asset['bytes'] or hashlib.sha256(data).hexdigest() != asset['sha256']:
         raise RuntimeError('Effect asset checksum mismatch: ' + asset['file'])
+environment_dir = root / 'assets' / 'environment'
+environment_manifest = json.loads((environment_dir / 'manifest.json').read_text())
+for asset in environment_manifest['assets']:
+    data = (environment_dir / asset['file']).read_bytes()
+    if len(data) != asset['bytes'] or hashlib.sha256(data).hexdigest() != asset['sha256']:
+        raise RuntimeError('Environment asset checksum mismatch: ' + asset['file'])
+model_dir = root / 'assets' / 'models'
+model_manifest = json.loads((model_dir / 'manifest.json').read_text())
+for asset in model_manifest['assets']:
+    data = (model_dir / asset['file']).read_bytes()
+    if len(data) != asset['bytes'] or hashlib.sha256(data).hexdigest() != asset['sha256'] or data[:4] != b'glTF':
+        raise RuntimeError('Model asset checksum mismatch: ' + asset['file'])
 js = root / 'js'
 mods = {}
 for f in js.glob('*.js'):
@@ -75,3 +87,4 @@ html = html.replace('</head>', '<script>window.__BUILD_ID = "' + build_id + '";<
 (root / 'version.json').write_text('{"build":"' + build_id + '"}\n', encoding='utf-8')
 print('built index.html + dempsey-standalone.html', len(html.encode('utf-8')), 'bytes; build', build_id, '; modules:', order)
 print('external rendering assets:', sum(a['bytes'] for a in asset_manifest['assets']), 'bytes; serve alongside assets/ over HTTP(S)')
+print('external effect/environment assets:', sum(a['bytes'] for a in effect_manifest['assets'] + environment_manifest['assets']), 'bytes')

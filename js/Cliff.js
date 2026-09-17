@@ -1,46 +1,12 @@
 // Cliff.js — 암벽 맵: 링 대신 거대한 바위 고원 위에서 싸운다. 가장자리 밖으로 나가면 낙사.
 // buildRing 과 같은 인터페이스({ update, cheer, fill, dispose })를 제공해 Game 이 그대로 쓸 수 있게 한다.
 import * as THREE from 'three';
-
-const toonRamp = (() => {
-  const data = new Uint8Array([60, 60, 150, 255]);
-  const tex = new THREE.DataTexture(data, 4, 1, THREE.RedFormat);
-  tex.minFilter = tex.magFilter = THREE.NearestFilter;
-  tex.needsUpdate = true;
-  return tex;
-})();
+import { surfaceTexture, disposeEnvironment } from './Environment.js';
 
 function rockTexture() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 1024;
-  const g = c.getContext('2d');
-  g.fillStyle = '#8a7d6f';
-  g.fillRect(0, 0, 1024, 1024);
-  // 암반 결 + 균열
-  for (let i = 0; i < 1400; i++) {
-    const x = Math.random() * 1024, y = Math.random() * 1024;
-    const r = 10 + Math.random() * 90;
-    g.fillStyle = `rgba(${90 + Math.random() * 60 | 0},${78 + Math.random() * 50 | 0},${66 + Math.random() * 40 | 0},0.35)`;
-    g.beginPath(); g.ellipse(x, y, r, r * (0.4 + Math.random() * 0.5), Math.random() * 3, 0, Math.PI * 2); g.fill();
-  }
-  g.strokeStyle = 'rgba(40,32,26,0.55)';
-  for (let i = 0; i < 34; i++) {
-    g.lineWidth = 1 + Math.random() * 3;
-    g.beginPath();
-    let x = Math.random() * 1024, y = Math.random() * 1024;
-    g.moveTo(x, y);
-    for (let k = 0; k < 6; k++) { x += (Math.random() - 0.5) * 260; y += (Math.random() - 0.5) * 260; g.lineTo(x, y); }
-    g.stroke();
-  }
-  // 중앙 투기장 마크
-  g.strokeStyle = 'rgba(210,60,40,0.55)'; g.lineWidth = 12;
-  g.beginPath(); g.arc(512, 512, 250, 0, Math.PI * 2); g.stroke();
-  g.lineWidth = 5;
-  g.beginPath(); g.arc(512, 512, 180, 0, Math.PI * 2); g.stroke();
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
-  return tex;
+  const tex=new THREE.TextureLoader().load('assets/environment/sandstone-v1.jpg');
+  tex.colorSpace=THREE.SRGBColorSpace;tex.wrapS=tex.wrapT=THREE.RepeatWrapping;
+  tex.repeat.set(3,3);tex.anisotropy=4;return tex;
 }
 
 /** 고원 가장자리 반경 (각도에 따라 울퉁불퉁) */
@@ -56,11 +22,17 @@ export function cliffRadius(x, z, R = CLIFF_R) {
 export function buildCliff(scene) {
   const group = new THREE.Group();
   scene.add(group);
-  scene.background = new THREE.Color(0x0a0d14);
-  scene.fog = new THREE.FogExp2(0x0a0d14, 0.028);
+  scene.background = new THREE.Color(0x889da9);
+  scene.fog = new THREE.FogExp2(0x889da9, 0.014);
+  const sky=new THREE.Mesh(new THREE.SphereGeometry(75,24,12),new THREE.ShaderMaterial({
+    vertexShader:'varying vec3 direction;void main(){direction=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+    fragmentShader:'varying vec3 direction;void main(){float h=normalize(direction).y;vec3 c=mix(vec3(.70,.68,.59),vec3(.18,.34,.49),smoothstep(-.1,.65,h));gl_FragColor=vec4(c,1.);}',
+    side:THREE.BackSide,depthWrite:false,
+  }));sky.name='canyon-sky';group.add(sky);
 
-  const rockMat = new THREE.MeshToonMaterial({ map: rockTexture(), gradientMap: toonRamp });
-  const rockDark = new THREE.MeshToonMaterial({ color: 0x5c5046, gradientMap: toonRamp });
+  const topDetail=rockTexture(),sideColor=rockTexture(),strata=surfaceTexture('rock');sideColor.repeat.set(2,2);strata.repeat.set(2,3);
+  const rockMat = new THREE.MeshStandardMaterial({map:topDetail,bumpMap:topDetail,bumpScale:.035,roughness:.98});
+  const rockDark = new THREE.MeshStandardMaterial({color:0xc1b6a2,map:sideColor,bumpMap:strata,bumpScale:.08,roughness:.96});
 
   // ---- 고원: 섹터 조각들로 만든다 (1분 뒤부터 조각이 무너져 내린다) ----
   const SEG = 64, R = CLIFF_R;
@@ -87,15 +59,16 @@ export function buildCliff(scene) {
     topM.receiveShadow = true;
     g2.add(topM);
     // 옆면 (조각 아래로 뻗은 암벽)
-    const sideGeo = new THREE.CylinderGeometry(1, 0.84, 9, SECTOR_SEG, 1, true, a0, span);
+    const sideGeo = new THREE.CylinderGeometry(1, 0.84, 9, SECTOR_SEG, 12, true, a0, span);
     {
       const pos = sideGeo.attributes.position;
       for (let i = 0; i < pos.count; i++) {
         const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
         const len = Math.hypot(x, z);
         if (len < 1e-4) continue;
-        const scale = cliffRadius(x, z, R) * (y > 0 ? 1 : 0.86);
-        const jag = 1 + Math.sin(y * 1.7 + Math.atan2(z, x) * 4) * 0.04;
+        const depth=(4.5-y)/9;
+        const scale = cliffRadius(x, z, R) * (1-depth*.14);
+        const jag = 1 + depth*(Math.sin(y*3.1+Math.atan2(z,x)*8)*.045+Math.sin(y*1.7)*.025);
         pos.setXYZ(i, (x / len) * scale * jag, y, (z / len) * scale * jag);
       }
       sideGeo.computeVertexNormals();
@@ -108,16 +81,22 @@ export function buildCliff(scene) {
   }
 
   // ---- 주변 봉우리 (멀리 솟은 바위 기둥들) ----
-  for (let i = 0; i < 14; i++) {
-    const a = (i / 14) * Math.PI * 2 + Math.random() * 0.3;
-    const dist = 11 + Math.random() * 9;
-    const h = 5 + Math.random() * 12;
-    const rr = 0.8 + Math.random() * 1.9;
-    const peak = new THREE.Mesh(new THREE.ConeGeometry(rr, h, 6 + (i % 3)), rockDark);
-    peak.position.set(Math.cos(a) * dist, -6 + h / 2, Math.sin(a) * dist);
-    peak.rotation.y = Math.random() * 3;
-    group.add(peak);
+  const peakGeo=new THREE.CylinderGeometry(.64,1,1,12,10);
+  const peakPos=peakGeo.attributes.position;
+  for(let i=0;i<peakPos.count;i++){
+    const x=peakPos.getX(i),y=peakPos.getY(i),z=peakPos.getZ(i),a=Math.atan2(z,x);
+    const ripple=1+Math.sin(y*28+a*5)*.10+Math.cos(a*3+y*11)*.07;
+    peakPos.setXYZ(i,x*ripple,y+(y>.49?Math.sin(a*3)*.08:0),z*ripple);
   }
+  peakGeo.computeVertexNormals();
+  const peaks=new THREE.InstancedMesh(peakGeo,rockDark,48),dummy=new THREE.Object3D();
+  for(let i=0;i<48;i++){
+    const a=(i%24)/24*Math.PI*2+Math.random()*.16,far=i>=24,dist=far?34+Math.random()*18:15+Math.random()*10;
+    const h=far?12+Math.random()*12:5+Math.random()*10,rr=far?3+Math.random()*4:1.3+Math.random()*1.8;
+    dummy.position.set(Math.cos(a)*dist,-10+h/2,Math.sin(a)*dist);dummy.rotation.y=Math.random()*3;dummy.scale.set(rr,h,rr*.8);dummy.updateMatrix();peaks.setMatrixAt(i,dummy.matrix);
+    peaks.setColorAt(i,new THREE.Color(far?0xaab2b1:0xc9b89c));
+  }
+  peaks.name='layered-canyon-pillars';group.add(peaks);
 
   // ---- 가장자리 경고 링 (여기 넘으면 떨어진다) ----
   const edgeGeo = new THREE.RingGeometry(1, 1.06, SEG);
@@ -137,7 +116,7 @@ export function buildCliff(scene) {
   group.add(edge);
 
   // ---- 바닥 없는 어둠 + 아래쪽 안개 ----
-  const abyss = new THREE.Mesh(new THREE.CylinderGeometry(40, 40, 60, 24, 1, true), new THREE.MeshBasicMaterial({ color: 0x05070c, side: THREE.BackSide }));
+  const abyss = new THREE.Mesh(new THREE.CylinderGeometry(64, 64, 60, 32, 1, true), new THREE.MeshBasicMaterial({ color: 0x566874, side: THREE.BackSide }));
   abyss.position.y = -28;
   group.add(abyss);
 
@@ -244,7 +223,7 @@ export function buildCliff(scene) {
     setCrowd() {},
     dispose() {
       scene.remove(group); scene.remove(sun); scene.remove(hemi); scene.remove(fill);
-      group.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+      sun.shadow.dispose();disposeEnvironment(group);
     },
   };
 }

@@ -89,9 +89,11 @@ class Game {
     this.voice = new VoiceManager(this.audio);
     this.subs.voice = this.voice;
 
-    this.trailL = new Ribbon(this.scene, { maxPoints: 12, width: 0.045, color: 0xffffff, coreColor: 0xffffff });
-    this.trailR = new Ribbon(this.scene, { maxPoints: 12, width: 0.045, color: 0xffffff, coreColor: 0xffffff });
-    this.headTrail = new Ribbon(this.scene, { maxPoints: 40, width: 0.025, color: 0x2090ff, coreColor: 0xbfe8ff, opacity: 0.55 });
+    this.trailL = new Ribbon(this.scene);
+    this.trailR = new Ribbon(this.scene);
+    this.oppTrailL = new Ribbon(this.scene);
+    this.oppTrailR = new Ribbon(this.scene);
+    this.headTrail = new Ribbon(this.scene, { maxPoints: 28, width: 0.025, color: 0x2090ff, coreColor: 0xbfe8ff, opacity: 0.55, wind:false });
     this.ghostFx = {};   // defKey → AfterImageEffect (지연 생성)
     this.sparks = new HitSparks(this.scene);
     this.ultFx = new UltimateFx(this.scene, this.audio, this.fx, this.camera);
@@ -1124,6 +1126,8 @@ class Game {
     const dir = new THREE.Vector3(ev.dir[0], 0, ev.dir[1]);
     const uv = this.project(pos, new THREE.Vector2());
     const px = uv.x * this.fx.w, py = uv.y * this.fx.h;
+    const tipUV=this.project(pos.clone().addScaledVector(dir,.4),new THREE.Vector2());
+    this.fx.impactDirection=Math.atan2((tipUV.y-uv.y)*this.fx.h,(tipUV.x-uv.x)*this.fx.w);
     const mine = ev.a === local, hurt = ev.b === local;
     const involved = mine || hurt;
     const P = ev.power;
@@ -1843,14 +1847,33 @@ class Game {
       const pr = pu ? pu.t / pu.dur : 0;
       const lActive = pu && pu.side === 'L' && pr > 0.2 && pr < 0.62;
       const rActive = pu && pu.side === 'R' && pr > 0.2 && pr < 0.62;
-      if (lActive) this.trailL.push(view.gloveL); else if (!pu) this.trailL.clear();
-      if (rActive) this.trailR.push(view.gloveR); else if (!pu) this.trailR.clear();
+      if (lActive) this.trailL.push(view.gloveL); else if (!pu&&this.trailL.strength<.02) this.trailL.clear();
+      if (rActive) this.trailR.push(view.gloveR); else if (!pu&&this.trailR.strength<.02) this.trailR.clear();
       if (d.blend > 0) this.headTrail.push(view.headPos); else this.headTrail.clear();
-      // Short white glove arcs keep the punching arm readable.
-      const tc = 0xffffff;
+      // Actual glove history forms a feathered white core with parallel air-cutting strands.
+      const tc = 0xc4eaff;
       this.trailL.setColor(tc); this.trailR.setColor(tc);
       this.trailL.update(rawDt, this.camera, !!lActive);
       this.trailR.update(rawDt, this.camera, !!rActive);
+      if(this._trailOppSlot!==opp.slot){this.oppTrailL.clear();this.oppTrailR.clear();this._trailOppSlot=opp.slot;}
+      const op=opp.punch,opr=op?op.t/op.dur:0;
+      for(const side of ['L','R']){
+        const trail=side==='L'?this.oppTrailL:this.oppTrailR,active=op&&op.side===side&&opr>.2&&opr<.68;
+        if(active)trail.push(side==='L'?opp.gloveL:opp.gloveR);else if(!op&&trail.strength<.02)trail.clear();
+        trail.update(rawDt,this.camera,!!active);
+      }
+      // A brief pressure crescent also accompanies a punch that misses its target.
+      for(const fighter of [view,opp]){
+        const punch=fighter.punch,progress=punch?punch.t/punch.dur:0;
+        if(punch&&progress>.30&&progress<.58&&this.realTime-(fighter._windAt??-1)>.15){
+          fighter._windAt=this.realTime;
+          const cur=punch.side==='L'?fighter.gloveL:fighter.gloveR,prev=punch.side==='L'?fighter.prevGloveL:fighter.prevGloveR;
+          const motion=cur.clone().sub(prev);if(motion.lengthSq()>1e-7){
+            const a=this.project(prev,new THREE.Vector2()),b=this.project(cur,new THREE.Vector2());
+            this.sparks.sweep(cur,motion.normalize(),punch.type==='hook'?.65:.4,-Math.atan2((b.y-a.y)*this.fx.h,(b.x-a.x)*this.fx.w),.18);
+          }
+        }
+      }
       this.headTrail.update(rawDt, this.camera, d.active && I > 0.15);
     }
 

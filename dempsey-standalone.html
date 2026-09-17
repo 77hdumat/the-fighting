@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta name="build-id" content="1789611885">
+<meta name="build-id" content="1789614239">
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -539,7 +539,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   }
 }
 </script>
-<script>window.__BUILD_ID = "1789611885";</script>
+<script>window.__BUILD_ID = "1789614239";</script>
 </head>
 <body>
   <canvas id="gl" tabindex="0"></canvas>
@@ -812,11 +812,19 @@ function sculptHead(g,P,def={}){
   const p=g.attributes.position,R=.17*P.headS;
   for(let i=0;i<p.count;i++){
     const x=p.getX(i),y=p.getY(i),z=p.getZ(i),v=y/R;
-    const jaw=1-(def.gender === 'f' ? .29 : P.headY > 1.1 ? .28 : .21)*THREE.MathUtils.smoothstep(-v,.1,.95);
-    const front=Math.max(0,z/R);
-    const bridge=bell(x,0,.020*P.headS)*bell(v,-.12,.22)*.017*P.headS;
-    const socket=(bell(x,.061*P.headS,.028*P.headS)+bell(x,-.061*P.headS,.028*P.headS))*bell(v,.16,.13)*.007*P.headS;
-    p.setXYZ(i,x*jaw,y,z*.91+front*(bell(v,-.10,.45)*.010*P.headS+bridge-socket));
+    {
+      const face=THREE.MathUtils.smoothstep(z/R,.25,.80);
+      const jaw=1-(def.referenceIppo?.26:def.gender==='f'?.30:P.headY>1.1?.28:.23)*THREE.MathUtils.smoothstep(-v,.08,.93);
+      const brow=(bell(x,.062*P.headS,.040)+bell(x,-.062*P.headS,.040))*bell(v,.28,.10)*.009;
+      const socket=(bell(x,.062*P.headS,.030)+bell(x,-.062*P.headS,.030))*bell(v,.13,.13)*.009;
+      const cheek=bell(Math.abs(x),.101*P.headS,.039)*bell(v,-.20,.17)*.008;
+      const bridge=bell(x,0,.016*P.headS)*bell(v,-.06,.31)*(def.gender==='f'?.021:P.headY>1.1&&!def.referenceIppo?.036:.030)*P.headS;
+      const tip=bell(x,0,.021*P.headS)*bell(v,-.28,.085)*.014;
+      const muzzle=bell(x,0,.05)*bell(v,-.52,.20)*.008;
+      const chin=bell(v,-.83,.16)*.011;
+      p.setXYZ(i,x*jaw,y+(v<-.82?(-v-.82)*.015:0),z*.90+face*(brow-socket+cheek+bridge+tip+muzzle+chin));continue;
+    }
+
   }
   g.computeVertexNormals();return g;
 }
@@ -1054,9 +1062,12 @@ __M.Trails = (() => {
 
 const VERT = /* glsl */`
 attribute float alpha;
+attribute float edge;
 varying float vA;
+varying float vEdge;
 void main() {
   vA = alpha;
+  vEdge = edge;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }`;
 const FRAG = /* glsl */`
@@ -1064,9 +1075,11 @@ uniform vec3 color;
 uniform vec3 coreColor;
 uniform float opacity;
 varying float vA;
+varying float vEdge;
 void main() {
-  vec3 c = mix(color, coreColor, vA);
-  gl_FragColor = vec4(c, vA * opacity);
+  float feather = pow(max(0.0,1.0-abs(vEdge)), .45);
+  vec3 c = mix(color, coreColor, feather);
+  gl_FragColor = vec4(c, vA * opacity * feather);
 }`;
 
 const _tan = new THREE.Vector3();
@@ -1074,10 +1087,11 @@ const _side = new THREE.Vector3();
 const _camDir = new THREE.Vector3();
 
 class Ribbon {
-  constructor(scene, { maxPoints = 12, width = 0.045, color = 0xffffff, coreColor = 0xffffff, opacity = 1 } = {}) {
-    maxPoints = Math.min(12, maxPoints);
+  constructor(scene, { maxPoints = 18, width = 0.075, color = 0xc4eaff, coreColor = 0xffffff, opacity = 1, wind = true } = {}) {
+    maxPoints = Math.min(28, maxPoints);
     this.maxPoints = maxPoints;
-    this.width = Math.min(.055, width);
+    this.width = Math.min(.10, width);
+    this.rails = wind ? 3 : 1;
     this.points = [];
     for (let i = 0; i < maxPoints; i++) this.points.push(new THREE.Vector3());
     this.len = 0;
@@ -1085,13 +1099,16 @@ class Ribbon {
     this.targetStrength = 0;
 
     const geo = new THREE.BufferGeometry();
-    this.pos = new Float32Array(maxPoints * 2 * 3);
-    this.alpha = new Float32Array(maxPoints * 2);
+    this.pos = new Float32Array(maxPoints * 2 * 3 * this.rails);
+    this.alpha = new Float32Array(maxPoints * 2 * this.rails);
+    const edges=new Float32Array(maxPoints*2*this.rails);
+    for(let i=0;i<edges.length;i++)edges[i]=i%2?1:-1;
     geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
     geo.setAttribute('alpha', new THREE.BufferAttribute(this.alpha, 1));
+    geo.setAttribute('edge',new THREE.BufferAttribute(edges,1));
     const idx = [];
-    for (let i = 0; i < maxPoints - 1; i++) {
-      const a = i * 2, b = i * 2 + 1, c = i * 2 + 2, d = i * 2 + 3;
+    for(let rail=0;rail<this.rails;rail++)for (let i = 0; i < maxPoints - 1; i++) {
+      const a = (rail*maxPoints+i)*2, b = a+1, c = a+2, d = a+3;
       idx.push(a, b, c, b, d, c);
     }
     geo.setIndex(idx);
@@ -1109,6 +1126,7 @@ class Ribbon {
   }
 
   push(p) {
+    if(this.len&&this.points[0].distanceToSquared(p)>1.44)this.clear();
     // 최신 점을 앞으로 (배열 회전)
     const last = this.points.pop();
     last.copy(p);
@@ -1135,12 +1153,15 @@ class Ribbon {
       if (_tan.lengthSq() < 1e-8) _tan.set(0, 1, 0);
       _side.crossVectors(_tan, _camDir).normalize();
       const f = 1 - k / (n - 1);
-      const w = this.width * Math.sin(Math.PI * (.08 + .84 * f));
-      const o = i * 6;
-      this.pos[o] = p.x - _side.x * w; this.pos[o + 1] = p.y - _side.y * w; this.pos[o + 2] = p.z - _side.z * w;
-      this.pos[o + 3] = p.x + _side.x * w; this.pos[o + 4] = p.y + _side.y * w; this.pos[o + 5] = p.z + _side.z * w;
-      const a = .42 * Math.pow(f, 1.8) * this.strength * (i < n ? 1 : 0);
-      this.alpha[i * 2] = a; this.alpha[i * 2 + 1] = a;
+      for(let rail=0;rail<this.rails;rail++){
+        const outer=rail>0, offset=outer?(rail===1?-1:1)*(.07+.085*Math.sin(f*Math.PI)):0;
+        const w=this.width*(outer?.30:1)*Math.sin(Math.PI*(.05+.9*f));
+        const o=(rail*this.maxPoints+i)*6;
+        this.pos[o]=p.x+_side.x*(offset-w);this.pos[o+1]=p.y+_side.y*(offset-w);this.pos[o+2]=p.z+_side.z*(offset-w);
+        this.pos[o+3]=p.x+_side.x*(offset+w);this.pos[o+4]=p.y+_side.y*(offset+w);this.pos[o+5]=p.z+_side.z*(offset+w);
+        const a=(outer?.48:.80)*Math.pow(f,1.2)*this.strength*(i<n?1:0),v=(rail*this.maxPoints+i)*2;
+        this.alpha[v]=this.alpha[v+1]=a;
+      }
     }
     this.geo.attributes.position.needsUpdate = true;
     this.geo.attributes.alpha.needsUpdate = true;
@@ -1530,6 +1551,11 @@ class HitSparks {
       const sprite = new THREE.Sprite(material);sprite.visible=false;sprite.renderOrder=30;scene.add(sprite);return {sprite,life:0};
     });
     this.flashHead=0;
+    const windTexture=new THREE.TextureLoader().load('assets/effects/boxing-wind-v1.png');windTexture.colorSpace=THREE.SRGBColorSpace;
+    this.windBursts=Array.from({length:6},()=>{
+      const material=new THREE.SpriteMaterial({map:windTexture,transparent:true,opacity:0,depthTest:true,depthWrite:false,toneMapped:false});
+      const sprite=new THREE.Sprite(material);sprite.visible=false;scene.add(sprite);return {sprite,life:0,duration:.24,scale:1};
+    });this.windHead=0;
     const streakGeo=new THREE.BufferGeometry();this.streakPositions=new Float32Array(MAX*6);this.streakAlpha=new Float32Array(MAX*2);
     streakGeo.setAttribute('position',new THREE.BufferAttribute(this.streakPositions,3));streakGeo.setAttribute('alpha',new THREE.BufferAttribute(this.streakAlpha,1));
     this.streaks=new THREE.LineSegments(streakGeo,new THREE.ShaderMaterial({vertexShader:'attribute float alpha; varying float a; void main(){a=alpha;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',fragmentShader:'varying float a;void main(){gl_FragColor=vec4(1.,1.,1.,a);}',transparent:true,depthWrite:false,depthTest:true}));
@@ -1545,8 +1571,15 @@ class HitSparks {
    * @param color THREE.Color 또는 입자별로 선택할 팔레트 배열
    * @param speed 초기 속도 배율
    */
+  sweep(pos,dir,size=.5,rotation=null,duration=.24) {
+    const f=this.windBursts[this.windHead++%this.windBursts.length];f.duration=duration;f.life=duration;f.scale=.55+size*.85;
+    f.sprite.position.copy(pos).addScaledVector(dir,-.08);f.sprite.material.rotation=rotation??(Math.atan2(dir.z,dir.x)+Math.random()*.7);
+    f.sprite.material.opacity=.65;f.sprite.visible=true;f.sprite.scale.setScalar(f.scale);
+  }
+
   burst(pos, dir, n = 20, color = new THREE.Color(1, 1, 1), speed = 1, size = 0.5) {
     if(n>=6){const f=this.flashes[this.flashHead++%this.flashes.length];f.life=.10;f.sprite.visible=true;f.sprite.position.copy(pos).addScaledVector(dir,.025);f.sprite.scale.set(.20+Math.min(size,.6)*.15,.10+Math.min(size,.6)*.08,1);f.sprite.material.opacity=.70;}
+    if(n>=18)this.sweep(pos,dir,size);
     n=Math.min(80,n);
     const colors = Array.isArray(color) && color.length ? color : null;
     for (let k = 0; k < n; k++) {
@@ -1569,6 +1602,7 @@ class HitSparks {
 
   update(dt) {
     for(const f of this.flashes){f.life=Math.max(0,f.life-dt);f.sprite.visible=f.life>0;f.sprite.material.opacity=.70*(f.life/.10)**2;}
+    for(const f of this.windBursts){f.life=Math.max(0,f.life-dt);const k=f.life/f.duration;f.sprite.visible=k>0;f.sprite.material.opacity=.65*k*k;f.sprite.scale.setScalar(f.scale*(1+(1-k)*.65));}
     for (let i = 0; i < MAX; i++) {
       if (this.life[i] <= 0) { this.size[i] = 0; this.streakAlpha[i*2]=this.streakAlpha[i*2+1]=0; continue; }
       this.life[i] -= dt;
@@ -1578,8 +1612,8 @@ class HitSparks {
       if (this.pos[o + 1] < 0.01) { this.pos[o + 1] = 0.01; this.vel[o + 1] *= -0.3; this.vel[o] *= 0.7; this.vel[o + 2] *= 0.7; }
       const k = Math.max(0, this.life[i] / this.maxLife[i]);
       this.size[i] = this.baseSize[i] * k;
-      for(let axis=0;axis<3;axis++){this.streakPositions[i*6+axis]=this.pos[o+axis];this.streakPositions[i*6+3+axis]=this.pos[o+axis]-this.vel[o+axis]*.025*k;}
-      this.streakAlpha[i*2]=k*.40;this.streakAlpha[i*2+1]=0;
+      for(let axis=0;axis<3;axis++){this.streakPositions[i*6+axis]=this.pos[o+axis];this.streakPositions[i*6+3+axis]=this.pos[o+axis]-this.vel[o+axis]*.055*k;}
+      this.streakAlpha[i*2]=k*.65;this.streakAlpha[i*2+1]=0;
       if (this.life[i] <= 0) this.size[i] = 0;
     }
     this.streaks.geometry.attributes.position.needsUpdate=true;this.streaks.geometry.attributes.alpha.needsUpdate=true;
@@ -2109,11 +2143,206 @@ class UltimateFx {
 }
 return { UltimateFx };
 })();
+// ===== IppoModel.js =====
+__M.IppoModel = (() => {
+// IPPO reference anatomy, adapted to each character. Welded eight-bone neck, torso and arms.
+const bell=(x,c,w)=>Math.exp(-(((x-c)/w)**2));
+const smooth=(x,a,b)=>THREE.MathUtils.smoothstep(x,a,b);
+const blend=(a,b,k)=>{const h=Math.max(k-Math.abs(a-b),0)/k;return Math.min(a,b)-h*h*k*.25;};
+const bodyCache=new Map();
+
+function ippoBodyGeometry(P,def={referenceIppo:true}) {
+  const cacheKey=JSON.stringify([P,def.bodyColor,def.sleeves,def.skin,def.belly,def.referenceIppo]);
+  if(bodyCache.has(cacheKey))return bodyCache.get(cacheKey);
+  const w=P.torsoW,d=P.torsoD,arm=.32*P.armLen,r=.080*P.armR,ax=.27*w,sy=.516;
+  const muscular=def.referenceIppo?1:(def.bodyColor?.12:1)*(P.muscle??0), neckR=def.referenceIppo?.071:.063*w, neckD=def.referenceIppo?.067:.061*d, neckTop=def.referenceIppo?.685:.52+.02+.07*P.neck+.178*P.headS-.17*P.headS*P.headY+.055;
+  const torso=[[.012,.155*w,.113*d],[.12,.166*w,.125*d],[.25,.176*w,.133*d],[.33,.205*w,.145*d],[.43,.247*w,.151*d],[.50,.245*w,.132*d],[.55,.175*w,.098*d],[.59,.077*w,.067*d]];
+  const arms=[[-.15,.05],[0,1.03],[.18,1.16],[.46,1.02],[.8,.70],[1,.63],[1.23,.90],[1.55,.72],[1.89,.49],[2.05,.07]];
+  function profile(rows,t){let i=0;while(i<rows.length-2&&rows[i+1][0]<t)i++;const a=rows[i],b=rows[i+1],f=smooth(t,a[0],b[0]);return a.slice(1).map((v,j)=>v+(b[j+1]-v)*f);}
+  function field(x,y,z){
+    const [rx,rz]=profile(torso,y),front=smooth(z,-.01,.09);
+    const pec=(bell(x,.118*w,.089*w)+bell(x,-.118*w,.089*w))*bell(y,.423,.062)*.045;
+    const sternum=bell(x,0,.019)*bell(y,.42,.11)*.009;
+    let abs=0;for(const row of [.166,.24,.305])abs+=(bell(x,.054*w,.045*w)+bell(x,-.054*w,.045*w))*bell(y,row,.036)*.013;
+    const ribs=bell(Math.abs(x),.165*w,.045)*bell(y,.31,.105)*(.005+.004*Math.sin(y*99+Math.abs(x)*14));
+    const clavicle=bell(y,.521,.017)*bell(Math.abs(x),.115*w,.085)*.010;
+    let body=Math.max((Math.hypot(x/rx,(z-front*(muscular*(pec+abs+ribs+clavicle-sternum)+(def.belly?bell(y,.20,.15)*.072:0)))/rz)-1)*Math.min(rx,rz),.012-y,y-.59);
+    const neck=Math.max((Math.hypot(x/neckR,(z-.015)/neckD)-1)*Math.min(neckR,neckD),.565-y,y-neckTop);
+    body=blend(body,neck,.035);
+    for(const sign of [-1,1]){
+      const u=(sy-y)/arm,ar=profile(arms,u)[0]*r;
+      const muscle=bell(u,.42,.25)*.009*(P.muscle??1)*smooth(z,-.015,.06);
+      const limb=Math.max((Math.hypot((x-sign*ax)/ar,(z-muscle)/(ar*.92))-1)*ar,y-(sy+arm*.15),(sy-arm*2.05)-y);
+      body=blend(body,limb,.035);
+    }
+    return body;
+  }
+  const extent=Math.max(.27*w+r*1.35+.045,.27*w+.035);
+  const lo=def.referenceIppo?[-.46,-.18,-.23]:[-extent,sy-arm*2.05-.04,-.18*d-.04],hi=def.referenceIppo?[.46,.71,.28]:[extent,Math.max(.71,neckTop+.03),.18*d+(def.belly?.10:.05)],step=def.referenceIppo?.018:.024;
+  const n=hi.map((v,i)=>Math.ceil((v-lo[i])/step)+1),[nx,ny,nz]=n,total=nx*ny*nz;
+  const values=new Float32Array(total),positions=[],normals=[],colors=[],indices=[],ids=[],weights=[],uvs=[],skinSurface=[];
+  const at=(x,y,z)=>x+nx*(y+ny*z),xyz=i=>{const x=i%nx,y=Math.floor(i/nx)%ny,z=Math.floor(i/(nx*ny));return [lo[0]+x*step,lo[1]+y*step,lo[2]+z*step];};
+  for(let z=0;z<nz;z++)for(let y=0;y<ny;y++)for(let x=0;x<nx;x++)values[at(x,y,z)]=field(lo[0]+x*step,lo[1]+y*step,lo[2]+z*step);
+  const edgeCache=new Map();
+  function gradient(i){const x=i%nx,y=Math.floor(i/nx)%ny,z=Math.floor(i/(nx*ny));return [values[at(Math.min(nx-1,x+1),y,z)]-values[at(Math.max(0,x-1),y,z)],values[at(x,Math.min(ny-1,y+1),z)]-values[at(x,Math.max(0,y-1),z)],values[at(x,y,Math.min(nz-1,z+1))]-values[at(x,y,Math.max(0,z-1))]];}
+  function vertex(a,b){
+    const key=a<b?a+'_'+b:b+'_'+a;if(edgeCache.has(key))return edgeCache.get(key);
+    const t=values[a]/(values[a]-values[b]),pa=xyz(a),pb=xyz(b),p=pa.map((v,i)=>v+(pb[i]-v)*t),ga=gradient(a),gb=gradient(b),normal=ga.map((v,i)=>v+(gb[i]-v)*t),nl=Math.hypot(...normal)||1;
+    const index=positions.length/3;edgeCache.set(key,index);positions.push(...p);normals.push(...normal.map(v=>v/nl));
+    const [x,y,z]=p,front=smooth(z,.01,.12);
+    const pecEdge=bell(y,.359+.055*(Math.abs(x)/(.25*w))**2,.009)*bell(Math.abs(x),.12*w,.10*w);
+    let folds=0;for(const row of [.133,.204,.274])folds+=(bell(x,.056*w,.034*w)+bell(x,-.056*w,.034*w))*bell(y,row+.009*(x/.12)**2,.007);
+    const center=bell(x,0,.009)*bell(y,.255,.17),clavicle=bell(y,.497,.007)*bell(Math.abs(x),.12*w,.10*w);
+    const serratus=bell(Math.abs(x),.172*w,.026)*bell(y,.31,.09)*Math.pow(Math.max(0,Math.sin(y*105+Math.abs(x)*22)),4);
+    const shade=Math.min(.72,muscular*front*(pecEdge*.45+folds*.28+center*.16+clavicle*.22+serratus*.16));
+    colors.push(1-shade*.24,1-shade*.52,1-shade*.69);uvs.push((x+.46)/.92,(y+.18)/.89);
+    const u=(sy-y)/arm,ar=profile(arms,u)[0]*r,[rx,rz]=profile(torso,y);
+    const torsoDistance=Math.max((Math.hypot(x/rx,z/rz)-1)*Math.min(rx,rz),.012-y,y-.59);
+    const limbDistance=Math.max((Math.hypot((Math.abs(x)-ax)/ar,z/(ar*.92))-1)*ar,y-(sy+arm*.15),(sy-arm*2.05)-y);
+    const armWeight=smooth(torsoDistance-limbDistance,-.045,.045);
+    const neckMask=smooth(y,.548,.58)*(1-smooth(Math.abs(x),neckR,neckR*1.8)),armMask=smooth(armWeight,.32,.68),bareArm=!def.sleeves||def.sleeves===def.skin;
+    skinSurface.push(def.bodyColor?Math.max(neckMask,bareArm?armMask:0):bareArm?1:1-armMask);
+    const chest=smooth(y,.25,.53),h=smooth(u,.76,1),k=smooth(u,1,1.24),base=x>0?2:5;
+    const boneWeights=[[0,(1-armWeight)*(1-chest)],[1,(1-armWeight)*chest],[base,armWeight*(1-h)],[base+1,armWeight*h*(1-k)],[base+2,armWeight*k]].filter(v=>v[1]>1e-6).sort((a,b)=>b[1]-a[1]).slice(0,4);
+    const sum=boneWeights.reduce((s,v)=>s+v[1],0);while(boneWeights.length<4)boneWeights.push([0,0]);ids.push(...boneWeights.map(v=>v[0]));weights.push(...boneWeights.map(v=>v[1]/sum));return index;
+  }
+  function triangle(a,b,c){const p=a*3,q=b*3,r=c*3,ab=[positions[q]-positions[p],positions[q+1]-positions[p+1],positions[q+2]-positions[p+2]],ac=[positions[r]-positions[p],positions[r+1]-positions[p+1],positions[r+2]-positions[p+2]],cross=[ab[1]*ac[2]-ab[2]*ac[1],ab[2]*ac[0]-ab[0]*ac[2],ab[0]*ac[1]-ab[1]*ac[0]];if(cross[0]*normals[p]+cross[1]*normals[p+1]+cross[2]*normals[p+2]<0)indices.push(a,c,b);else indices.push(a,b,c);}
+  const tetra=[[0,5,1,6],[0,1,2,6],[0,2,3,6],[0,3,7,6],[0,7,4,6],[0,4,5,6]],offsets=[[0,0,0],[1,0,0],[1,1,0],[0,1,0],[0,0,1],[1,0,1],[1,1,1],[0,1,1]];
+  for(let z=0;z<nz-1;z++)for(let y=0;y<ny-1;y++)for(let x=0;x<nx-1;x++){
+    const cube=offsets.map(([dx,dy,dz])=>at(x+dx,y+dy,z+dz));if(cube.every(i=>values[i]>0)||cube.every(i=>values[i]<0))continue;
+    for(const tet of tetra){const inside=[],outside=[];for(const v of tet)(values[cube[v]]<0?inside:outside).push(cube[v]);if(!inside.length||!outside.length)continue;
+      if(inside.length===1){const p=outside.map(i=>vertex(inside[0],i));triangle(...p);}
+      else if(inside.length===3){const p=inside.map(i=>vertex(outside[0],i));triangle(...p);}
+      else {const a=vertex(inside[0],outside[0]),b=vertex(inside[0],outside[1]),c=vertex(inside[1],outside[0]),d=vertex(inside[1],outside[1]);triangle(a,b,c);triangle(b,d,c);}
+    }
+  }
+  const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geo.setAttribute('normal',new THREE.Float32BufferAttribute(normals,3));geo.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));geo.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));geo.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(ids,4));geo.setAttribute('skinWeight',new THREE.Float32BufferAttribute(weights,4));if(def.bodyColor||def.sleeves&&def.sleeves!==def.skin)geo.setAttribute('skinSurface',new THREE.Float32BufferAttribute(skinSurface,1));geo.setIndex(indices);geo.computeBoundingSphere();bodyCache.set(cacheKey,geo);return geo;
+}
+
+function attachIppoBody(waist,torso,deformers,P,def={referenceIppo:true},neckMaterial=torso.material) {
+  torso.visible=false;waist.children.filter(o=>o.isSkinnedMesh).forEach(o=>o.visible=false);
+  const arms=deformers.slice(2);
+  for(const d of arms)d.mesh.parent.children.filter(o=>o.isSkinnedMesh).forEach(o=>o.visible=false);
+  const bones=[...torso.skeleton.bones,...arms[0].mesh.skeleton.bones,...arms[1].mesh.skeleton.bones],skeleton=new THREE.Skeleton(bones);
+  const geometry=ippoBodyGeometry(P,def),material=torso.material.clone();material.onBeforeCompile=torso.material.onBeforeCompile;material.vertexColors=true;
+  if(geometry.attributes.skinSurface){
+    const compile=material.onBeforeCompile,skin=neckMaterial.userData.ramp;
+    material.onBeforeCompile=shader=>{
+      compile(shader);
+      shader.uniforms.uSurfaceSkinLit={value:skin.lit};shader.uniforms.uSurfaceSkinMid={value:skin.mid};shader.uniforms.uSurfaceSkinShadow={value:skin.shadow};
+      shader.vertexShader='attribute float skinSurface; varying float vSurfaceSkin;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvSurfaceSkin=skinSurface;');
+      shader.fragmentShader='varying float vSurfaceSkin; uniform vec3 uSurfaceSkinLit,uSurfaceSkinMid,uSurfaceSkinShadow;\n'+shader.fragmentShader;
+      const main=shader.fragmentShader.indexOf('void main()'),header=shader.fragmentShader.slice(0,main);let body=shader.fragmentShader.slice(main);
+      const aliases={uLitColor:'surfaceLit',uMidColor:'surfaceMid',uShadowColor:'surfaceShadow',uGrade:'surfaceGrade',uSpecGain:'surfaceSpec',uRim:'surfaceRim',uFormWeight:'surfaceForm'};
+      for(const [original,replacement]of Object.entries(aliases))body=body.replace(new RegExp('\\b'+original+'\\b','g'),replacement);
+      body=body.replace('vec3 nrm = normalize(vNormal);',`float surfaceMask=smoothstep(.25,.75,vSurfaceSkin);
+        vec3 surfaceLit=mix(uLitColor,uSurfaceSkinLit,surfaceMask),surfaceMid=mix(uMidColor,uSurfaceSkinMid,surfaceMask),surfaceShadow=mix(uShadowColor,uSurfaceSkinShadow,surfaceMask);
+        float surfaceGrade=mix(uGrade,.88,surfaceMask),surfaceSpec=mix(uSpecGain,.015,surfaceMask),surfaceRim=mix(uRim,.10,surfaceMask),surfaceForm=mix(uFormWeight,.94,surfaceMask);
+        vec3 nrm = normalize(vNormal);`);
+      shader.fragmentShader=header+body;
+    };
+    material.customProgramCacheKey=()=> 'reference-anatomy-continuous-clothing-v1';
+  }
+  const mesh=new THREE.SkinnedMesh(geometry,material);mesh.name=(def.name||'IPPO')+' welded anatomical upper body';waist.add(mesh);waist.updateWorldMatrix(true,true);mesh.bind(skeleton);mesh.frustumCulled=false;mesh.castShadow=true;
+  const ink=torso.userData.ink;ink.userData.thickness.value=.0017;ink.color.set(def.bodyColor?0x302c2a:0x694e32);
+  const outline=new THREE.SkinnedMesh(mesh.geometry,ink);waist.add(outline);outline.bind(skeleton,mesh.bindMatrix);outline.frustumCulled=false;mesh.userData.ink=ink;return mesh;
+}
+
+function ippoHairGeometry(P,style='ippo-reference') {
+  const pos=[],indices=[],s=P.headS;
+  function blade(root,tip,width,depth,endRadius=.015){
+    const a=new THREE.Vector3(...root),b=new THREE.Vector3(...tip),dir=b.clone().sub(a).normalize(),side=new THREE.Vector3(1,0,0);
+    if(Math.abs(dir.dot(side))>.85)side.set(0,0,1);side.addScaledVector(dir,-side.dot(dir)).normalize();
+    const thick=new THREE.Vector3().crossVectors(side,dir).normalize(),base=pos.length/3,cross=[[-1,0],[-.45,.65],[0,1],[.45,.65],[1,0],[0,-.45]];
+    const ts=[0,.28,.67,1],radii=[.65,1,endRadius===.015?.55:.88,endRadius];
+    for(let j=0;j<4;j++){
+      const center=a.clone().lerp(b,ts[j]);center.addScaledVector(thick,Math.sin(ts[j]*Math.PI)*depth*.4);
+      for(const [x,z]of cross){const p=center.clone().addScaledVector(side,x*width*radii[j]).addScaledVector(thick,z*depth*radii[j]);pos.push(p.x*s,p.y*s,p.z*s);}
+      if(j<3)for(let k=0;k<6;k++){const u=base+j*6+k,v=base+j*6+(k+1)%6;indices.push(u,v,u+6,v,v+6,u+6);}
+    }
+  }
+  if(style!=='ippo-reference'){
+    const long=style==='long'||style==='longblack',bob=style==='bob'||style==='bobsharp'||style==='bowl';
+    if(long||bob){
+      // Overlapping curved locks grow from the crown, wrap the scalp, then fall.
+      const count=24,length=long?(style==='long'?.48:.34):style==='bobsharp'?.23:style==='bowl'?.15:.20;
+      for(let i=0;i<count;i++){
+        const a=1.05+i/(count-1)*(Math.PI*2-2.10),x=Math.sin(a),z=Math.cos(a);
+        blade([x*.14,.10,z*.13-.025],[x*(bob?.18:.177),.10-length+(style==='bobsharp'?0:Math.sin(i*1.7)*.015),z*.16-.027],.033,.023,bob?.66:.28);
+      }
+      for(let i=0;i<10;i++){
+        const x=-.135+i*.03,slant=style==='longblack'?.035:style==='long'?.015:0;
+        blade([x,.148,.078],[x+slant,.065+(style==='bobsharp'?0:Math.cos(i*1.7)*.012),.151],.023,.017,style==='bobsharp'?.7:.18);
+      }
+      if(style==='longblack')for(let i=0;i<9;i++){const a=i/9*Math.PI*2;blade([Math.sin(a)*.09,.14,Math.cos(a)*.08-.03],[Math.sin(a)*.145,.225+Math.sin(i)*.025,Math.cos(a)*.13-.04],.029,.021);}
+    }else{
+      const mane=style==='mane',slick=style==='slick',count=mane?24:22;
+      for(let i=0;i<count;i++){
+        const a=i/count*Math.PI*2,x=Math.sin(a),z=Math.cos(a),rear=Math.max(0,-z);
+        blade([x*.10,.12+Math.sin(i)*.014,z*.09-.025],[x*(mane?.19:slick?.145:.17),slick?.14+.03*rear:.23+Math.sin(i*1.8)*.028,z*(slick?.14:.16)-(mane?.09:slick?.11:.035)],.034,.025);
+      }
+      for(let i=0;i<7;i++){const x=-.11+i*.036;blade([x,.14,.089],[x+(mane?x*.25:.015),mane?.065:slick?.12:.073,slick?.07:.15],.025,.016);}
+    }
+  }else{
+  for(let i=0;i<14;i++){
+    const a=i/14*Math.PI*2,rr=.065+(i%3)*.018;
+    blade([Math.sin(a)*rr,.135+Math.sin(i*1.3)*.012,Math.cos(a)*rr-.025],[Math.sin(a)*(.11+(i%3)*.018),.235+Math.sin(i*2.1)*.037,Math.cos(a)*.12-.045],.033,.024);
+  }
+  for(let i=0;i<20;i++){
+    const a=i/20*Math.PI*2;
+    blade([Math.sin(a)*.137,.065+(i%3)*.018,Math.cos(a)*.118-.024],[Math.sin(a)*(.212+Math.sin(i*2)*.019),.109+Math.sin(i*1.7)*.035,Math.cos(a)*.180-.030],.036,.025);
+  }
+  for(let i=0;i<9;i++){
+    const x=-.122+i*.0305;
+    blade([x,.133+Math.cos(i)*.016,.119],[x+Math.sin(i*2.4)*.013,.043+Math.sin(i*1.9)*.016,.157],.020,.012);
+  }
+  for(let i=0;i<7;i++){
+    const x=-.12+i*.04;blade([x,.02,-.123],[x*.98,-.084+Math.cos(i)*.025,-.15],.021,.016);
+  }
+  }
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setIndex(indices);g.computeVertexNormals();return g;
+}
+
+const faces=new Map();
+function ippoFaceTexture(expression='focused',def={referenceIppo:true}) {
+  const key=[def.name,def.eyes,def.brows,def.mouth,def.gender,expression].join('|');
+  if(faces.has(key))return faces.get(key);
+  const c=document.createElement('canvas');c.width=c.height=512;const g=c.getContext('2d'),blink=expression==='blink',hurt=expression==='hurt';
+  for(const sign of [-1,1]){
+    g.save();g.translate(sign<0?151:361,204);g.scale(sign,1);
+    if(!def.referenceIppo)g.scale(def.eyes==='big'?.95:1,def.eyes==='narrow'?.62:def.eyes==='big'?1.08:.94);
+    if(blink){g.strokeStyle='#211812';g.lineWidth=7;g.beginPath();g.moveTo(-72,-6);g.quadraticCurveTo(0,9,72,-16);g.stroke();}
+    else {
+      const h=hurt?.6:1;g.save();g.scale(1,h);
+      g.beginPath();g.moveTo(-72,-8);g.quadraticCurveTo(-15,-38,68,-23);g.quadraticCurveTo(86,-2,62,24);g.quadraticCurveTo(-12,51,-72,-8);g.closePath();
+      g.fillStyle='#eeeae2';g.fill();g.save();g.clip();
+      const iris=g.createRadialGradient(-3,5,4,-3,5,31);iris.addColorStop(0,'#151110');iris.addColorStop(.6,'#3f3024');iris.addColorStop(1,'#82705a');
+      g.fillStyle=iris;g.beginPath();g.ellipse(-3,5,28,30,0,0,Math.PI*2);g.fill();g.fillStyle='#100e0c';g.beginPath();g.ellipse(-3,3,17,23,0,0,Math.PI*2);g.fill();
+      g.fillStyle='rgba(20,12,8,.24)';g.fillRect(-80,-35,160,30);g.fillStyle='#fff';g.beginPath();g.ellipse(-11,-8,8,10,0,0,Math.PI*2);g.fill();g.beginPath();g.arc(9,15,3,0,Math.PI*2);g.fill();g.restore();
+      g.strokeStyle='#21150f';g.lineWidth=7;g.lineCap='round';g.beginPath();g.moveTo(-72,-8);g.quadraticCurveTo(-15,-38,68,-23);g.stroke();g.lineWidth=3;g.beginPath();g.moveTo(-62,7);g.quadraticCurveTo(0,46,69,15);g.stroke();g.restore();
+    }
+    g.save();if(def.brows==='thin')g.translate(0,-23);if(def.brows==='thin')g.scale(1,.55);
+    g.fillStyle='#181410';g.beginPath();g.moveTo(-76,-43+(hurt?8:0));g.lineTo(58,-80);g.lineTo(75,-64);g.lineTo(-65,-24+(hurt?8:0));g.closePath();g.fill();
+    // A few angled eyebrow strokes retain the hand inked density of the reference.
+    g.strokeStyle='#1a1713';g.lineWidth=3;for(let i=0;i<6;i++){const x=-52+i*20;g.beginPath();g.moveTo(x,-33-i*4.5);g.lineTo(x+7,-47-i*4.5);g.stroke();}
+    g.restore();g.restore();
+  }
+  g.strokeStyle='rgba(88,45,24,.8)';g.lineWidth=3;g.lineCap='round';
+  g.beginPath();g.moveTo(238,312);g.quadraticCurveTo(245,307,252,312);g.moveTo(267,312);g.quadraticCurveTo(274,307,280,312);g.stroke();
+  g.strokeStyle='#54321e';g.lineWidth=4;g.beginPath();g.moveTo(207,383);g.quadraticCurveTo(253,375,306,383);
+  if(!hurt&&def.mouth==='grin'){g.quadraticCurveTo(258,413,207,383);g.fillStyle='#ece5d9';g.fill();}
+  if(hurt){g.lineTo(301,399);g.quadraticCurveTo(256,407,212,398);g.closePath();g.fillStyle='#4d261e';g.fill();}g.stroke();
+  g.strokeStyle='rgba(159,84,40,.32)';g.lineWidth=5;g.beginPath();g.moveTo(231,400);g.quadraticCurveTo(256,407,282,400);g.stroke();
+  const tex=new THREE.CanvasTexture(c);tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=4;faces.set(key,tex);return tex;
+}
+return { ippoBodyGeometry, attachIppoBody, ippoHairGeometry, ippoFaceTexture };
+})();
 // ===== Rig.js =====
 __M.Rig = (() => {
 // Rig.js — 오리지널 복서 캐릭터 (셀 셰이딩 + 검은 외곽선) 와 포즈 파라미터 시스템
 // 캐릭터 정의(비율/헤어/얼굴/트렁크)로 서로 다른 체형의 복서를 생성한다.
 const { torsoGeometry, sculptHead, hairLock, limbGeometry, attachLimb, attachTorso } = __M.Anatomy;
+const { attachIppoBody, ippoHairGeometry, ippoFaceTexture } = __M.IppoModel;
 
 // Soft three-region ramp: shadows, warm midtones, lit planes.
 // 원작 화면에서 추출한 명암 분포에 맞춰 그림자 단을 더 깊게, 경계를 더 좁게 잡는다.
@@ -2154,7 +2383,7 @@ const TONE_GRADE_GLSL = /* glsl */`
   float baseLum = max(dot(uBaseColor, LUMA), 1e-4);
   float illumination = clamp(dot(gl_FragColor.rgb, LUMA) / baseLum, 0.0, 1.25);
   float formLight = .56 + .48 * dot(nrm, normalize(vec3(-.45,.72,.65)));
-  float shade = mix(illumination, formLight, uGrade * .65);
+  float shade = mix(illumination, formLight, uGrade * uFormWeight);
 
   // Soft transitions retain comic planes without hard black muscle borders.
   vec3 toned = mix(uShadowColor, uMidColor, smoothstep(0.36, 0.58, shade));
@@ -2186,6 +2415,9 @@ const TONE_GRADE_GLSL = /* glsl */`
     band = smoothstep(0.55, 0.78, band);
     gl_FragColor.rgb += vec3(0.06, 0.055, 0.05) * band * 0.12;
   }
+  #ifdef USE_COLOR
+    gl_FragColor.rgb *= vColor;
+  #endif
 }`;
 
 // 노멀 방향으로 밀어낸 뒷면 렌더링 = 두께 일정한 검은 외곽선
@@ -2216,15 +2448,16 @@ function makeOutlineMaterial(ghost, thickness = 0.014) {
 }
 
 // ---- 캐릭터 정의 ----
-// 주인공: 작고 다부진 인파이터 (검은 뻗친 머리, 굵은 눈썹, 초록/흰 트렁크, 빨간 글러브)
+// 주인공: 작고 다부진 인파이터 (첨부 레퍼런스의 흰/빨간 트렁크, 검은 헤어, 빨간 글러브)
 // 상대: 장신·마른 히트맨 (흑발 슬릭백, 가늘게 찢어진 눈, 다크 트렁크, 검은 글러브, 플리커 잽)
 const CHARACTERS = {
   ippo: {
-    name: 'IPPO', gender: 'm', skin: 0xf0caad, trunks: 0x1c8d4a, trunksTrim: 0xf7f7f7, trunksText: 'IPPO',
-    ramp: { lit: 0xf0caad, mid: 0xd88f6b, shadow: 0xa25334 },
-    gloves: 0xc8241f, hair: 0x0f0c0d, shoes: 0xc92626, shoesTrim: 0xffffff,
-    hairStyle: 'spiky', brows: 'thick', eyes: 'round', mouth: 'grit',
-    prop: { height: 0.95, torsoW: 1.14, torsoD: 1.12, armR: 1.18, armLen: 0.96, legR: 1.12, legLen: 0.95, headS: 1.02, headY: 1.0, neck: 0.9, muscle: 1 },
+    name: 'IPPO', gender: 'm', skin: 0xf0caad, trunks: 0xf1eee6, trunksTrim: 0xb72b2d, trunksText: 'IPPO',
+    referenceIppo: true,
+    ramp: { lit: 0xf0c293, mid: 0xcf8e53, shadow: 0x854926 },
+    gloves: 0xc8241f, hair: 0x20201e, shoes: 0xc92626, shoesTrim: 0xffffff,
+    hairStyle: 'ippo-reference', brows: 'thick', eyes: 'round', mouth: 'grit',
+    prop: { height: 0.95, torsoW: 1.14, torsoD: 1.12, armR: 1.18, armLen: 0.96, legR: 1.12, legLen: 0.95, headS: .98, headY: 1.10, neck: 1.0, muscle: 1 },
     hp: 140, powerMul: 1.05, speedMul: 1.05, style: 'infighter', guardMax: 110, guardRegen: 1.0, weaveCd: 1.2,
   },
   mashiba: {
@@ -2418,7 +2651,7 @@ function geometriesFor(def) {
   const P = def.prop;
   const G = {
     pelvis: new RoundedBoxGeometry(0.36 * P.torsoW, 0.24, 0.26 * P.torsoD, 4, 0.08),
-    band: new RoundedBoxGeometry(0.38 * P.torsoW, 0.06, 0.28 * P.torsoD, 2, 0.02),
+    band: new RoundedBoxGeometry(0.38 * P.torsoW, def.referenceIppo?.105:.06, 0.28 * P.torsoD, 2, 0.02),
     stripe: new THREE.BoxGeometry(0.03, 0.2, 0.05),
     // 어깨(위) 넓고 허리(아래) 좁은 역삼각형. muscle 이 높을수록 차이를 크게 준다
     torso: torsoGeometry(P, def),
@@ -2446,6 +2679,7 @@ function geometriesFor(def) {
     spikeBig: hairLock(0.058 * P.headS, 0.235 * P.headS),          // 크게 뻗치는 머리칼
     strand: hairLock(0.041 * P.headS, 0.30 * P.headS, 0.014),   // 늘어지는 긴 머리칼
     bang: new RoundedBoxGeometry(.27 * P.headS, .075 * P.headS, .055, 4, .025), // 이마 덮는 앞머리
+    ippoHair: ippoHairGeometry(P,def.hairStyle),
   };
   geoCache.set(def, G);
   return G;
@@ -2510,147 +2744,19 @@ function buildHeldItem(kind, glove, part, sx) {
 // ---- 얼굴 텍스처 ----
 // 원작의 눈은 "얼굴 평면에 그려진 날카로운 도형"이다. 구체를 박아 넣으면 눈알이 튀어나온 인형이 된다.
 // 눈·눈썹·입을 캔버스에 그려서 얼굴 앞면에 감싼다.
-const faceTexCache = new Map();
-function faceTexture(def, expression = 'focused') {
-  const key = [def.name, def.eyes, def.brows, def.mouth, def.gender, expression].join('|');
-  if (faceTexCache.has(key)) return faceTexCache.get(key);
+function faceTexture(def, expression = 'focused') { return ippoFaceTexture(expression,def); }
 
-  const S = 512;
-  const cv = document.createElement('canvas');
-  cv.width = cv.height = S;
-  const c = cv.getContext('2d');
-  c.clearRect(0, 0, S, S);
-
-  const blinking = expression === 'blink';
-  const injured = expression === 'hurt';
-  const narrow = def.eyes === 'narrow';
-  const big = def.eyes === 'big';
-  const round = def.eyes === 'round';
-  const INK = '#120a08';
-
-  // 눈 한 쪽 (sx = -1 왼쪽 / +1 오른쪽). cx, cy 는 캔버스 좌표.
-  const eye = (cx, cy, sx) => {
-    const w = big ? 60 : narrow ? 64 : 62;          // 가로 반폭
-    const h = blinking ? 2 : (big ? 39 : narrow ? 19 : 36) * (injured ? .60 : 1);          // 세로 반높이
-    const tilt = sx * (narrow ? 0.20 : big ? -0.04 : 0.10);   // 눈꼬리 올라감 = 날카로움
-
-    c.save();
-    c.translate(cx, cy);
-    c.rotate(tilt);
-
-    // 흰자 — 위는 직선에 가깝고 아래가 둥근 아몬드 (애니 눈의 기본형)
-    c.beginPath();
-    c.moveTo(-w, -h * 0.35);
-    c.quadraticCurveTo(-w * 0.35, -h * 1.05, w * 0.55, -h * 0.72);
-    c.quadraticCurveTo(w, -h * 0.5, w, -h * 0.1);
-    c.quadraticCurveTo(w * 0.6, h, -w * 0.2, h * 0.95);
-    c.quadraticCurveTo(-w * 0.85, h * 0.7, -w, -h * 0.35);
-    c.closePath();
-    c.fillStyle = '#f7f4f0';
-    c.fill();
-
-    // 홍채/동공 — 크고 어둡게, 아래 눈꺼풀에 닿도록 살짝 내려 앉힌다
-    if (!narrow && !blinking) {
-      const ir = big ? 29 : 26;
-      c.save();
-      c.clip();
-      c.beginPath();
-      c.ellipse(sx * w * 0.08, h * 0.16, ir * 0.82, ir * 1.22, 0, 0, Math.PI * 2);
-      c.fillStyle = big ? '#3a2418' : '#14121a';
-      c.fill();
-      // 홍채 위쪽 그림자 (눈꺼풀이 드리우는 음영)
-      c.beginPath();
-      c.rect(-w, -h * 1.2, w * 2, h * 0.55);
-      c.fillStyle = 'rgba(0,0,0,.30)';
-      c.fill();
-      c.restore();
-
-      // 캐치라이트 — 애니 눈은 반드시 있다. 없으면 눈이 죽는다
-      c.beginPath();
-      c.ellipse(sx * w * 0.08 - sx * ir * 0.34, h * 0.16 - ir * 0.44, ir * 0.26, ir * 0.3, 0, 0, Math.PI * 2);
-      c.fillStyle = '#ffffff';
-      c.fill();
-    } else if (!blinking) {
-      // 가늘게 찢어진 눈: 흰자 없이 검은 선 + 작은 동공
-      c.beginPath();
-      c.ellipse(sx * w * 0.1, 0, w * 0.26, h * 0.85, 0, 0, Math.PI * 2);
-      c.fillStyle = '#14121a';
-      c.fill();
-    }
-
-    // 윗눈꺼풀 — 가장 굵은 선. 이 선 하나가 눈매를 결정한다
-    c.beginPath();
-    c.moveTo(-w * 1.04, -h * 0.34);
-    c.quadraticCurveTo(-w * 0.35, -h * 1.18, w * 0.58, -h * 0.80);
-    c.quadraticCurveTo(w * 1.0, -h * 0.58, w * 1.06, -h * 0.12);
-    c.strokeStyle = INK;
-    c.lineWidth = narrow ? 9 : big ? 10 : 11;
-    c.lineCap = 'round';
-    c.stroke();
-
-    // 아랫눈꺼풀 — 가늘게
-    c.beginPath();
-    c.moveTo(-w * 0.9, -h * 0.2);
-    c.quadraticCurveTo(-w * 0.1, h * 1.0, w * 0.95, -h * 0.05);
-    c.strokeStyle = INK;
-    c.lineWidth = narrow ? 9 : 6;
-    c.stroke();
-    c.restore();
-
-    // 눈썹 — 두꺼울수록 사납다
-    const bw = def.brows === 'thick' ? 20 : 11;
-    const by = cy - (big ? 69 : narrow ? 53 : 66) + (injured ? 12 : 0);
-    c.save();
-    c.beginPath();
-    c.moveTo(cx - sx * 68, by + (narrow ? 26 : 18));
-    c.quadraticCurveTo(cx - sx * 6, by - (narrow ? 16 : 10), cx + sx * 62, by + (narrow ? -6 : 6));
-    c.strokeStyle = INK;
-    c.lineWidth = bw;
-    c.lineCap = 'round';
-    c.stroke();
-    c.restore();
-  };
-
-  eye(S * (def.name === 'MASHIBA' ? 0.31 : 0.30), S * 0.40, -1);
-  eye(S * 0.695, S * 0.40, 1);
-
-  // 입
-  c.beginPath();
-  c.strokeStyle = INK;
-  c.lineWidth = 11;
-  c.lineCap = 'round';
-  if (injured) {
-    c.moveTo(S*.415,S*.762);c.quadraticCurveTo(S*.50,S*.742,S*.585,S*.762);c.lineTo(S*.575,S*.802);c.quadraticCurveTo(S*.50,S*.817,S*.425,S*.802);c.closePath();c.fillStyle='#e8dfd2';c.fill();
-  } else if (def.mouth === 'grin') {
-    c.moveTo(S * 0.40, S * 0.755);
-    c.quadraticCurveTo(S * 0.50, S * 0.825, S * 0.60, S * 0.750);
-  } else {
-    // 이 악문 입 (grit) — 원작 전투 표정
-    c.moveTo(S * 0.415, S * 0.772);
-    c.quadraticCurveTo(S * 0.50, S * 0.748, S * 0.585, S * 0.772);
-  }
-  c.stroke();
-
-  c.strokeStyle='rgba(91,47,33,.70)';c.lineWidth=5;
-  c.beginPath();c.moveTo(255,260);c.quadraticCurveTo(248,302,264,316);c.lineTo(280,312);c.stroke();
-  c.strokeStyle='rgba(102,52,36,.35)';c.lineWidth=4;c.beginPath();c.moveTo(239,417);c.quadraticCurveTo(257,422,273,416);c.stroke();
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
-  faceTexCache.set(key, tex);
-  return tex;
-}
-
-function trunksTextTexture(text, color) {
+function trunksTextTexture(text, color, patch=false) {
   const c = document.createElement('canvas');
   c.width = 256; c.height = 96;
   const g = c.getContext('2d');
   g.clearRect(0, 0, 256, 96);
+  if(patch){g.fillStyle='#eee9dd';g.fillRect(4,4,248,88);g.strokeStyle='#a49583';g.lineWidth=4;g.strokeRect(4,4,248,88);}
   g.font = '900 64px Impact, "Arial Black", sans-serif';
   g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.lineWidth = 8; g.strokeStyle = '#000';
-  g.strokeText(text, 128, 50);
-  g.fillStyle = color;
+  g.lineWidth = patch?1:8; g.strokeStyle = '#000';
+  if(!patch)g.strokeText(text, 128, 50);
+  g.fillStyle = patch?'#181413':color;
   g.fillText(text, 128, 50);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -2731,6 +2837,7 @@ function buildBoxer(def, opts = {}) {
         sh.uniforms.uMidColor = { value: ramp.mid };
         sh.uniforms.uShadowColor = { value: ramp.shadow };
         sh.uniforms.uGrade = { value: look.grade };
+        sh.uniforms.uFormWeight = {value:(role==='skin'||role==='face')?.94:.65};
         sh.uniforms.uRim = { value: look.rim };
         sh.uniforms.uSpecPower = { value: look.specPower };
         sh.uniforms.uSpecGain = { value: look.specGain };
@@ -2738,7 +2845,7 @@ function buildBoxer(def, opts = {}) {
         sh.uniforms.uHairBand = { value: look.hairBand ? 1 : 0 };
         sh.fragmentShader = `
 uniform vec3 uBaseColor; uniform vec3 uLitColor; uniform vec3 uMidColor; uniform vec3 uShadowColor;
-uniform float uGrade; uniform float uRim; uniform float uSpecPower; uniform float uSpecGain;
+uniform float uGrade; uniform float uFormWeight; uniform float uRim; uniform float uSpecPower; uniform float uSpecGain;
 uniform float uSpecEdge; uniform float uHairBand;
 ` + sh.fragmentShader.replace(
           '#include <tonemapping_fragment>',
@@ -2791,8 +2898,8 @@ uniform float uSpecEdge; uniform float uHairBand;
   part(G.stripe, def.trunksTrim, hips, 0.185 * P.torsoW, -0.03, 0, false);
   part(G.stripe, def.trunksTrim, hips, -0.185 * P.torsoW, -0.03, 0, false);
   if (!ghost && def.trunksText) {
-    const tp = new THREE.Mesh(new THREE.PlaneGeometry(0.24, 0.09), new THREE.MeshBasicMaterial({ map: trunksTextTexture(def.trunksText, '#' + new THREE.Color(def.trunksTrim).getHexString()), transparent: true, depthWrite: false }));
-    tp.position.set(0, -0.005, 0.13 * P.torsoD + 0.005);
+    const tp = new THREE.Mesh(new THREE.PlaneGeometry(def.referenceIppo?.14:.24,def.referenceIppo?.08:.09), new THREE.MeshBasicMaterial({ map: trunksTextTexture(def.trunksText, '#' + new THREE.Color(def.trunksTrim).getHexString(),def.referenceIppo), transparent: true, depthWrite: false }));
+    tp.position.set(0, def.referenceIppo?.09:-.005, 0.14 * P.torsoD + 0.006);
     hips.add(tp);
   }
 
@@ -2854,13 +2961,13 @@ uniform float uSpecEdge; uniform float uHairBand;
   const chest = new THREE.Group();
   chest.position.y = 0.52;
   waist.add(chest);
-  const torso = attachTorso(waist, chest, ghost ? G.ghostTorso : G.torso, M(bodyCol, def.bodyColor ? 'cloth' : 'skin'), !ghost);
-  part(G.neck, def.skin, chest, 0, 0.06 * P.neck, 0.02);
+  let torso = attachTorso(waist, chest, ghost ? G.ghostTorso : G.torso, M(bodyCol, def.bodyColor ? 'cloth' : 'skin'), !ghost);
+  if(ghost)part(G.neck, def.skin, chest, 0, 0.06 * P.neck, 0.02);
 
   const armLen = 0.32 * P.armLen;
   const mkArm = (sx) => {
     const shoulder = new THREE.Group();
-    shoulder.position.set(sx * 0.248 * P.torsoW, -0.004, 0);
+    shoulder.position.set(sx * .27 * P.torsoW, -0.004, 0);
     shoulder.rotation.order = 'YZX'; // X(들어올림) → Z(벌림) → Y(휘두름) 순으로 적용
     chest.add(shoulder);
     if (def.oversize) {   // 소매가 팔보다 크다
@@ -2888,6 +2995,7 @@ uniform float uSpecEdge; uniform float uHairBand;
   };
   const armL = mkArm(1);
   const armR = mkArm(-1);
+  if(!ghost){torso=attachIppoBody(waist,torso,deformers,P,def,M(def.skin,'skin'));bodyMats.push(...(Array.isArray(torso.material)?torso.material:[torso.material]));}
 
   // ---- 머리 / 얼굴 ----
   const headBaseY = 0.02 + 0.07 * P.neck;
@@ -2906,114 +3014,9 @@ uniform float uSpecEdge; uniform float uHairBand;
   hairCap.rotation.x = -0.32;
   hairCap.scale.set(1.03, P.headY, 1.02);
   if (!ghost) {
-  if (def.hairStyle === 'bobsharp') {
-    // 칼단발: 턱선에서 직선으로 뚝 떨어지는 실루엣 + 일자 앞머리
-    // 옆/뒤를 감싸는 원통형 컷 (아래가 일자로 잘린 느낌)
-    const cut = part(new THREE.CylinderGeometry(0.215 * P.headS, 0.225 * P.headS, 0.26, 18, 1, true, Math.PI * .5, Math.PI), def.hair, head, 0, hy - 0.1, -0.012);
-    cut.material.side = THREE.DoubleSide;
-    cut.scale.set(1, 1, 1.02);
-    const backFill = part(new THREE.BoxGeometry(0.3 * P.headS, 0.26, 0.16), def.hair, head, 0, hy - 0.1, -0.11);
-    // 일자 앞머리 (뱅)
-    const bang = part(new THREE.BoxGeometry(0.3 * P.headS, 0.1, 0.075), def.hair, head, 0, hy + 0.085, 0.112 * P.headS);
-    bang.rotation.x = -0.1;
-  } else if (def.hairStyle === 'bob') {
-    // 단발: 머리통을 감싸는 짧은 컷 + 앞머리 뱅
-    for (const sx of [-1, 1]) {   // 옆머리 (귀 아래까지)
-      const side = part(new THREE.CapsuleGeometry(0.055 * P.headS, 0.16, 4, 10), def.hair, head, sx * 0.155 * P.headS, hy - 0.06, -0.01);
-      side.scale.set(1, 1, 0.75);
-    }
-    const bang = part(new THREE.BoxGeometry(0.26 * P.headS, 0.075, 0.08), def.hair, head, 0, hy + 0.1, 0.108 * P.headS);
-    bang.rotation.x = -0.18;
-  } else if (def.hairStyle === 'long') {
-    // 긴 생머리: 뒤로 길게 흐르는 판 + 양옆 머리카락
-    const back = part(new THREE.CapsuleGeometry(0.115 * P.headS, 0.42, 4, 12), def.hair, head, 0, hy - 0.3, -0.075);
-    back.scale.set(1.15, 1, 0.6);
-    for (const sx of [-1, 1]) {
-      const side = part(new THREE.CapsuleGeometry(0.05 * P.headS, 0.3, 4, 10), def.hair, head, sx * 0.15 * P.headS, hy - 0.16, 0.012);
-      side.scale.set(1, 1, 0.7);
-    }
-    const bang = part(new THREE.BoxGeometry(0.24 * P.headS, 0.06, 0.07), def.hair, head, 0, hy + 0.105, 0.1 * P.headS);
-    bang.rotation.x = -0.25;
-  } else if (def.hairStyle === 'spiky') {
-    // Locks emerge tangentially from one scalp mass; short fringe keeps brows readable.
-    for (let i = 0; i < 10; i++) {
-      const a = i / 10 * Math.PI * 2;
-      const lock = part(G.spikeBig, def.hair, head, Math.cos(a)*.115*P.headS, hy+.145*P.headS, Math.sin(a)*.093*P.headS-.025, false);
-      lock.rotation.set(Math.sin(a)*.85, .15, -Math.cos(a)*.85);
-      lock.scale.set(.90,.65+.12*Math.sin(i*1.7),.85);
-    }
-    for(const [x,tilt] of [[-.10,-.25],[-.045,.2],[.03,-.12],[.09,.35]]){
-      const lock=part(G.spikeBig,def.hair,head,x*P.headS,hy+.126*P.headS,.111*P.headS,false);
-      lock.rotation.set(2.65,0,tilt);lock.scale.set(.58,.33,.50);
-    }
-  } else if (def.hairStyle === 'mane') {
-    // 센도: 뒤·위로 크게 젖혀진 갈기.
-    // 스파이크는 반드시 머리 뒤쪽 아크에만 놓는다 — 원형으로 두르면 앞쪽 가닥이 얼굴을 덮는다
-    const n = 11;
-    for (let i = 0; i < n; i++) {
-      const u = i / (n - 1);                               // 0 = 왼쪽, 1 = 오른쪽
-      const x = (u - 0.5) * 0.235 * P.headS;
-      const z = -0.04 - 0.08 * Math.sin(u * Math.PI);      // 가운데일수록 더 뒤로
-      const s = part(G.spikeBig, def.hair, head, x, hy + 0.145, z);
-      s.rotation.set(-0.95 - 0.22 * Math.sin(u * Math.PI), 0, -(u - 0.5) * 1.15);
-      s.scale.set(1.05, 0.82 + 0.25 * Math.sin(u * Math.PI), 1.05);
-    }
-    // 앞으로 뾰족하게 내려온 앞머리 두 갈래 — 눈을 덮지 않도록 짧고 높게
-    for (const sx of [-1, 1]) {
-      const s = part(G.spikeBig, def.hair, head, sx * 0.082, hy + 0.152, 0.092 * P.headS);
-      s.rotation.set(2.42, 0, -sx * 0.62);
-      s.scale.set(0.72, 0.46, 0.72);
-    }
-  } else if (def.hairStyle === 'longblack') {
-    // 마시바: 정수리에서 뻗치고 얼굴 양옆으로 길게 내려오는 흑발
-    for (let i = 0; i < 7; i++) {
-      const a = Math.PI * 0.5 + (i / 6) * Math.PI * 1.0;
-      const s = part(G.spikeBig, def.hair, head, Math.cos(a) * 0.095, hy + 0.14, Math.sin(a) * 0.08 - 0.05);
-      s.rotation.set(-0.5, 0, -Math.cos(a) * 0.5);
-      s.scale.set(0.80, 0.82, 0.80);
-    }
-    // 얼굴 옆으로 흐르는 긴 머리칼 (턱선 아래까지)
-    for (const sx of [-1, 1]) {
-      for (const [ox, oz, len, tilt] of [[0.155, 0.02, 1.35, 0.10], [0.135, -0.075, 1.6, 0.04]]) {
-        const s = part(G.strand, def.hair, head, sx * ox * P.headS, hy - 0.10, oz);
-        s.rotation.set(0.06, 0, Math.PI + sx * tilt);
-        s.scale.set(0.92, len, 0.85);
-      }
-    }
-    // 관자놀이를 스치는 앞머리 한 가닥 (한쪽으로 쏠림) — 눈은 가리지 않는다
-    const fringe = part(G.strand, def.hair, head, -0.088 * P.headS, hy + 0.088, 0.096 * P.headS);
-    fringe.rotation.set(0.26, 0, Math.PI + 0.46);
-    fringe.scale.set(0.72, 0.42, 0.5);
-  } else if (def.hairStyle === 'bowl') {
-    // 미야타: 이마를 덮는 일자 앞머리 + 귀를 덮는 단정한 중단발
-    // 캡은 눈썹 위에서 멈춰야 한다. 적도 아래까지 내려오면 얼굴을 덮는 검은 헬멧이 된다
-    const bang = part(G.bang, def.hair, head, 0, hy + 0.098, 0.100 * P.headS);
-    bang.rotation.x = -0.16;
-    bang.scale.set(1, 0.78, 0.85);
-    for (const sx of [-1, 1]) {
-      // 옆머리는 뒤쪽에 둔다 — 앞으로 오면 볼을 덮는다
-      const side = part(new THREE.CapsuleGeometry(0.048 * P.headS, 0.13, 4, 10), def.hair, head, sx * 0.158 * P.headS, hy - 0.018, -0.045);
-      side.scale.set(1, 1, 0.8);
-    }
-    // 뒤통수를 덮는 뒷머리
-    const back = part(new THREE.CapsuleGeometry(0.115 * P.headS, 0.10, 4, 12), def.hair, head, 0, hy - 0.035, -0.105 * P.headS);
-    back.scale.set(1.28, 1, 0.72);
-  } else {
-    // 뒤로 넘긴 흑발: 길게 뻗은 뾰족한 머리칼이 뒤/옆으로
-    for (let i = 0; i < 7; i++) {
-      const a = Math.PI * 0.55 + (i / 6) * Math.PI * 0.9;
-      const s = part(G.spike, def.hair, head, Math.cos(a) * 0.1, hy + 0.12, Math.sin(a) * 0.08 - 0.06);
-      s.rotation.set(1.35 - Math.abs(Math.cos(a)) * 0.3, 0, -Math.cos(a) * 0.45);
-      s.scale.set(0.9, 1.7, 0.9);
-    }
-    // 뾰족한 구레나룻
-    for (const sx of [-1, 1]) {
-      const s = part(G.spike, def.hair, head, sx * 0.16, hy - 0.03, 0.05);
-      s.rotation.set(Math.PI, 0, 0);
-      s.scale.set(0.5, 0.8, 0.5);
-    }
+    part(G.ippoHair,def.hair,head,0,hy,0,false);
   }
-  }
+
   // 얼굴: 머리 구면에 딱 맞는 앞면 패치에 눈·눈썹·입 텍스처를 감싼다 (튀어나온 눈알 없음)
   const eyeY = hy + 0.02 * P.headY, eyeZ = 0.14 * P.headS;   // 소품(선글라스 등) 기준점
   let rigFace = null;
@@ -3021,8 +3024,8 @@ uniform float uSpecEdge; uniform float uHairBand;
     const R = 0.17 * P.headS;
     const faceGeo = sculptHead(new THREE.SphereGeometry(
       R * 1.006, 28, 22,
-      Math.PI * 0.5 - 0.62, 1.24,          // 가로: 얼굴 폭
-      Math.PI * 0.5 - 0.50, 0.94,          // 세로: 이마 ~ 턱
+      Math.PI * 0.5 - .90, 1.80,
+      .83, 1.75,
     ), P, def);
     const faceMesh = new THREE.Mesh(faceGeo, new THREE.MeshBasicMaterial({
       map: faceTexture(def), transparent: true, depthWrite: false,
@@ -5037,50 +5040,141 @@ class PostFX {
 }
 return { PostFX };
 })();
+// ===== Environment.js =====
+__M.Environment = (() => {
+// Shared authored surface detail and batched arena architecture. No extra shadow lights.
+
+function surfaceTexture(kind = 'fabric', seed = 31) {
+  const c=document.createElement('canvas');c.width=c.height=512;const g=c.getContext('2d');
+  const rand=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
+  g.fillStyle=kind==='rock'?'#988676':kind==='concrete'?'#60656c':'#aaa69e';g.fillRect(0,0,512,512);
+  if(kind==='fabric'){
+    for(let i=0;i<512;i+=4){g.fillStyle=i%8?'#aca89e':'#827f78';g.fillRect(i,0,1,512);g.fillRect(0,i,512,1);}
+  } else {
+    for(let i=0;i<6500;i++) {const v=70+Math.floor(rand()*100);g.fillStyle=`rgba(${v},${v},${v},.12)`;g.fillRect(rand()*512,rand()*512,1+rand()*5,1+rand()*3);}
+    if(kind==='rock'){
+      for(let i=0;i<28;i++) {const y=i*19;g.strokeStyle=i%3?'rgba(65,47,36,.3)':'rgba(218,196,162,.5)';g.lineWidth=2+rand()*5;g.beginPath();g.moveTo(0,y);for(let x=0;x<=512;x+=16)g.lineTo(x,y+Math.sin(x*.028+i)*5);g.stroke();}
+    }
+  }
+  const tex=new THREE.CanvasTexture(c);tex.wrapS=tex.wrapT=THREE.RepeatWrapping;tex.anisotropy=4;
+  return tex;
+}
+
+function batch(group, geometry, material, transforms, name) {
+  const mesh=new THREE.InstancedMesh(geometry,material,transforms.length),dummy=new THREE.Object3D();
+  transforms.forEach((t,i)=>{dummy.position.set(...t.p);dummy.rotation.set(0,t.yaw||0,0);dummy.scale.set(...(t.s||[1,1,1]));dummy.updateMatrix();mesh.setMatrixAt(i,dummy.matrix);if(t.color)mesh.setColorAt(i,new THREE.Color(t.color));});
+  mesh.instanceMatrix.needsUpdate=true;mesh.name=name;group.add(mesh);return mesh;
+}
+
+function roundedSeatGeometry() {
+  const shape=new THREE.Shape();shape.moveTo(-.42,-.42);shape.lineTo(.42,-.42);shape.lineTo(.42,.42);shape.lineTo(-.42,.42);shape.closePath();
+  const geo=new THREE.ExtrudeGeometry(shape,{depth:.84,bevelEnabled:true,bevelThickness:.08,bevelSize:.08,bevelSegments:2,steps:1});geo.translate(0,0,-.42);return geo;
+}
+
+function addArenaStructure(group) {
+  const concrete=surfaceTexture('concrete');concrete.repeat.set(8,8);
+  const concreteMat=new THREE.MeshStandardMaterial({color:0x4a505b,map:concrete,bumpMap:concrete,bumpScale:.024,roughness:.96});
+  const steel=new THREE.MeshStandardMaterial({color:0x555e6c,metalness:.75,roughness:.46});
+  const stands=[],seats=[],backs=[],steps=[],tables=[];
+  for(let side=0;side<4;side++){
+    const yaw=side*Math.PI/2,c=Math.cos(yaw),s=Math.sin(yaw);
+    const point=(x,y,z)=>[x*c+z*s,y,-x*s+z*c];
+    for(let row=0;row<7;row++){
+      const z=-10.2-row*1.12,y=-.7+row*.48;
+      stands.push({p:point(0,y-.22,z),s:[29,.44,1.14],yaw});
+      for(let col=0;col<24;col++){
+        const x=-13.2+col*1.12;if(Math.abs(x)<1.3||Math.abs(x)>11.8-row*.22)continue;
+        const color=row%3===0?0x69292f:0x203b54;
+        seats.push({p:point(x,y+.10,z),s:[.72,.16,.65],yaw,color});
+        backs.push({p:point(x,y+.43,z-.3),s:[.72,.65,.12],yaw,color});
+      }
+      steps.push({p:point(0,y-.11,z),s:[1.7,.20,1.12],yaw});
+    }
+    tables.push({p:point(0,-.20,-7.1),s:[3.1,.12,.8],yaw});
+  }
+  batch(group,new THREE.BoxGeometry(1,1,1),concreteMat,stands,'arena-terraces');
+  const seatMat=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.7});
+  const seatGeo=roundedSeatGeometry();
+  batch(group,seatGeo,seatMat,seats,'arena-seat-cushions');
+  batch(group,seatGeo,seatMat,backs,'arena-seat-backs');
+  batch(group,new THREE.BoxGeometry(1,1,1),steel,steps,'arena-aisle-steps');
+  batch(group,new THREE.BoxGeometry(1,1,1),new THREE.MeshStandardMaterial({color:0x292c33,roughness:.8}),tables,'ringside-desks');
+  const shell=[];
+  for(let i=0;i<4;i++){const a=i*Math.PI/2;shell.push({p:[Math.sin(a)*21,4,Math.cos(a)*21],s:[42,10,.4],yaw:a});}
+  shell.push({p:[0,9.1,0],s:[42,.2,42]});
+  batch(group,new THREE.BoxGeometry(1,1,1),new THREE.MeshStandardMaterial({color:0x151c28,roughness:.92}),shell,'arena-shell');
+
+  // Real cylindrical truss members, combined into one instanced draw.
+  const links=[];const span=6.3,y=7.2;
+  for(let side=0;side<4;side++){
+    const a=side*Math.PI/2,c=Math.cos(a),s=Math.sin(a),p=(x,h,z)=>new THREE.Vector3(x*c+z*s,h,-x*s+z*c);
+    for(const h of [y,y+.5])links.push([p(-span,h,-span),p(span,h,-span)]);
+    for(let x=-span;x<span;x+=1.26){links.push([p(x,y,-span),p(x+1.26,y+.5,-span)]);links.push([p(x,y+.5,-span),p(x+1.26,y,-span)]);}
+    links.push([p(-span,y+.5,-span),p(-span,9,-span)]);
+  }
+  const beams=new THREE.InstancedMesh(new THREE.CylinderGeometry(.035,.035,1,6),steel,links.length),dummy=new THREE.Object3D(),up=new THREE.Vector3(0,1,0);
+  links.forEach(([a,b],i)=>{dummy.position.copy(a).add(b).multiplyScalar(.5);dummy.quaternion.setFromUnitVectors(up,b.clone().sub(a).normalize());dummy.scale.set(1,a.distanceTo(b),1);dummy.updateMatrix();beams.setMatrixAt(i,dummy.matrix);});
+  beams.name='overhead-truss';group.add(beams);
+  const fixtures=[];
+  for(let i=0;i<8;i++){const a=i*Math.PI/4;fixtures.push({p:[Math.cos(a)*5.5,7.1,Math.sin(a)*5.5],s:[1.4,.10,.45],yaw:-a});}
+  const lamps=batch(group,new THREE.BoxGeometry(1,1,1),new THREE.MeshStandardMaterial({color:0xfff4de,emissive:0xffe1bb,emissiveIntensity:3,roughness:.4}),fixtures,'arena-light-fixtures');
+
+  const c=document.createElement('canvas');c.width=1024;c.height=128;const g=c.getContext('2d');
+  g.fillStyle='#142337';g.fillRect(0,0,1024,128);g.fillStyle='#af3436';g.fillRect(0,110,1024,10);
+  g.fillStyle='#d5d8dc';g.font='italic 900 60px Impact, sans-serif';g.textAlign='center';g.fillText('D E M P S E Y  /  B O X I N G',512,82);
+  const bannerTex=new THREE.CanvasTexture(c);bannerTex.colorSpace=THREE.SRGBColorSpace;
+  const bannerMat=new THREE.MeshBasicMaterial({map:bannerTex});
+  for(let i=0;i<4;i++){const a=i*Math.PI/2,banner=new THREE.Mesh(new THREE.PlaneGeometry(15,1.7),bannerMat);banner.position.set(Math.sin(a)*20.7,5.2,Math.cos(a)*20.7);banner.rotation.y=a+Math.PI;group.add(banner);}
+  return {bloomObjects:[lamps]};
+}
+
+function disposeEnvironment(group) {
+  const geometries=new Set(),materials=new Set(),textures=new Set();
+  group.traverse(o=>{if(o.isInstancedMesh)o.dispose();if(o.geometry)geometries.add(o.geometry);if(o.material)for(const m of Array.isArray(o.material)?o.material:[o.material]){materials.add(m);for(const key of ['map','bumpMap','roughnessMap','normalMap'])if(m[key])textures.add(m[key]);}});
+  textures.forEach(t=>t.dispose());materials.forEach(m=>m.dispose());geometries.forEach(g=>g.dispose());
+}
+return { surfaceTexture, addArenaStructure, disposeEnvironment };
+})();
 // ===== Ring.js =====
 __M.Ring = (() => {
 // Ring.js — 복싱 링, 어두운 관중석, 스포트라이트, 카메라 플래시
 const { PHOTOREAL } = __M.RenderSettings;
+const { surfaceTexture, addArenaStructure, disposeEnvironment } = __M.Environment;
 
 function ringMaterial(options) {
-  if (!PHOTOREAL) return new THREE.MeshToonMaterial({ ...options, gradientMap: toonRamp });
   return new THREE.MeshStandardMaterial({ roughness: .72, metalness: 0, ...options });
 }
-
-const toonRamp = (() => {
-  const data = new Uint8Array([70, 70, 170, 255]);
-  const tex = new THREE.DataTexture(data, 4, 1, THREE.RedFormat);
-  tex.minFilter = tex.magFilter = THREE.NearestFilter;
-  tex.needsUpdate = true;
-  return tex;
-})();
 
 function canvasTexture() {
   const c = document.createElement('canvas');
   c.width = c.height = 1024;
   const g = c.getContext('2d');
+  const paint=(image=null)=>{
   g.fillStyle = '#e9e4d6';
   g.fillRect(0, 0, 1024, 1024);
+  if(image)g.drawImage(image,0,0,1024,1024);
   // 캔버스 질감
   for (let i = 0; i < 6000; i++) {
     g.fillStyle = `rgba(0,0,0,${Math.random() * 0.05})`;
     g.fillRect(Math.random() * 1024, Math.random() * 1024, 2, 2);
   }
   // 중앙 원 + 링 로고 느낌
-  g.strokeStyle = '#b8342e';
+  g.strokeStyle = '#823b37';
   g.lineWidth = 14;
   g.beginPath(); g.arc(512, 512, 200, 0, Math.PI * 2); g.stroke();
   g.lineWidth = 5;
   g.beginPath(); g.arc(512, 512, 150, 0, Math.PI * 2); g.stroke();
-  g.fillStyle = '#2438c8';
+  g.fillStyle = '#2f4362';
   g.font = '900 120px Impact, sans-serif';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillText('D R', 512, 512);
   // 코너 마크
-  g.fillStyle = '#b8342e'; g.fillRect(40, 40, 90, 90);
-  g.fillStyle = '#2438c8'; g.fillRect(894, 894, 90, 90);
+  g.fillStyle = '#823b37'; g.fillRect(40, 40, 90, 90);
+  g.fillStyle = '#2f4362'; g.fillRect(894, 894, 90, 90);
+  };paint();
   const tex = new THREE.CanvasTexture(c);
+  const image=new Image();image.onload=()=>{paint(image);tex.needsUpdate=true;};image.src='assets/environment/ring-canvas-v1.jpg';
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
   return tex;
@@ -5089,11 +5183,13 @@ function canvasTexture() {
 function buildRing(scene) {
   const group = new THREE.Group();
   scene.add(group);
-  scene.background = new THREE.Color(0x000000);
-  scene.fog = new THREE.FogExp2(0x000000, 0.042);
+  scene.background = new THREE.Color(0x111a28);
+  scene.fog = new THREE.FogExp2(0x111a28, 0.025);
 
   // ---- 링 바닥 ----
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(9.9, 9.9), ringMaterial({ map: canvasTexture() }));
+  const weave=surfaceTexture('fabric');weave.repeat.set(24,24);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(9.9, 9.9), ringMaterial({ map: canvasTexture(), bumpMap:weave,bumpScale:.013,roughness:.94 }));
+  floor.name='woven-ring-canvas';
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   group.add(floor);
@@ -5103,13 +5199,12 @@ function buildRing(scene) {
   platform.receiveShadow = true;
   group.add(platform);
   // 에이프런 (스커트)
-  const apron = new THREE.Mesh(new THREE.BoxGeometry(11.13, 0.5, 11.13), ringMaterial({ color: 0x7a1d24 }));
+  const apron = new THREE.Mesh(new THREE.BoxGeometry(11.13, 0.5, 11.13), ringMaterial({ color: 0x7a1d24,bumpMap:weave,bumpScale:.018,roughness:.92 }));
   apron.position.y = -0.28;
   group.add(apron);
 
   // ---- 포스트 / 코너 패드 / 로프 ----
-  const postMat = ringMaterial({ color: 0x2a2a30 });
-  if (PHOTOREAL) { postMat.metalness = .75; postMat.roughness = .35; }
+  const postMat = ringMaterial({ color: 0x535861,metalness:.75,roughness:.35 });
   const padColors = [0xd0302c, 0x2438c8, 0xf0f0f0, 0xf0f0f0];
   const corners = [[4.72, 4.72], [-4.72, -4.72], [4.72, -4.72], [-4.72, 4.72]];
   corners.forEach(([x, z], i) => {
@@ -5117,33 +5212,42 @@ function buildRing(scene) {
     post.position.set(x, 0.8, z);
     post.castShadow = true;
     group.add(post);
-    const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 1.0, 12), ringMaterial({ color: padColors[i] }));
+    const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 1.0, 16), ringMaterial({ color: padColors[i],roughness:.65 }));
     pad.position.set(x, 0.95, z);
     group.add(pad);
+    for(const h of [.52,.90,1.28]) {
+      const band=new THREE.Mesh(new THREE.TorusGeometry(.143,.008,4,16),ringMaterial({color:0xdddddf,roughness:.8}));
+      band.rotation.x=Math.PI/2;band.position.set(x,h,z);group.add(band);
+    }
   });
   const ropeColors = [0xd0302c, 0xf0f0f0, 0x2438c8];
   const ropeHeights = [0.5, 0.9, 1.3];
   ropeHeights.forEach((h, i) => {
-    const mat = ringMaterial({ color: ropeColors[i] });
+    const mat = ringMaterial({ color: ropeColors[i],bumpMap:weave,bumpScale:.008,roughness:.78 });
     for (let side = 0; side < 4; side++) {
-      const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 9.45, 8), mat);
-      rope.rotation.z = Math.PI / 2;
-      if (side % 2) rope.rotation.y = Math.PI / 2;
       const off = 4.72;
-      if (side === 0) rope.position.set(0, h, off);
-      if (side === 1) rope.position.set(off, h, 0);
-      if (side === 2) rope.position.set(0, h, -off);
-      if (side === 3) rope.position.set(-off, h, 0);
+      const points=[];
+      for(let j=0;j<=16;j++){const along=-off+j/16*off*2,sag=.065*Math.sin(j/16*Math.PI);points.push(new THREE.Vector3(side%2?(side===1?off:-off):along,h-sag,side%2?along:(side===0?off:-off)));}
+      const rope = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points),32,.03,8,false),mat);
       rope.castShadow = true;
       group.add(rope);
     }
   });
+  const tieMat=ringMaterial({color:0xe5e3dc,roughness:.95});
+  for(let side=0;side<4;side++)for(const along of [-2.3,2.3]){
+    const tie=new THREE.Mesh(new THREE.BoxGeometry(.055,.82,.055),tieMat);
+    tie.position.set(side%2?(side===1?4.72:-4.72):along,.87,side%2?along:(side===0?4.72:-4.72));group.add(tie);
+  }
+  const stepMat=ringMaterial({color:0x626872,metalness:.55,roughness:.7});
+  for(let i=0;i<3;i++){const stair=new THREE.Mesh(new THREE.BoxGeometry(1.4,.2*(i+1),.42),stepMat);stair.position.set(-3.6,-.72+.1*(i+1),5.95-i*.42);stair.receiveShadow=true;group.add(stair);}
 
   // ---- 바깥 어둠: 바닥 + 관중 실루엣 ----
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshBasicMaterial({ color: 0x020204 }));
+  const groundDetail=surfaceTexture('concrete');groundDetail.repeat.set(12,12);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), ringMaterial({color:0x303641,bumpMap:groundDetail,bumpScale:.025,roughness:.96}));
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -0.72;
   group.add(ground);
+  const architecture=addArenaStructure(group);
 
   // ---- 관중 없음. 링 코너 밖에 코치 4명 (Game 이 buildBoxer 로 세운다) ----
   const updateCrowd = () => {};
@@ -5200,24 +5304,13 @@ function buildRing(scene) {
   rim.position.set(-4, 3, -5);
   scene.add(rim);
 
-  const bloomObjects = [];
+  const bloomObjects = architecture.bloomObjects;
   if (PHOTOREAL) {
     // One shadow-casting spotlight, two unshadowed fills; fixtures emit without lights.
     spot.intensity = 240; spot.decay = 2;
     spot.angle = .72; spot.penumbra = .65;
     spot.shadow.normalBias = .025;
     fill.intensity = .6; rim.intensity = .85;
-    const fixtures = new THREE.InstancedMesh(new THREE.BoxGeometry(1.8, .06, .5),
-      new THREE.MeshStandardMaterial({ color: 0x151923, emissive: 0xffe1bb, emissiveIntensity: 5 }), 8);
-    const matrix = new THREE.Matrix4();
-    for (let i = 0; i < 8; i++) {
-      const angle = i * Math.PI / 4;
-      matrix.makeRotationY(-angle);
-      matrix.setPosition(Math.cos(angle) * 5.5, 7.5, Math.sin(angle) * 5.5);
-      fixtures.setMatrixAt(i, matrix);
-    }
-    fixtures.instanceMatrix.needsUpdate = true;
-    group.add(fixtures); bloomObjects.push(fixtures);
   }
 
   let crowdT = 0, jump = 0, frame = 0;
@@ -5230,18 +5323,7 @@ function buildRing(scene) {
       scene.remove(group);
       scene.remove(crowdLight, ambient, key, key.target, spot, spot.target, fill, fill.target, rim, rim.target);
       spot.shadow.dispose();
-      const geometries = new Set(), materials = new Set(), textures = new Set();
-      group.traverse((object) => {
-        if (object.isInstancedMesh) object.dispose();
-        if (object.geometry) geometries.add(object.geometry);
-        if (object.material) for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
-          materials.add(material);
-          if (material.map) textures.add(material.map);
-        }
-      });
-      for (const texture of textures) texture.dispose();
-      for (const material of materials) material.dispose();
-      for (const geometry of geometries) geometry.dispose();
+      disposeEnvironment(group);
     },
     cheer() { jump = 1; },
     update(dt, excitement = 0) {
@@ -5268,46 +5350,12 @@ return { buildRing };
 __M.Cliff = (() => {
 // Cliff.js — 암벽 맵: 링 대신 거대한 바위 고원 위에서 싸운다. 가장자리 밖으로 나가면 낙사.
 // buildRing 과 같은 인터페이스({ update, cheer, fill, dispose })를 제공해 Game 이 그대로 쓸 수 있게 한다.
-
-const toonRamp = (() => {
-  const data = new Uint8Array([60, 60, 150, 255]);
-  const tex = new THREE.DataTexture(data, 4, 1, THREE.RedFormat);
-  tex.minFilter = tex.magFilter = THREE.NearestFilter;
-  tex.needsUpdate = true;
-  return tex;
-})();
+const { surfaceTexture, disposeEnvironment } = __M.Environment;
 
 function rockTexture() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 1024;
-  const g = c.getContext('2d');
-  g.fillStyle = '#8a7d6f';
-  g.fillRect(0, 0, 1024, 1024);
-  // 암반 결 + 균열
-  for (let i = 0; i < 1400; i++) {
-    const x = Math.random() * 1024, y = Math.random() * 1024;
-    const r = 10 + Math.random() * 90;
-    g.fillStyle = `rgba(${90 + Math.random() * 60 | 0},${78 + Math.random() * 50 | 0},${66 + Math.random() * 40 | 0},0.35)`;
-    g.beginPath(); g.ellipse(x, y, r, r * (0.4 + Math.random() * 0.5), Math.random() * 3, 0, Math.PI * 2); g.fill();
-  }
-  g.strokeStyle = 'rgba(40,32,26,0.55)';
-  for (let i = 0; i < 34; i++) {
-    g.lineWidth = 1 + Math.random() * 3;
-    g.beginPath();
-    let x = Math.random() * 1024, y = Math.random() * 1024;
-    g.moveTo(x, y);
-    for (let k = 0; k < 6; k++) { x += (Math.random() - 0.5) * 260; y += (Math.random() - 0.5) * 260; g.lineTo(x, y); }
-    g.stroke();
-  }
-  // 중앙 투기장 마크
-  g.strokeStyle = 'rgba(210,60,40,0.55)'; g.lineWidth = 12;
-  g.beginPath(); g.arc(512, 512, 250, 0, Math.PI * 2); g.stroke();
-  g.lineWidth = 5;
-  g.beginPath(); g.arc(512, 512, 180, 0, Math.PI * 2); g.stroke();
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
-  return tex;
+  const tex=new THREE.TextureLoader().load('assets/environment/sandstone-v1.jpg');
+  tex.colorSpace=THREE.SRGBColorSpace;tex.wrapS=tex.wrapT=THREE.RepeatWrapping;
+  tex.repeat.set(3,3);tex.anisotropy=4;return tex;
 }
 
 /** 고원 가장자리 반경 (각도에 따라 울퉁불퉁) */
@@ -5323,11 +5371,17 @@ function cliffRadius(x, z, R = CLIFF_R) {
 function buildCliff(scene) {
   const group = new THREE.Group();
   scene.add(group);
-  scene.background = new THREE.Color(0x0a0d14);
-  scene.fog = new THREE.FogExp2(0x0a0d14, 0.028);
+  scene.background = new THREE.Color(0x889da9);
+  scene.fog = new THREE.FogExp2(0x889da9, 0.014);
+  const sky=new THREE.Mesh(new THREE.SphereGeometry(75,24,12),new THREE.ShaderMaterial({
+    vertexShader:'varying vec3 direction;void main(){direction=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+    fragmentShader:'varying vec3 direction;void main(){float h=normalize(direction).y;vec3 c=mix(vec3(.70,.68,.59),vec3(.18,.34,.49),smoothstep(-.1,.65,h));gl_FragColor=vec4(c,1.);}',
+    side:THREE.BackSide,depthWrite:false,
+  }));sky.name='canyon-sky';group.add(sky);
 
-  const rockMat = new THREE.MeshToonMaterial({ map: rockTexture(), gradientMap: toonRamp });
-  const rockDark = new THREE.MeshToonMaterial({ color: 0x5c5046, gradientMap: toonRamp });
+  const topDetail=rockTexture(),sideColor=rockTexture(),strata=surfaceTexture('rock');sideColor.repeat.set(2,2);strata.repeat.set(2,3);
+  const rockMat = new THREE.MeshStandardMaterial({map:topDetail,bumpMap:topDetail,bumpScale:.035,roughness:.98});
+  const rockDark = new THREE.MeshStandardMaterial({color:0xc1b6a2,map:sideColor,bumpMap:strata,bumpScale:.08,roughness:.96});
 
   // ---- 고원: 섹터 조각들로 만든다 (1분 뒤부터 조각이 무너져 내린다) ----
   const SEG = 64, R = CLIFF_R;
@@ -5354,15 +5408,16 @@ function buildCliff(scene) {
     topM.receiveShadow = true;
     g2.add(topM);
     // 옆면 (조각 아래로 뻗은 암벽)
-    const sideGeo = new THREE.CylinderGeometry(1, 0.84, 9, SECTOR_SEG, 1, true, a0, span);
+    const sideGeo = new THREE.CylinderGeometry(1, 0.84, 9, SECTOR_SEG, 12, true, a0, span);
     {
       const pos = sideGeo.attributes.position;
       for (let i = 0; i < pos.count; i++) {
         const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
         const len = Math.hypot(x, z);
         if (len < 1e-4) continue;
-        const scale = cliffRadius(x, z, R) * (y > 0 ? 1 : 0.86);
-        const jag = 1 + Math.sin(y * 1.7 + Math.atan2(z, x) * 4) * 0.04;
+        const depth=(4.5-y)/9;
+        const scale = cliffRadius(x, z, R) * (1-depth*.14);
+        const jag = 1 + depth*(Math.sin(y*3.1+Math.atan2(z,x)*8)*.045+Math.sin(y*1.7)*.025);
         pos.setXYZ(i, (x / len) * scale * jag, y, (z / len) * scale * jag);
       }
       sideGeo.computeVertexNormals();
@@ -5375,16 +5430,22 @@ function buildCliff(scene) {
   }
 
   // ---- 주변 봉우리 (멀리 솟은 바위 기둥들) ----
-  for (let i = 0; i < 14; i++) {
-    const a = (i / 14) * Math.PI * 2 + Math.random() * 0.3;
-    const dist = 11 + Math.random() * 9;
-    const h = 5 + Math.random() * 12;
-    const rr = 0.8 + Math.random() * 1.9;
-    const peak = new THREE.Mesh(new THREE.ConeGeometry(rr, h, 6 + (i % 3)), rockDark);
-    peak.position.set(Math.cos(a) * dist, -6 + h / 2, Math.sin(a) * dist);
-    peak.rotation.y = Math.random() * 3;
-    group.add(peak);
+  const peakGeo=new THREE.CylinderGeometry(.64,1,1,12,10);
+  const peakPos=peakGeo.attributes.position;
+  for(let i=0;i<peakPos.count;i++){
+    const x=peakPos.getX(i),y=peakPos.getY(i),z=peakPos.getZ(i),a=Math.atan2(z,x);
+    const ripple=1+Math.sin(y*28+a*5)*.10+Math.cos(a*3+y*11)*.07;
+    peakPos.setXYZ(i,x*ripple,y+(y>.49?Math.sin(a*3)*.08:0),z*ripple);
   }
+  peakGeo.computeVertexNormals();
+  const peaks=new THREE.InstancedMesh(peakGeo,rockDark,48),dummy=new THREE.Object3D();
+  for(let i=0;i<48;i++){
+    const a=(i%24)/24*Math.PI*2+Math.random()*.16,far=i>=24,dist=far?34+Math.random()*18:15+Math.random()*10;
+    const h=far?12+Math.random()*12:5+Math.random()*10,rr=far?3+Math.random()*4:1.3+Math.random()*1.8;
+    dummy.position.set(Math.cos(a)*dist,-10+h/2,Math.sin(a)*dist);dummy.rotation.y=Math.random()*3;dummy.scale.set(rr,h,rr*.8);dummy.updateMatrix();peaks.setMatrixAt(i,dummy.matrix);
+    peaks.setColorAt(i,new THREE.Color(far?0xaab2b1:0xc9b89c));
+  }
+  peaks.name='layered-canyon-pillars';group.add(peaks);
 
   // ---- 가장자리 경고 링 (여기 넘으면 떨어진다) ----
   const edgeGeo = new THREE.RingGeometry(1, 1.06, SEG);
@@ -5404,7 +5465,7 @@ function buildCliff(scene) {
   group.add(edge);
 
   // ---- 바닥 없는 어둠 + 아래쪽 안개 ----
-  const abyss = new THREE.Mesh(new THREE.CylinderGeometry(40, 40, 60, 24, 1, true), new THREE.MeshBasicMaterial({ color: 0x05070c, side: THREE.BackSide }));
+  const abyss = new THREE.Mesh(new THREE.CylinderGeometry(64, 64, 60, 32, 1, true), new THREE.MeshBasicMaterial({ color: 0x566874, side: THREE.BackSide }));
   abyss.position.y = -28;
   group.add(abyss);
 
@@ -5511,7 +5572,7 @@ function buildCliff(scene) {
     setCrowd() {},
     dispose() {
       scene.remove(group); scene.remove(sun); scene.remove(hemi); scene.remove(fill);
-      group.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+      sun.shadow.dispose();disposeEnvironment(group);
     },
   };
 }
@@ -7413,7 +7474,7 @@ class FxOverlay {
     const pal = PALETTES[name];
     // 만화식 폭발 실루엣: 꼭짓점마다 반지름이 들쭉날쭉한 별 모양
     const star = []; for (let i = 0; i < 14; i++) star.push(0.55 + Math.random() * 0.45);
-    this.impacts.push({ pal, star,
+    this.impacts.push({ pal, star, direction:this.impactDirection??0,
       x, y, power, age: 0, rot: Math.random() * Math.PI * 2,
       word: SFX_WORDS[Math.floor(Math.random() * SFX_WORDS.length)],
       wordRot: (Math.random() - 0.5) * 0.5, maxSpeed,
@@ -7576,6 +7637,24 @@ class FxOverlay {
         ctx.lineWidth=Math.max(.5,(j?6:18+10*P)*(1-k));ctx.strokeStyle=`rgba(${pal.ring[j]},${(1-k)*.9})`;
         ctx.beginPath();ctx.arc(0,0,rad*(j?.72:1),0,Math.PI*2);ctx.stroke();
       }
+      // Broken swirling pressure rings, plus curved directional air blades.
+      ctx.save();ctx.rotate(im.direction);
+      for(let j=0;j<3;j++){
+        const a=im.rot+j*Math.PI*2/3+k*.8;
+        ctx.lineWidth=Math.max(.5,(9-j*2)*(1-k));ctx.strokeStyle=`rgba(200,237,255,${.8*(1-k)})`;
+        ctx.beginPath();ctx.arc(0,0,rad*(.82+j*.16),a,a+1.35);ctx.stroke();
+      }
+      if(k<.7){
+        ctx.globalAlpha=Math.pow(1-k/.7,1.3);
+        const L=(120+140*P)*(.5+e),H=(40+35*P)*(1-k);
+        for(const sign of [-1,1]){
+          ctx.fillStyle='rgba(222,247,255,.85)';ctx.beginPath();ctx.moveTo(-L,-H*sign);
+          ctx.quadraticCurveTo(-L*.25,-H*2.1*sign,L*.32,0);
+          ctx.quadraticCurveTo(-L*.30,-H*1.2*sign,-L,-H*sign);ctx.fill();
+          for(let j=0;j<2;j++){ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=2-j*.7;ctx.beginPath();ctx.moveTo(-L*(1+j*.08),-H*(1.35+j*.35)*sign);ctx.quadraticCurveTo(-L*.3,-H*(2.4+j*.35)*sign,L*.24,0);ctx.stroke();}
+        }
+      }
+      ctx.restore();
       ctx.globalAlpha=1-k;
       for(let j=0;j<14;j++) {
         const a=im.rot+j/14*Math.PI*2, L=(130+260*P)*e*(.6+.4*Math.abs(Math.sin(j*2.7))), wd=(24+14*P)*(1-k);
@@ -7586,6 +7665,11 @@ class FxOverlay {
         ctx.lineTo(Math.cos(a)*(20+L),Math.sin(a)*(20+L));
         ctx.lineTo(Math.cos(a-.06)*(20+wd),Math.sin(a-.06)*(20+wd));
         ctx.closePath();ctx.stroke();ctx.fill();
+      }
+      for(let j=0;j<12;j++){
+        const a=im.rot+j/12*Math.PI*2,r=rad*(.6+(j%3)*.12),length=(24+50*P)*(1-k);
+        ctx.strokeStyle=j%2?'#fff':`rgb(${pal.ring[1]})`;ctx.lineWidth=(j%3?2:4)*(1-k);ctx.beginPath();
+        ctx.moveTo(Math.cos(a)*r,Math.sin(a)*r);ctx.lineTo(Math.cos(a)*(r+length),Math.sin(a)*(r+length));ctx.stroke();
       }
       ctx.restore();
       if(im.age<.4) {
@@ -8723,9 +8807,11 @@ class Game {
     this.voice = new VoiceManager(this.audio);
     this.subs.voice = this.voice;
 
-    this.trailL = new Ribbon(this.scene, { maxPoints: 12, width: 0.045, color: 0xffffff, coreColor: 0xffffff });
-    this.trailR = new Ribbon(this.scene, { maxPoints: 12, width: 0.045, color: 0xffffff, coreColor: 0xffffff });
-    this.headTrail = new Ribbon(this.scene, { maxPoints: 40, width: 0.025, color: 0x2090ff, coreColor: 0xbfe8ff, opacity: 0.55 });
+    this.trailL = new Ribbon(this.scene);
+    this.trailR = new Ribbon(this.scene);
+    this.oppTrailL = new Ribbon(this.scene);
+    this.oppTrailR = new Ribbon(this.scene);
+    this.headTrail = new Ribbon(this.scene, { maxPoints: 28, width: 0.025, color: 0x2090ff, coreColor: 0xbfe8ff, opacity: 0.55, wind:false });
     this.ghostFx = {};   // defKey → AfterImageEffect (지연 생성)
     this.sparks = new HitSparks(this.scene);
     this.ultFx = new UltimateFx(this.scene, this.audio, this.fx, this.camera);
@@ -9758,6 +9844,8 @@ class Game {
     const dir = new THREE.Vector3(ev.dir[0], 0, ev.dir[1]);
     const uv = this.project(pos, new THREE.Vector2());
     const px = uv.x * this.fx.w, py = uv.y * this.fx.h;
+    const tipUV=this.project(pos.clone().addScaledVector(dir,.4),new THREE.Vector2());
+    this.fx.impactDirection=Math.atan2((tipUV.y-uv.y)*this.fx.h,(tipUV.x-uv.x)*this.fx.w);
     const mine = ev.a === local, hurt = ev.b === local;
     const involved = mine || hurt;
     const P = ev.power;
@@ -10477,14 +10565,33 @@ class Game {
       const pr = pu ? pu.t / pu.dur : 0;
       const lActive = pu && pu.side === 'L' && pr > 0.2 && pr < 0.62;
       const rActive = pu && pu.side === 'R' && pr > 0.2 && pr < 0.62;
-      if (lActive) this.trailL.push(view.gloveL); else if (!pu) this.trailL.clear();
-      if (rActive) this.trailR.push(view.gloveR); else if (!pu) this.trailR.clear();
+      if (lActive) this.trailL.push(view.gloveL); else if (!pu&&this.trailL.strength<.02) this.trailL.clear();
+      if (rActive) this.trailR.push(view.gloveR); else if (!pu&&this.trailR.strength<.02) this.trailR.clear();
       if (d.blend > 0) this.headTrail.push(view.headPos); else this.headTrail.clear();
-      // Short white glove arcs keep the punching arm readable.
-      const tc = 0xffffff;
+      // Actual glove history forms a feathered white core with parallel air-cutting strands.
+      const tc = 0xc4eaff;
       this.trailL.setColor(tc); this.trailR.setColor(tc);
       this.trailL.update(rawDt, this.camera, !!lActive);
       this.trailR.update(rawDt, this.camera, !!rActive);
+      if(this._trailOppSlot!==opp.slot){this.oppTrailL.clear();this.oppTrailR.clear();this._trailOppSlot=opp.slot;}
+      const op=opp.punch,opr=op?op.t/op.dur:0;
+      for(const side of ['L','R']){
+        const trail=side==='L'?this.oppTrailL:this.oppTrailR,active=op&&op.side===side&&opr>.2&&opr<.68;
+        if(active)trail.push(side==='L'?opp.gloveL:opp.gloveR);else if(!op&&trail.strength<.02)trail.clear();
+        trail.update(rawDt,this.camera,!!active);
+      }
+      // A brief pressure crescent also accompanies a punch that misses its target.
+      for(const fighter of [view,opp]){
+        const punch=fighter.punch,progress=punch?punch.t/punch.dur:0;
+        if(punch&&progress>.30&&progress<.58&&this.realTime-(fighter._windAt??-1)>.15){
+          fighter._windAt=this.realTime;
+          const cur=punch.side==='L'?fighter.gloveL:fighter.gloveR,prev=punch.side==='L'?fighter.prevGloveL:fighter.prevGloveR;
+          const motion=cur.clone().sub(prev);if(motion.lengthSq()>1e-7){
+            const a=this.project(prev,new THREE.Vector2()),b=this.project(cur,new THREE.Vector2());
+            this.sparks.sweep(cur,motion.normalize(),punch.type==='hook'?.65:.4,-Math.atan2((b.y-a.y)*this.fx.h,(b.x-a.x)*this.fx.w),.18);
+          }
+        }
+      }
       this.headTrail.update(rawDt, this.camera, d.active && I > 0.15);
     }
 

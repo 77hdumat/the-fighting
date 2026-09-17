@@ -46,7 +46,7 @@ export class FxOverlay {
     const pal = PALETTES[name];
     // 만화식 폭발 실루엣: 꼭짓점마다 반지름이 들쭉날쭉한 별 모양
     const star = []; for (let i = 0; i < 14; i++) star.push(0.55 + Math.random() * 0.45);
-    this.impacts.push({ pal, star,
+    this.impacts.push({ pal, star, direction:this.impactDirection??0,
       x, y, power, age: 0, rot: Math.random() * Math.PI * 2,
       word: SFX_WORDS[Math.floor(Math.random() * SFX_WORDS.length)],
       wordRot: (Math.random() - 0.5) * 0.5, maxSpeed,
@@ -209,6 +209,24 @@ export class FxOverlay {
         ctx.lineWidth=Math.max(.5,(j?6:18+10*P)*(1-k));ctx.strokeStyle=`rgba(${pal.ring[j]},${(1-k)*.9})`;
         ctx.beginPath();ctx.arc(0,0,rad*(j?.72:1),0,Math.PI*2);ctx.stroke();
       }
+      // Broken swirling pressure rings, plus curved directional air blades.
+      ctx.save();ctx.rotate(im.direction);
+      for(let j=0;j<3;j++){
+        const a=im.rot+j*Math.PI*2/3+k*.8;
+        ctx.lineWidth=Math.max(.5,(9-j*2)*(1-k));ctx.strokeStyle=`rgba(200,237,255,${.8*(1-k)})`;
+        ctx.beginPath();ctx.arc(0,0,rad*(.82+j*.16),a,a+1.35);ctx.stroke();
+      }
+      if(k<.7){
+        ctx.globalAlpha=Math.pow(1-k/.7,1.3);
+        const L=(120+140*P)*(.5+e),H=(40+35*P)*(1-k);
+        for(const sign of [-1,1]){
+          ctx.fillStyle='rgba(222,247,255,.85)';ctx.beginPath();ctx.moveTo(-L,-H*sign);
+          ctx.quadraticCurveTo(-L*.25,-H*2.1*sign,L*.32,0);
+          ctx.quadraticCurveTo(-L*.30,-H*1.2*sign,-L,-H*sign);ctx.fill();
+          for(let j=0;j<2;j++){ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=2-j*.7;ctx.beginPath();ctx.moveTo(-L*(1+j*.08),-H*(1.35+j*.35)*sign);ctx.quadraticCurveTo(-L*.3,-H*(2.4+j*.35)*sign,L*.24,0);ctx.stroke();}
+        }
+      }
+      ctx.restore();
       ctx.globalAlpha=1-k;
       for(let j=0;j<14;j++) {
         const a=im.rot+j/14*Math.PI*2, L=(130+260*P)*e*(.6+.4*Math.abs(Math.sin(j*2.7))), wd=(24+14*P)*(1-k);
@@ -219,6 +237,11 @@ export class FxOverlay {
         ctx.lineTo(Math.cos(a)*(20+L),Math.sin(a)*(20+L));
         ctx.lineTo(Math.cos(a-.06)*(20+wd),Math.sin(a-.06)*(20+wd));
         ctx.closePath();ctx.stroke();ctx.fill();
+      }
+      for(let j=0;j<12;j++){
+        const a=im.rot+j/12*Math.PI*2,r=rad*(.6+(j%3)*.12),length=(24+50*P)*(1-k);
+        ctx.strokeStyle=j%2?'#fff':`rgb(${pal.ring[1]})`;ctx.lineWidth=(j%3?2:4)*(1-k);ctx.beginPath();
+        ctx.moveTo(Math.cos(a)*r,Math.sin(a)*r);ctx.lineTo(Math.cos(a)*(r+length),Math.sin(a)*(r+length));ctx.stroke();
       }
       ctx.restore();
       if(im.age<.4) {
