@@ -211,9 +211,19 @@ export const CHARACTERS = {
     prop: { height: 0.94, torsoW: 0.98, torsoD: 0.94, armR: 0.94, armLen: 1.04, legR: 0.96, legLen: 0.96, headS: 1.02, headY: 1.0, neck: 0.95, muscle: 0.45 },
     hp: 150, powerMul: 1.05, speedMul: 1.0, style: 'istp', guardMax: 100, guardRegen: 1.0, weaveCd: 1.3, gaugeMul: 0.95, hidden: true,
   },
+  // 우랄라: 스페이스 채널 5 리포터. 길쭉하고 늘씬. 분홍 트윈테일 + 헤드셋, 흰 크롭탑·미니스커트, 흰 롱부츠, 제트팩. 쌍권총 레이저(원거리)
+  ulala: {
+    name: 'ULALA', gender: 'f', skin: 0xffe3d2, trunks: 0xffffff, trunksTrim: 0xc9ccd6, trunksText: '',
+    bodyColor: 0xffffff, sleeves: 0xffe3d2, pants: 0xffe3d2,
+    gloves: 0xffe3d2, noGloves: true, shoes: 0xffffff, shoesTrim: 0xff6a2a,
+    hair: 0xff5fa8, hairStyle: 'twintail', brows: 'thin', eyes: 'big', mouth: 'grin', pretty: true, irisColor: '#4fb6ff', browColor: '#8a3a66',
+    accessory: 'headset', skirt: 0xffffff, boots: 0xffffff, jetpack: 0xc9ccd6, hold: { L: 'raygun', R: 'raygun' },
+    prop: { height: 1.2, torsoW: 0.78, torsoD: 0.7, armR: 0.7, armLen: 1.12, legR: 0.7, legLen: 1.24, headS: 0.95, headY: 1.05, neck: 1.3, muscle: 0 },
+    hp: 70, powerMul: 0.75, speedMul: 1.3, style: 'idol', guardMax: 60, guardRegen: 1.2, weaveCd: 1.0, gaugeMul: 1.1, hidden: true, ranged: true,
+  },
 };
 export const CHARACTER_ORDER = ['ippo', 'mashiba', 'miyata', 'sendo'];
-export const HIDDEN_ORDER = ['chaechae', 'jjeonghyo', 'ppyeo', 'ohsh', 'jungjuwon', 'gokomong'];
+export const HIDDEN_ORDER = ['chaechae', 'jjeonghyo', 'ppyeo', 'ohsh', 'jungjuwon', 'gokomong', 'ulala'];
 
 // 코치 (링 밖 코너에 서 있는 NPC): 트레이닝복, 글러브 없음
 export const COACH_DEFS = [
@@ -348,7 +358,17 @@ function geometriesFor(def) {
 
 // 손에 드는 소품: 책 / 덤벨 / 하이바(헬멧) / 녹차병
 function buildHeldItem(kind, glove, part, sx) {
-  if (kind === 'book') {
+  if (kind === 'raygun') {
+    // 레이저 권총: 파란 몸통 + 흰 손잡이 + 둥근 총구 (스페이스 채널 5)
+    const body = part(new THREE.CylinderGeometry(0.03, 0.036, 0.2, 10), 0x2b7fd6, glove, 0, -0.01, 0.12);
+    body.rotation.x = Math.PI / 2;
+    const ring = part(new THREE.TorusGeometry(0.038, 0.012, 8, 14), 0xffffff, body, 0, 0.06, 0, false);
+    ring.rotation.x = Math.PI / 2;
+    const tip = part(new THREE.SphereGeometry(0.03, 10, 8), 0x8fd6ff, body, 0, 0.115, 0, false);
+    if (tip.material.emissive) { tip.material.emissive.set(0x4fb0ff); tip.material.emissiveIntensity = 1.4; }
+    const grip = part(new THREE.BoxGeometry(0.03, 0.09, 0.04), 0xffffff, glove, 0, -0.05, 0.05, false);
+    grip.rotation.x = 0.35;
+  } else if (kind === 'book') {
     const cover = part(new THREE.BoxGeometry(0.19, 0.25, 0.045), 0x8a2b2b, glove, 0, -0.02, 0.06);
     cover.rotation.set(0.25, sx * 0.25, 0);
     const pages = part(new THREE.BoxGeometry(0.175, 0.235, 0.05), 0xf6f1e2, cover, 0, 0, 0.004, false);
@@ -576,6 +596,14 @@ uniform float uSpecEdge; uniform float uHairBand;
     deformers.push(attachLimb(thigh, shin, ghost ? G.ghostLeg : G.legSurface, M(def.pants || def.skin, def.pants ? 'cloth' : 'skin'), !ghost));
     const foot = part(G.foot, def.shoes, shin, 0, -legLen, 0.05);
     part(G.footTrim, def.shoesTrim, shin, 0, -legLen - 0.04, 0.05, false);
+    if (def.boots && !ghost) {
+      // 롱부츠: 정강이 전체를 덮는 흰 통 + 두꺼운 플랫폼 굽
+      const boot = part(new THREE.CylinderGeometry(0.072 * P.legR, 0.085 * P.legR, legLen * 0.98, 12, 1, true), def.boots, shin, 0, -legLen * 0.5, 0.005, false);
+      boot.material.side = THREE.DoubleSide;
+      const cuff = part(new THREE.TorusGeometry(0.078 * P.legR, 0.012, 6, 14), 0xd8dbe4, shin, 0, -0.01, 0.005, false);
+      cuff.rotation.x = Math.PI / 2;
+      part(new THREE.BoxGeometry(0.16, 0.05, 0.22), def.shoesTrim, shin, 0, -legLen - 0.075, 0.06, false);
+    }
     return { thigh, shin, foot };
   };
   const legL = mkLeg(1);
@@ -604,6 +632,14 @@ uniform float uSpecEdge; uniform float uHairBand;
       const nose = new THREE.Mesh(new THREE.CircleGeometry(0.009, 10), new THREE.MeshBasicMaterial({ color: 0x14141c }));
       nose.position.set(0, -0.012, 0.002); art.add(nose);
     }
+  }
+  // 제트팩 (우랄라): 등 뒤 은색 탱크 두 개
+  if (def.jetpack && !ghost) {
+    for (const sx of [-1, 1]) {
+      const tank = part(new THREE.CapsuleGeometry(0.06, 0.2, 4, 10), def.jetpack, waist, sx * 0.075, 0.42, -0.16 * P.torsoD - 0.05, false);
+      part(new THREE.CylinderGeometry(0.045, 0.06, 0.05, 10), 0x8a8fa0, tank, 0, -0.17, 0, false);
+    }
+    part(new THREE.BoxGeometry(0.2, 0.08, 0.04), 0x8a8fa0, waist, 0, 0.42, -0.16 * P.torsoD, false);
   }
   // 원피스 치마 (채채더킴)
   if (def.skirt) {
@@ -721,6 +757,29 @@ uniform float uSpecEdge; uniform float uHairBand;
       const arm = part(new THREE.BoxGeometry(0.02, 0.012, 0.09), 0x15151c, gl, sx * 0.108, 0.006, -0.05, false);
     }
     part(new THREE.BoxGeometry(0.038, 0.012, 0.014), 0x15151c, gl, 0, 0.008, 0, false);
+  }
+  // 트윈테일 (우랄라): 양옆 위쪽에서 뒤로 뻗는 분홍 꽁지 + 앞머리
+  if (!ghost && def.hairStyle === 'twintail') {
+    for (const sx of [-1, 1]) {
+      const base = part(new THREE.SphereGeometry(0.05 * P.headS, 10, 8), def.hair, head, sx * 0.15 * P.headS, hy + 0.1 * P.headS, -0.04, false);
+      const tail = part(new THREE.CapsuleGeometry(0.045 * P.headS, 0.22 * P.headS, 4, 10), def.hair, head, sx * 0.2 * P.headS, hy + 0.02 * P.headS, -0.1, false);
+      tail.rotation.set(0.9, 0, sx * 0.55);
+      const tip = part(new THREE.ConeGeometry(0.042 * P.headS, 0.16 * P.headS, 10), def.hair, head, sx * 0.25 * P.headS, hy - 0.16 * P.headS, -0.2, false);
+      tip.rotation.set(2.6, 0, sx * 0.4);
+      const band = part(new THREE.TorusGeometry(0.052 * P.headS, 0.012, 6, 12), 0xffffff, head, sx * 0.155 * P.headS, hy + 0.09 * P.headS, -0.045, false);
+      band.rotation.set(0.8, 0, sx * 0.5);
+    }
+    const bang = part(new THREE.BoxGeometry(0.2 * P.headS, 0.06, 0.05), def.hair, head, 0.02, hy + 0.11 * P.headS, 0.12 * P.headS, false);
+    bang.rotation.set(-0.3, 0, -0.15);
+  }
+  // 헤드셋 (우랄라): 가는 은색 밴드 + 왼쪽 이어피스 + 마이크 붐
+  if (!ghost && def.accessory === 'headset') {
+    const band = part(new THREE.TorusGeometry(0.19 * P.headS, 0.012, 6, 20, Math.PI), 0xd8dbe4, head, 0, hy + 0.02, -0.02, false);
+    const cup = part(new THREE.CylinderGeometry(0.045, 0.045, 0.03, 12), 0xffffff, head, 0.18 * P.headS, hy, 0, false);
+    cup.rotation.z = Math.PI / 2;
+    const boom = part(new THREE.CylinderGeometry(0.008, 0.008, 0.16, 6), 0xd8dbe4, head, 0.14 * P.headS, hy - 0.05, 0.1, false);
+    boom.rotation.set(0.5, 0, 0.9);
+    const mic = part(new THREE.SphereGeometry(0.018, 8, 6), 0xff6a2a, head, 0.075 * P.headS, hy - 0.085, 0.16 * P.headS, false);
   }
   const skinOutlineMats = [...deformers.map(d => d.ink), torso.userData.ink].filter(Boolean);
   const rig = {

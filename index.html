@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta name="build-id" content="1789635728">
+<meta name="build-id" content="1789636988">
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -552,7 +552,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   }
 }
 </script>
-<script>window.__BUILD_ID = "1789635728";</script>
+<script>window.__BUILD_ID = "1789636988";</script>
 </head>
 <body>
   <canvas id="gl" tabindex="0"></canvas>
@@ -1442,6 +1442,13 @@ const SPECIALS = {
     wind: { x: -0.3, y: 1.3, z: 0.4, el: -2.4 }, strike: { x: -1.3, y: -1.2, z: 0.4, el: -1.6 },
     body(p, w, s, sgn) { p.waistY += sgn * (1.1 * w - 1.6 * s); p.chestY += sgn * (0.5 * w - 0.8 * s); p.hipsRotY += sgn * (0.4 * w - 0.6 * s); p.hipsY += -0.12 * w; },
   },
+  // ---- 히든: 우랄라 (유혹하기 / 춤추기) ----
+  seduce: {
+    name: 'チュッ', ko: '유혹하기', side: 'R', dur: 0.55, power: 0.25, cd: 6.5, heavy: false, staggerT: 1.6, hitRadius: 3.2, step: 0,
+    wind: { x: -1.6, y: 0.4, z: 0.3, el: -2.4 }, strike: { x: -1.4, y: -0.6, z: 0.9, el: -0.6 },
+    body(p, w, s, sgn) { p.waistY += sgn * (-0.2 * w + 0.35 * s); p.headZ += 0.25 * s; p.hipsX += -sgn * 0.12 * s; p.hipsRotY += sgn * 0.2 * s; p.headX += -0.15 * s; },
+  },
+  sideDash: { name: 'ピルエット', ko: '피루엣', self: true, dash: true, dur: 0.42, cd: 2.4 },
 };
 
 // 캐릭터별 키 배정 + 스탠스 + 필살
@@ -1458,6 +1465,7 @@ const KITS = {
   ohsh:      { stance: 'counter', finisher: 'snackRain', U: 'suddenSmack',  I: 'breadThrow', cdU: 4.5 },
   jungjuwon: { stance: 'smash',   finisher: 'coffeeBarrage',  U: 'onigiriThrow', I: 'bellyBump', cdU: 4.5 },
   gokomong:  { stance: 'counter', finisher: 'coldCut', U: 'babyKick',      I: 'lazyJab',   cdU: 6 },
+  ulala:     { stance: 'flicker', finisher: 'danceTime', U: 'seduce',    I: 'sideDash', cdU: 6.5 },
 };
 
 const STANCE_LINES = {
@@ -1475,6 +1483,7 @@ const HIDDEN_LINES = {
   jungjuwon: { intro: '커피 좋아~', max: '배고픈데 한 판 더?', fin: '커피 마셔야 돼!!', u: '이거나 먹어!', hit: ['우걱', '냠', '헤드폰 벗겨지겠네'] },
   gokomong: { intro: '…귀찮은데.', max: '빨리 끝내자.', fin: '그래서 어쩌라고.', u: '집 가서 아기 봐야 돼.', hit: ['…', '음', '하아'] },
   ppyeo: { intro: '난 먹어도 살 안 쪄.', max: '시동 건다.', fin: '부아아앙—!!', u: '헬멧은 필수지!', hit: ['뼈!', '뼈뼈!', '부릉'] },
+  ulala: { intro: '스페이스 채널 5, 우랄라입니다!', max: '자, 리듬 타볼까?', fin: '댄스 타임!!', u: '츄~♥', hit: ['츄!', '업!', '다운!'] },
 };
 return { SPECIALS, KITS, STANCE_LINES, HIDDEN_LINES };
 })();
@@ -1900,7 +1909,7 @@ class UltimateFx {
     if (!target) return;
     const root = new THREE.Group();
     this.scene.add(root);
-    const DUR = { reels: 3.4, snackRain: 3.6, cafeRush: 3.2, coldCut: 3.4, forge: 3.3, coffeeBarrage: 3.6 };
+    const DUR = { reels: 3.4, snackRain: 3.6, cafeRush: 3.2, coldCut: 3.4, forge: 3.3, coffeeBarrage: 3.6, danceTime: 3.6 };
     const item = { kind, root, t: 0, dur: DUR[kind] || 3.2, parts: [], attacker, target, tp: target.pos.clone() };
     if (kind === 'reels') this._buildReels(item, attacker);
     else if (kind === 'snackRain') this._buildSnackRain(item);
@@ -1910,6 +1919,7 @@ class UltimateFx {
     else if (kind === 'bike') this._buildBike(item, attacker);
     else if (kind === 'forge') this._buildForge(item, attacker);
     else if (kind === 'coffeeBarrage') this._buildCoffee(item, attacker);
+    else if (kind === 'danceTime') this._buildDance(item, attacker);
     this.active.push(item);
   }
 
@@ -2090,6 +2100,74 @@ class UltimateFx {
       d.t += dt; d.v.y -= 12 * dt; d.m.position.addScaledVector(d.v, dt);
       if (d.t > 0.4 || d.m.position.y < 0.02) { d.t = -1; d.m.visible = false; }
     }
+  }
+
+  _buildDance(item, attacker) {
+    // 우랄라 댄스 타임: 머리 위 미러볼 + 돌아가는 색 조명 + 떠오르는 음표·하트 + 'DANCE TIME!' 말풍선
+    const g = item.root;
+    const ball = new THREE.Group(); g.add(ball); item.ball = ball;
+    const core = outlined(new THREE.SphereGeometry(0.32, 16, 12), 0xd8dbe4, ball);
+    for (let i = 0; i < 26; i++) {   // 거울 조각 반짝이
+      const tile = outlined(new THREE.BoxGeometry(0.08, 0.08, 0.02), i % 2 ? 0xffffff : 0x8fd6f2, ball);
+      const a = Math.random() * Math.PI * 2, b = (Math.random() - 0.5) * Math.PI * 0.8;
+      tile.position.set(Math.cos(a) * Math.cos(b) * 0.33, Math.sin(b) * 0.33, Math.sin(a) * Math.cos(b) * 0.33);
+      tile.lookAt(0, 0, 0); tile.castShadow = false;
+    }
+    outlined(new THREE.CylinderGeometry(0.012, 0.012, 3.0, 6), 0x8a8fa0, ball, new THREE.Vector3(0, 1.8, 0)).castShadow = false;
+    ball.scale.setScalar(0.001);
+    // 색 조명 원뿔 4개 (반투명 가산)
+    item.beams = [];
+    const cols = [0xff5fd0, 0x5fc8ff, 0xffe45f, 0x8cff6a];
+    for (let i = 0; i < 4; i++) {
+      const m = new THREE.Mesh(new THREE.ConeGeometry(0.9, 4.2, 14, 1, true), new THREE.MeshBasicMaterial({ color: cols[i], transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+      m.userData.shared = false; m.visible = false; g.add(m);
+      item.beams.push({ m, ph: i * Math.PI / 2 });
+    }
+    item.notes = [];
+    for (let i = 0; i < 18; i++) {
+      const isHeart = i % 3 === 0;
+      const n = isHeart ? makeHeart() : (() => { const gr = new THREE.Group(); outlined(new THREE.SphereGeometry(0.07, 10, 8), 0x2b2b3a, gr, new THREE.Vector3(0, 0, 0)).scale.set(1, 0.7, 1); outlined(new THREE.BoxGeometry(0.025, 0.28, 0.02), 0x2b2b3a, gr, new THREE.Vector3(0.06, 0.13, 0)); outlined(new THREE.BoxGeometry(0.12, 0.03, 0.02), 0x2b2b3a, gr, new THREE.Vector3(0.11, 0.26, 0)); return gr; })();
+      n.visible = false; g.add(n);
+      item.notes.push({ m: n, delay: 0.3 + i * 0.17, t: 0, x: (Math.random() - 0.5) * 2.4, z: (Math.random() - 0.5) * 1.6, spd: 0.9 + Math.random() * 0.7 });
+    }
+    item.title = makeBubble('DANCE TIME!', '#ff5fd0', '#ffffff'); item.title.visible = false; item.title.scale.setScalar(1.3); g.add(item.title);
+  }
+
+  _updDance(it, dt, tp) {
+    const u = it.t, att = it.attacker; if (!att) return;
+    const mid = att.pos.clone().add(tp).multiplyScalar(0.5);
+    // 미러볼: 두 사람 위에서 내려와 돈다
+    const pop = Math.min(1, u / 0.5);
+    it.ball.scale.setScalar(Math.max(0.001, (1 - Math.pow(1 - pop, 3)) * (u > it.dur ? Math.max(0, 1 - (u - it.dur) / 0.4) : 1)));
+    it.ball.position.set(mid.x, 2.7, mid.z);
+    it.ball.rotation.y = u * 2.2;
+    // 조명: 미러볼에서 사방으로 돌며 바닥을 쓸어간다
+    for (const b of it.beams) {
+      b.m.visible = u > 0.3 && u < it.dur + 0.2;
+      const a = u * 1.6 + b.ph;
+      b.m.position.set(mid.x, 2.7 - 2.1, mid.z);
+      b.m.rotation.set(0, 0, 0);
+      b.m.rotateY(a); b.m.rotateX(Math.PI + 0.45 + Math.sin(u * 2.3 + b.ph) * 0.2);
+      b.m.material.opacity = 0.16 + 0.1 * Math.sin(u * 9 + b.ph);
+    }
+    for (const n of it.notes) {
+      if (u < n.delay) continue;
+      n.t += dt;
+      if (n.t === dt) { n.m.visible = true; n.m.position.set(mid.x + n.x, 0.8, mid.z + n.z); }
+      n.m.position.y += n.spd * dt; n.m.position.x += Math.sin(n.t * 3 + n.x * 5) * 0.3 * dt;
+      n.m.rotation.z = Math.sin(n.t * 4) * 0.3; n.m.rotation.y += dt * 2;
+      const fade = Math.max(0, 1 - n.t / 1.8);
+      n.m.scale.setScalar(Math.max(0.001, (0.5 + 0.5 * Math.min(1, n.t * 4)) * fade));
+      if (fade <= 0) n.m.visible = false;
+    }
+    if (it.title) {
+      it.title.visible = u > 0.15 && u < 1.8;
+      it.title.position.set(mid.x, 2.1 + Math.sin(u * 6) * 0.05, mid.z);
+      if (this.cam) it.title.lookAt(this.cam.position);
+    }
+    // 비트마다 플래시
+    const beat = Math.floor(u * 3.2);
+    if (beat !== it._beat) { it._beat = beat; if (this.fx && u > 0.3 && u < it.dur) this.fx.flash = Math.max(this.fx.flash || 0, 0.08); if (u > 0.3 && u < it.dur) this.audio.blip(beat % 2 === 0); }
   }
 
   _buildColdCut(item, attacker) {
@@ -2310,6 +2388,7 @@ class UltimateFx {
       else if (it.kind === 'bike') this._updBike(it, dt, tp);
       else if (it.kind === 'forge') this._updForge(it, dt, tp);
       else if (it.kind === 'coffeeBarrage') this._updCoffee(it, dt, tp);
+      else if (it.kind === 'danceTime') this._updDance(it, dt, tp);
       if (it.t > it.dur + 1.4) {
         this._release(it);
         this.active.splice(i, 1);
@@ -2607,6 +2686,73 @@ class UltimateFx {
 }
 return { UltimateFx };
 })();
+// ===== LaserFx.js =====
+__M.LaserFx = (() => {
+// LaserFx.js — 우랄라 레이저 탄 연출. 호스트가 'shot'/'shotEnd' 이벤트를 내면(로컬·게스트 모두) 여기서 그린다.
+// 판정은 Fighter.shots(호스트)가 하고, 이건 순수 시각용. 탄마다 밝은 코어 + 넓은 글로우 두 겹.
+
+const SPEED = 14;   // Fighter.js 의 탄속과 같아야 착탄 지점이 맞는다
+
+class LaserFx {
+  constructor(scene) {
+    this.scene = scene;
+    this.pool = [];
+    this.live = new Map();   // id → bolt
+    this.coreGeo = new THREE.CylinderGeometry(0.028, 0.028, 0.62, 8);
+    this.coreGeo.rotateX(Math.PI / 2);
+    this.glowGeo = new THREE.CylinderGeometry(0.075, 0.075, 0.78, 8);
+    this.glowGeo.rotateX(Math.PI / 2);
+    this.coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false });
+    this.glowMatPink = new THREE.MeshBasicMaterial({ color: 0xff5fd0, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending });
+    this.glowMatBlue = new THREE.MeshBasicMaterial({ color: 0x5fc8ff, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending });
+    // 예열: 첫 발사 때 셰이더 컴파일로 멈추지 않게 하나 만들어 숨겨 둔다
+    const w = this._make(); w.group.position.set(0, -50, 0); w.group.visible = true; w.group.traverse((o) => { o.frustumCulled = false; });
+    this.pool.push(w);
+  }
+
+  _make() {
+    const group = new THREE.Group();
+    const core = new THREE.Mesh(this.coreGeo, this.coreMat);
+    const glow = new THREE.Mesh(this.glowGeo, this.glowMatPink);
+    group.add(core, glow);
+    group.visible = false;
+    this.scene.add(group);
+    return { group, core, glow, t: 0, dir: new THREE.Vector3() };
+  }
+
+  fire(e) {
+    let b = this.pool.pop() || this._make();
+    b.group.visible = true;
+    b.group.position.set(e.x, e.y, e.z);
+    b.dir.set(e.dx, 0, e.dz).normalize();
+    b.group.lookAt(b.group.position.clone().add(b.dir));
+    b.glow.material = e.hook ? this.glowMatBlue : this.glowMatPink;
+    b.group.scale.setScalar(e.hook ? 1.35 : 1);
+    b.t = 0;
+    if (this.live.has(e.id)) this.end(e.id);
+    this.live.set(e.id, b);
+  }
+
+  end(id) {
+    const b = this.live.get(id); if (!b) return;
+    this.live.delete(id);
+    b.group.visible = false;
+    this.pool.push(b);
+  }
+
+  update(dt) {
+    for (const [id, b] of this.live) {
+      b.t += dt;
+      b.group.position.addScaledVector(b.dir, SPEED * dt);
+      b.core.scale.x = 1 + Math.sin(b.t * 40) * 0.25;
+      if (b.t > 0.75) this.end(id);   // 호스트의 shotEnd 를 못 받았을 때의 안전장치
+    }
+  }
+
+  clear() { for (const id of [...this.live.keys()]) this.end(id); }
+}
+return { LaserFx };
+})();
 // ===== AuraFx.js =====
 __M.AuraFx = (() => {
 // AuraFx.js — 필살기 게이지 MAX 오라 (드래곤볼 초사이어인 스타일: 몸을 감싸고 위로 치솟는 황금 불꽃 + 발밑 파동).
@@ -2880,7 +3026,7 @@ function ippoHairGeometry(P,style='ippo-reference') {
       }
       if(style==='longblack')for(let i=0;i<9;i++){const a=i/9*Math.PI*2;blade([Math.sin(a)*.09,.14,Math.cos(a)*.08-.03],[Math.sin(a)*.145,.225+Math.sin(i)*.025,Math.cos(a)*.13-.04],.029,.021);}
     }else{
-      const mane=style==='mane',slick=style==='slick',count=mane?24:22;
+      const mane=style==='mane',slick=style==='slick'||style==='twintail',count=mane?24:22;   // 트윈테일은 두피에 붙는 매끈한 머리 + Rig 쪽 꽁지
       for(let i=0;i<count;i++){
         const a=i/count*Math.PI*2,x=Math.sin(a),z=Math.cos(a),rear=Math.max(0,-z);
         blade([x*.10,.12+Math.sin(i)*.014,z*.09-.025],[x*(mane?.19:slick?.145:.17),slick?.14+.03*rear:.23+Math.sin(i*1.8)*.028,z*(slick?.14:.16)-(mane?.09:slick?.11:.035)],.034,.025);
@@ -2908,10 +3054,54 @@ function ippoHairGeometry(P,style='ippo-reference') {
 }
 
 const faces=new Map();
+/** 예쁜 얼굴 (우랄라): 크고 둥근 눈 + 하늘색 홍채 + 긴 속눈썹 + 가는 아치 눈썹 + 볼터치 + 작은 분홍 입술. 만화 여주인공 얼굴 */
+function prettyFace(g,def,blink,hurt){
+  const irisCol=def.irisColor||'#4fb6ff',lash='#2a1a2e';
+  // 볼터치
+  for(const sign of [-1,1]){const cx=256+sign*128;const bl=g.createRadialGradient(cx,300,4,cx,300,46);bl.addColorStop(0,'rgba(255,120,150,.42)');bl.addColorStop(1,'rgba(255,120,150,0)');g.fillStyle=bl;g.beginPath();g.arc(cx,300,46,0,Math.PI*2);g.fill();}
+  for(const sign of [-1,1]){
+    g.save();g.translate(sign<0?150:362,214);g.scale(sign,1);
+    if(blink){
+      // 감은 눈: 아래로 볼록한 곡선 + 속눈썹
+      g.strokeStyle=lash;g.lineWidth=8;g.lineCap='round';g.beginPath();g.moveTo(-66,-2);g.quadraticCurveTo(-4,26,64,-6);g.stroke();
+      g.lineWidth=5;for(let i=0;i<4;i++){const x=20+i*13;g.beginPath();g.moveTo(x,8-i*3);g.lineTo(x+9,22-i*4);g.stroke();}
+    } else {
+      const h=hurt?.7:1;g.save();g.scale(1,h);
+      // 흰자: 크고 둥근 아몬드
+      g.beginPath();g.moveTo(-70,-4);g.quadraticCurveTo(-30,-58,40,-46);g.quadraticCurveTo(84,-30,70,18);g.quadraticCurveTo(30,58,-40,42);g.quadraticCurveTo(-82,26,-70,-4);g.closePath();
+      g.fillStyle='#fbfbff';g.fill();g.save();g.clip();
+      // 홍채: 하늘색 그라데이션 + 큰 하이라이트 두 개
+      const iris=g.createRadialGradient(0,4,6,0,4,40);iris.addColorStop(0,'#0c2a4a');iris.addColorStop(.45,irisCol);iris.addColorStop(.85,'#9fe0ff');iris.addColorStop(1,'#2f6fa8');
+      g.fillStyle=iris;g.beginPath();g.ellipse(0,4,36,40,0,0,Math.PI*2);g.fill();
+      g.fillStyle='#0a0c14';g.beginPath();g.ellipse(0,6,18,22,0,0,Math.PI*2);g.fill();
+      g.fillStyle='rgba(40,20,60,.28)';g.fillRect(-90,-70,180,34);   // 윗 눈꺼풀 그림자
+      g.fillStyle='#fff';g.beginPath();g.ellipse(-13,-12,12,14,0,0,Math.PI*2);g.fill();g.beginPath();g.arc(12,20,5,0,Math.PI*2);g.fill();
+      g.restore();
+      // 윗 라인 굵게 + 속눈썹 3~4가닥 (바깥쪽으로 길게)
+      g.strokeStyle=lash;g.lineWidth=9;g.lineCap='round';g.beginPath();g.moveTo(-70,-4);g.quadraticCurveTo(-30,-58,40,-46);g.quadraticCurveTo(70,-40,74,-14);g.stroke();
+      g.lineWidth=6;for(let i=0;i<4;i++){const x=28+i*14,y=-48+i*7;g.beginPath();g.moveTo(x,y);g.lineTo(x+16,y-16+i*2);g.stroke();}
+      g.lineWidth=3;g.strokeStyle='rgba(42,26,46,.7)';g.beginPath();g.moveTo(-58,26);g.quadraticCurveTo(0,58,64,22);g.stroke();
+      g.restore();
+    }
+    // 가는 아치 눈썹 (머리색 계열 진한 톤)
+    g.strokeStyle=def.browColor||'#7a2d55';g.lineWidth=7;g.lineCap='round';g.beginPath();
+    const lift=hurt?6:0;g.moveTo(-70,-78+lift);g.quadraticCurveTo(-10,-112,66,-88+lift);g.stroke();
+    g.restore();
+  }
+  // 코: 작은 점 두 개
+  g.strokeStyle='rgba(140,70,60,.55)';g.lineWidth=3;g.lineCap='round';g.beginPath();g.moveTo(246,322);g.quadraticCurveTo(252,318,258,322);g.stroke();
+  // 입: 작고 도톰한 분홍 입술, 미소
+  g.fillStyle='#ff4f7d';g.strokeStyle='#a8244f';g.lineWidth=3;
+  if(hurt){g.beginPath();g.ellipse(256,392,20,14,0,0,Math.PI*2);g.fill();g.stroke();g.fillStyle='#4d1a2a';g.beginPath();g.ellipse(256,394,10,8,0,0,Math.PI*2);g.fill();}
+  else{g.beginPath();g.moveTo(228,384);g.quadraticCurveTo(256,372,284,384);g.quadraticCurveTo(268,404,256,404);g.quadraticCurveTo(244,404,228,384);g.closePath();g.fill();g.stroke();
+    g.fillStyle='rgba(255,255,255,.55)';g.beginPath();g.ellipse(248,392,7,3,0,0,Math.PI*2);g.fill();}
+}
+
 function ippoFaceTexture(expression='focused',def={referenceIppo:true}) {
-  const key=[def.name,def.eyes,def.brows,def.mouth,def.gender,expression].join('|');
+  const key=[def.name,def.eyes,def.brows,def.mouth,def.gender,def.pretty?'pretty':'',expression].join('|');
   if(faces.has(key))return faces.get(key);
   const c=document.createElement('canvas');c.width=c.height=512;const g=c.getContext('2d'),blink=expression==='blink',hurt=expression==='hurt';
+  if(def.pretty){prettyFace(g,def,blink,hurt);const tex=new THREE.CanvasTexture(c);tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=4;faces.set(key,tex);return tex;}
   for(const sign of [-1,1]){
     g.save();g.translate(sign<0?151:361,204);g.scale(sign,1);
     if(!def.referenceIppo)g.scale(def.eyes==='big'?.95:1,def.eyes==='narrow'?.62:def.eyes==='big'?1.08:.94);
@@ -3154,9 +3344,19 @@ const CHARACTERS = {
     prop: { height: 0.94, torsoW: 0.98, torsoD: 0.94, armR: 0.94, armLen: 1.04, legR: 0.96, legLen: 0.96, headS: 1.02, headY: 1.0, neck: 0.95, muscle: 0.45 },
     hp: 150, powerMul: 1.05, speedMul: 1.0, style: 'istp', guardMax: 100, guardRegen: 1.0, weaveCd: 1.3, gaugeMul: 0.95, hidden: true,
   },
+  // 우랄라: 스페이스 채널 5 리포터. 길쭉하고 늘씬. 분홍 트윈테일 + 헤드셋, 흰 크롭탑·미니스커트, 흰 롱부츠, 제트팩. 쌍권총 레이저(원거리)
+  ulala: {
+    name: 'ULALA', gender: 'f', skin: 0xffe3d2, trunks: 0xffffff, trunksTrim: 0xc9ccd6, trunksText: '',
+    bodyColor: 0xffffff, sleeves: 0xffe3d2, pants: 0xffe3d2,
+    gloves: 0xffe3d2, noGloves: true, shoes: 0xffffff, shoesTrim: 0xff6a2a,
+    hair: 0xff5fa8, hairStyle: 'twintail', brows: 'thin', eyes: 'big', mouth: 'grin', pretty: true, irisColor: '#4fb6ff', browColor: '#8a3a66',
+    accessory: 'headset', skirt: 0xffffff, boots: 0xffffff, jetpack: 0xc9ccd6, hold: { L: 'raygun', R: 'raygun' },
+    prop: { height: 1.2, torsoW: 0.78, torsoD: 0.7, armR: 0.7, armLen: 1.12, legR: 0.7, legLen: 1.24, headS: 0.95, headY: 1.05, neck: 1.3, muscle: 0 },
+    hp: 70, powerMul: 0.75, speedMul: 1.3, style: 'idol', guardMax: 60, guardRegen: 1.2, weaveCd: 1.0, gaugeMul: 1.1, hidden: true, ranged: true,
+  },
 };
 const CHARACTER_ORDER = ['ippo', 'mashiba', 'miyata', 'sendo'];
-const HIDDEN_ORDER = ['chaechae', 'jjeonghyo', 'ppyeo', 'ohsh', 'jungjuwon', 'gokomong'];
+const HIDDEN_ORDER = ['chaechae', 'jjeonghyo', 'ppyeo', 'ohsh', 'jungjuwon', 'gokomong', 'ulala'];
 
 // 코치 (링 밖 코너에 서 있는 NPC): 트레이닝복, 글러브 없음
 const COACH_DEFS = [
@@ -3291,7 +3491,17 @@ function geometriesFor(def) {
 
 // 손에 드는 소품: 책 / 덤벨 / 하이바(헬멧) / 녹차병
 function buildHeldItem(kind, glove, part, sx) {
-  if (kind === 'book') {
+  if (kind === 'raygun') {
+    // 레이저 권총: 파란 몸통 + 흰 손잡이 + 둥근 총구 (스페이스 채널 5)
+    const body = part(new THREE.CylinderGeometry(0.03, 0.036, 0.2, 10), 0x2b7fd6, glove, 0, -0.01, 0.12);
+    body.rotation.x = Math.PI / 2;
+    const ring = part(new THREE.TorusGeometry(0.038, 0.012, 8, 14), 0xffffff, body, 0, 0.06, 0, false);
+    ring.rotation.x = Math.PI / 2;
+    const tip = part(new THREE.SphereGeometry(0.03, 10, 8), 0x8fd6ff, body, 0, 0.115, 0, false);
+    if (tip.material.emissive) { tip.material.emissive.set(0x4fb0ff); tip.material.emissiveIntensity = 1.4; }
+    const grip = part(new THREE.BoxGeometry(0.03, 0.09, 0.04), 0xffffff, glove, 0, -0.05, 0.05, false);
+    grip.rotation.x = 0.35;
+  } else if (kind === 'book') {
     const cover = part(new THREE.BoxGeometry(0.19, 0.25, 0.045), 0x8a2b2b, glove, 0, -0.02, 0.06);
     cover.rotation.set(0.25, sx * 0.25, 0);
     const pages = part(new THREE.BoxGeometry(0.175, 0.235, 0.05), 0xf6f1e2, cover, 0, 0, 0.004, false);
@@ -3519,6 +3729,14 @@ uniform float uSpecEdge; uniform float uHairBand;
     deformers.push(attachLimb(thigh, shin, ghost ? G.ghostLeg : G.legSurface, M(def.pants || def.skin, def.pants ? 'cloth' : 'skin'), !ghost));
     const foot = part(G.foot, def.shoes, shin, 0, -legLen, 0.05);
     part(G.footTrim, def.shoesTrim, shin, 0, -legLen - 0.04, 0.05, false);
+    if (def.boots && !ghost) {
+      // 롱부츠: 정강이 전체를 덮는 흰 통 + 두꺼운 플랫폼 굽
+      const boot = part(new THREE.CylinderGeometry(0.072 * P.legR, 0.085 * P.legR, legLen * 0.98, 12, 1, true), def.boots, shin, 0, -legLen * 0.5, 0.005, false);
+      boot.material.side = THREE.DoubleSide;
+      const cuff = part(new THREE.TorusGeometry(0.078 * P.legR, 0.012, 6, 14), 0xd8dbe4, shin, 0, -0.01, 0.005, false);
+      cuff.rotation.x = Math.PI / 2;
+      part(new THREE.BoxGeometry(0.16, 0.05, 0.22), def.shoesTrim, shin, 0, -legLen - 0.075, 0.06, false);
+    }
     return { thigh, shin, foot };
   };
   const legL = mkLeg(1);
@@ -3547,6 +3765,14 @@ uniform float uSpecEdge; uniform float uHairBand;
       const nose = new THREE.Mesh(new THREE.CircleGeometry(0.009, 10), new THREE.MeshBasicMaterial({ color: 0x14141c }));
       nose.position.set(0, -0.012, 0.002); art.add(nose);
     }
+  }
+  // 제트팩 (우랄라): 등 뒤 은색 탱크 두 개
+  if (def.jetpack && !ghost) {
+    for (const sx of [-1, 1]) {
+      const tank = part(new THREE.CapsuleGeometry(0.06, 0.2, 4, 10), def.jetpack, waist, sx * 0.075, 0.42, -0.16 * P.torsoD - 0.05, false);
+      part(new THREE.CylinderGeometry(0.045, 0.06, 0.05, 10), 0x8a8fa0, tank, 0, -0.17, 0, false);
+    }
+    part(new THREE.BoxGeometry(0.2, 0.08, 0.04), 0x8a8fa0, waist, 0, 0.42, -0.16 * P.torsoD, false);
   }
   // 원피스 치마 (채채더킴)
   if (def.skirt) {
@@ -3664,6 +3890,29 @@ uniform float uSpecEdge; uniform float uHairBand;
       const arm = part(new THREE.BoxGeometry(0.02, 0.012, 0.09), 0x15151c, gl, sx * 0.108, 0.006, -0.05, false);
     }
     part(new THREE.BoxGeometry(0.038, 0.012, 0.014), 0x15151c, gl, 0, 0.008, 0, false);
+  }
+  // 트윈테일 (우랄라): 양옆 위쪽에서 뒤로 뻗는 분홍 꽁지 + 앞머리
+  if (!ghost && def.hairStyle === 'twintail') {
+    for (const sx of [-1, 1]) {
+      const base = part(new THREE.SphereGeometry(0.05 * P.headS, 10, 8), def.hair, head, sx * 0.15 * P.headS, hy + 0.1 * P.headS, -0.04, false);
+      const tail = part(new THREE.CapsuleGeometry(0.045 * P.headS, 0.22 * P.headS, 4, 10), def.hair, head, sx * 0.2 * P.headS, hy + 0.02 * P.headS, -0.1, false);
+      tail.rotation.set(0.9, 0, sx * 0.55);
+      const tip = part(new THREE.ConeGeometry(0.042 * P.headS, 0.16 * P.headS, 10), def.hair, head, sx * 0.25 * P.headS, hy - 0.16 * P.headS, -0.2, false);
+      tip.rotation.set(2.6, 0, sx * 0.4);
+      const band = part(new THREE.TorusGeometry(0.052 * P.headS, 0.012, 6, 12), 0xffffff, head, sx * 0.155 * P.headS, hy + 0.09 * P.headS, -0.045, false);
+      band.rotation.set(0.8, 0, sx * 0.5);
+    }
+    const bang = part(new THREE.BoxGeometry(0.2 * P.headS, 0.06, 0.05), def.hair, head, 0.02, hy + 0.11 * P.headS, 0.12 * P.headS, false);
+    bang.rotation.set(-0.3, 0, -0.15);
+  }
+  // 헤드셋 (우랄라): 가는 은색 밴드 + 왼쪽 이어피스 + 마이크 붐
+  if (!ghost && def.accessory === 'headset') {
+    const band = part(new THREE.TorusGeometry(0.19 * P.headS, 0.012, 6, 20, Math.PI), 0xd8dbe4, head, 0, hy + 0.02, -0.02, false);
+    const cup = part(new THREE.CylinderGeometry(0.045, 0.045, 0.03, 12), 0xffffff, head, 0.18 * P.headS, hy, 0, false);
+    cup.rotation.z = Math.PI / 2;
+    const boom = part(new THREE.CylinderGeometry(0.008, 0.008, 0.16, 6), 0xd8dbe4, head, 0.14 * P.headS, hy - 0.05, 0.1, false);
+    boom.rotation.set(0.5, 0, 0.9);
+    const mic = part(new THREE.SphereGeometry(0.018, 8, 6), 0xff6a2a, head, 0.075 * P.headS, hy - 0.085, 0.16 * P.headS, false);
   }
   const skinOutlineMats = [...deformers.map(d => d.ink), torso.userData.ink].filter(Boolean);
   const rig = {
@@ -6330,11 +6579,13 @@ class Fighter {
     this.rattle = 0;
     this.airY = 0; this.airV = 0;      // 띄워짐 (가젤/스매시)
     this.ko = false; this.koT = 0; this.koSpin = 0; this.koAngle = 0; this.koLift = 0;
+    this.spin = 0;   // 피루엣(우랄라 사이드 스텝) 제자리 회전 각
     this.koFly = false; this.koLandT = -1;   // KO: 위로 붕 떠서 뒤로 날아가다 뒤통수부터 떨어진다
     this.combo = 0; this.comboTimer = 0;
     this.inputSeq = []; this.seqT = 0;   // 콤비네이션 입력 기록
     this.target = null;
     this.events = [];
+    this.shots = []; this._shotId = 0;   // 원거리 캐릭터(우랄라)의 레이저 탄
     this.gloveL = new THREE.Vector3(); this.gloveR = new THREE.Vector3();
     this.prevGloveL = new THREE.Vector3(); this.prevGloveR = new THREE.Vector3();
     this.footL = new THREE.Vector3(); this.footR = new THREE.Vector3();
@@ -6570,6 +6821,27 @@ class Fighter {
       this.events.push({ type: 'special', kind });
       return true;
     }
+    if (spec.dash) {
+      // 사이드 스텝 (우랄라 I): A/D 누른 쪽(없으면 번갈아)으로 0.26초 빠르게 옆 이동. 이동 중엔 모든 공격 회피 (필살기 제외)
+      const sgn = this._dashSign || 1;
+      this.sideDash = { t: 0, dur: spec.dur, dir: this.side.clone().multiplyScalar(sgn) };
+      this.punch = null; this.queue.length = 0;
+      this.audio.dodge(sgn);
+      this.subs.show(this.specialLine(spec, slotKey), { duration: 0.5, mid: false });
+      this.events.push({ type: 'special', kind });
+      return true;
+    }
+    if (spec.self) {
+      // 자기 버프형 (우랄라 춤추기): 1.3초 춤추며 슈퍼아머, 기 게이지 +18, 가드 게이지 회복
+      this.danceT = spec.dur; this.dancePartner = null; this.danceVictim = false;
+      this.armor = spec.dur + 0.1;
+      this.dempsey.addGauge(spec.gauge || 15);
+      this.stam = Math.min(this.stamMax, this.stam + this.stamMax * 0.5);
+      this.audio.riser(0.3, 0.2);
+      this.subs.show(this.specialLine(spec, slotKey), { duration: 0.9, mid: true });
+      this.events.push({ type: 'special', kind });
+      return true;
+    }
     if (kind === 'dumbbellPress') this.audio.clang(0.9);
     else if (kind === 'marketerPunch') { this.audio.clang(0.3); this.audio.shutter(); }
     else if (kind === 'helmetBash') this.audio.engine(0.5);
@@ -6590,7 +6862,7 @@ class Fighter {
     const fk = this.kit.finisher;
     const F = FINISHERS[fk] || FINISHERS.finisherHook;
     const charge = d.charge;
-    const ULT = { reels: 3.4, barbell: 3.6, bike: 3.0, forge: 3.3, snackRain: 3.6, coldCut: 3.4, cafeRush: 3.2, coffeeBarrage: 3.6 };
+    const ULT = { reels: 3.4, barbell: 3.6, bike: 3.0, forge: 3.3, snackRain: 3.6, coldCut: 3.4, cafeRush: 3.2, coffeeBarrage: 3.6, danceTime: 3.6 };
     if (fk === 'cafeRush') {
       // ---- 카페 돌격: 경로상의 모두에게 스턴 + 데미지 (넘어뜨리진 않는다) ----
       this.ultT = 3.2; this.ultKind = fk; this.ultTarget = this.target;
@@ -6631,11 +6903,18 @@ class Fighter {
       // 연출 동안 나눠서 들어간다. 채채(릴스)·오승현(간식 폭격)은 기본 파워가 낮아 필살기만은 크게 (경량 캐릭터의 한 방)
       const ULT_MUL = { reels: 1.8, snackRain: 1.8, forge: 1.15, coffeeBarrage: 1.3 };
       tg.ultDmg = (34 + 7 * charge) * this.def.powerMul * (ULT_MUL[fk] || 1) * (guardPierce && tg.guard ? 0.5 : 1);
+      if (fk === 'danceTime') {
+        // 댄스 타임: 상대 최대 체력의 1/3 고정. 둘이 나란히 서서 같이 춤춘다 (기존 파트너 댄스 재사용)
+        tg.ultDmg = (tg.maxHp || tg.def.hp) / 3;
+        this.danceT = dur; this.dancePartner = tg; this.danceVictim = false;
+        tg.danceT = dur; tg.dancePartner = this; tg.danceVictim = true;
+        this.danceStay = true; tg.danceStay = true;   // 끌어오지 않고 각자 제자리에서 춤춘다
+      }
       if (guardPierce && tg.guard) { tg.guard = false; tg.stam = 0; tg.guardBroken = Math.max(tg.guardBroken || 0, 2.0); tg.events.push({ type: 'guardBreak' }); }
       tg.ultDmgRate = tg.ultDmg / dur;
       d.consume();
       this.audio.finisherWind(0.5);
-      const line = fk === 'reels' ? '잡았다! 릴스 각이야, 찍는다!' : fk === 'barbell' ? '자, 10회 3세트 간다!' : fk === 'snackRain' ? '비, 빵이 떨어진다…!' : fk === 'coldCut' ? '…그래서 어쩌라고.' : fk === 'forge' ? '망치로 뚝배기 강화하기!' : fk === 'coffeeBarrage' ? '커피 마셔야 돼!! 받아!!' : '어… 이거 무거운데—!!';
+      const line = fk === 'reels' ? '잡았다! 릴스 각이야, 찍는다!' : fk === 'barbell' ? '자, 10회 3세트 간다!' : fk === 'snackRain' ? '비, 빵이 떨어진다…!' : fk === 'coldCut' ? '…그래서 어쩌라고.' : fk === 'forge' ? '망치로 뚝배기 강화하기!' : fk === 'coffeeBarrage' ? '커피 마셔야 돼!! 받아!!' : fk === 'danceTime' ? '자, 댄스 타임!! 업, 다운, 츄!' : '어… 이거 무거운데—!!';
       this.subs.show(line, { duration: 1.6, strong: true });
       this.events.push({ type: 'ultStart', kind: fk, target: tg.slot, charge });
       return true;
@@ -6694,6 +6973,8 @@ class Fighter {
     dmg *= tired;
     this.readSkill = Math.min(0.3, this.readSkill + 0.025);
 
+    // ---- 사이드 스텝 회피 (우랄라 I): 이동 중엔 필살기 빼고 전부 피한다 ----
+    if (this.sideDash && !ev.finisher) { this.dempsey.addGauge(2); return { dmg: 0, evaded: true, ko: false }; }
     // ---- 뎀프시롤 회피: 롤 중엔 공격도 하면서 상체를 크게 흔들어 70% 확률로 피한다 (필살기·카운터는 예외) ----
     if (this.stanceStyle === 'dempsey' && this.dempsey.active && !ev.finisher && !ev.counter && !counter) {
       if (Math.random() < (ev.fromU ? 0.1 : 0.7)) {   // U 반격기는 10% 만 회피
@@ -6935,6 +7216,15 @@ class Fighter {
     }
     // (자동 전진/거리 유지 제거 — 제자리에서도 롤/스탠스 가능, 이동은 전부 WASD)
     if (this.backstep > 0) { this.backstep -= dt; this.pos.addScaledVector(this.forward, -4.2 * dt); }
+    if (this.sideDash) {
+      const sd = this.sideDash; sd.t += dt;
+      const k = Math.min(1, sd.t / sd.dur), spd = 5.2 * (1 - k * k);   // 초반 빠르고 끝에서 멈춘다 (약 1.5m)
+      this._advance(sd.dir, spd * dt);
+      // 빙그르르 한 바퀴 (이동 방향으로), 끝에서 정확히 원래 방향
+      const sgn = sd.dir.dot(this.side) > 0 ? 1 : -1;
+      this.spin = sgn * Math.PI * 2 * (1 - Math.pow(1 - k, 2.2));
+      if (sd.t >= sd.dur) { this.sideDash = null; this.spin = 0; }
+    }
     this.pos.addScaledVector(this.knock, dt);
     // KO 로 떠 있는 동안은 공중에서 거의 안 줄어든다 (뒤로 시원하게 날아가게)
     this.knock.multiplyScalar(Math.exp(-dt * (this.ko && this.koFly ? 1.1 : this.stagger > 0 ? 9 : 6.5)));
@@ -7081,7 +7371,7 @@ class Fighter {
     } else if (!this.busy && !this.ko) {
       if (finPress && d.maxSpeed) this.startFinisher();
       else if (input.justPressed('KeyU')) this.startSpecial('U');
-      else if (input.justPressed('KeyI')) this.startSpecial('I');
+      else if (input.justPressed('KeyI')) { this._dashSign = input.isDown('KeyA') ? 1 : input.isDown('KeyD') ? -1 : -(this._lastDash || 1); this._lastDash = this._dashSign; this.startSpecial('I'); }
       else {
         const press = jPress ? 'J' : kPress ? 'K' : null;
         if (press) {
@@ -7307,8 +7597,8 @@ class Fighter {
       const pu = this.punch;
       pu.t += dt;
       const info = applyPunchToPose(p, pu);
-      // 스텝인
-      if (tgt && !d.active) {
+      // 스텝인 (원거리 캐릭터의 기본 사격은 제자리에서 — 자동으로 파고들면 원거리의 의미가 없다)
+      if (tgt && !d.active && !(this.def.ranged && !pu.kind)) {
         const reach = this.reach;
         const stepSpd = pu.step || 3.2;
         if (info.p < 0.28) {
@@ -7322,10 +7612,42 @@ class Fighter {
       }
       if (pu.t >= pu.dur) { this.punch = null; this.events.push({ type: 'punchEnd', hit: !!pu.hit }); }
       if (!d.active) this.bufferedHook = null;
+      // 원거리 캐릭터: 기본 펀치(스트레이트/훅)는 주먹 대신 레이저 탄을 쏜다. 탄 판정은 아래 shots 갱신에서
+      if (this.def.ranged && !pu.kind && (pu.type === 'straight' || pu.type === 'hook') && !pu.shotFired && info.p > 0.22) {
+        pu.shotFired = true; pu.hit = true;   // 주먹 판정은 쓰지 않는다
+        this._applyNow(p);
+        const from = (pu.side === 'L' ? this.gloveL : this.gloveR).clone();
+        const dir = this.forward.clone();
+        const id = ++this._shotId;
+        this.shots.push({ id, pos: from, dir, side: pu.side, type: pu.type, power: pu.power, life: 0.7, maxSpeed: d.maxSpeed, dempsey: d.active, heavy: pu.type === 'hook' });
+        this.events.push({ type: 'shot', id, x: from.x, y: from.y, z: from.z, dx: dir.x, dz: dir.z, side: pu.side, hook: pu.type === 'hook' });
+        this.audio.whoosh(pu.side === 'L' ? -1 : 1, 1.6, 0.35);
+      }
       if (!pu.hit && info.p > (pu.kind ? 0.24 : 0.3) && info.p < 0.66) {
         this._applyNow(p);
         const radius = 0.85 * (pu.hitRadius || (pu.type === 'flicker' ? (st === 'flicker' && d.active ? 0.55 : 0.48) : pu.kind ? 0.62 : 0.42));
         hitEvent = tryHit(pu.side, radius, (tg, h) => { pu.hit = true; return { attacker: this, target: tg, side: pu.side, type: pu.type, power: pu.power, pos: h.point.clone(), zone: pu.zoneForce || h.zone, dir: this.forward.clone(), maxSpeed: d.maxSpeed, dempsey: d.active, finisher: !!pu.rollFinish, roll: !!pu.roll, charge: pu.rollFinish ? d.charge : 0, heavy: !!pu.heavy, counter: !!pu.counter || !!pu.forceCounter, counterMul: pu.counterMul || 1, launch: pu.launch || 0, liver: !!pu.liver, staggerT: pu.staggerT || 0, kind: pu.kind || null, fromU: !!pu.fromU }; }, !!pu.kick);
+      }
+    }
+
+    // ---- 레이저 탄 (원거리): 14m/s 직진, 몸통 선분에 닿으면 펀치와 같은 피격 이벤트 ----
+    if (this.shots.length) {
+      const SPD = 14;
+      for (let i = this.shots.length - 1; i >= 0; i--) {
+        const sh = this.shots[i];
+        sh.pos.addScaledVector(sh.dir, SPD * dt); sh.life -= dt;
+        let done = sh.life <= 0 || Math.abs(sh.pos.x) > 7 || Math.abs(sh.pos.z) > 7;
+        if (!done) {
+          for (const f of others) {
+            if (pointSegmentDist(sh.pos, f.hipsPos, f.headPos) < 0.42) {
+              const zone = sh.pos.y > f.hipsPos.y + (f.headPos.y - f.hipsPos.y) * 0.72 ? 'head' : 'body';
+              const ev = { attacker: this, target: f, side: sh.side, type: sh.type, power: sh.power, pos: sh.pos.clone(), zone, dir: sh.dir.clone(), maxSpeed: sh.maxSpeed, dempsey: sh.dempsey, finisher: false, roll: false, charge: 0, heavy: sh.heavy, counter: false, counterMul: 1, launch: 0, liver: false, staggerT: 0, kind: null, fromU: false, laser: true };
+              if (!hitEvent) hitEvent = ev; else this.events.push({ type: 'extraHit', ev });
+              done = true; break;
+            }
+          }
+        }
+        if (done) { this.events.push({ type: 'shotEnd', id: sh.id }); this.shots.splice(i, 1); }
       }
     }
 
@@ -7678,8 +8000,7 @@ class Fighter {
         this.yaw = Math.atan2(this.forward.x, this.forward.z);
         this.side.set(this.forward.z, 0, -this.forward.x);
       } else if (pr) {
-        const want = pr.pos.clone().addScaledVector(pr.forward, 0.95);
-        this.pos.lerp(want, Math.min(1, dt * 8));
+        if (!this.danceStay) { const want = pr.pos.clone().addScaledVector(pr.forward, 0.95); this.pos.lerp(want, Math.min(1, dt * 8)); }
         this.forward.copy(pr.pos).sub(this.pos).setY(0).normalize();
         this.yaw = Math.atan2(this.forward.x, this.forward.z);
       }
@@ -7693,10 +8014,18 @@ class Fighter {
       p.thighLX += -0.25 + sw * 0.35; p.thighRX += -0.25 - sw * 0.35; p.shinL += Math.max(0, sw) * 0.7; p.shinR += Math.max(0, -sw) * 0.7;
       this.queue.length = 0;
       if (this.danceT <= 0) {
-        this.danceT = 0; this.dancePartner = null;
+        this.danceT = 0; this.dancePartner = null; this.danceStay = false;
         if (this.danceVictim && !this.ko) { this.downT = this.downDur; this.hp = Math.max(0, this.hp - 6); if (this.hp <= 0) this._die(); }
         this.danceVictim = false;
       }
+    }
+    // ---- 피루엣 포즈: 발끝으로 서서 한 팔은 머리 위 곡선, 한 팔은 옆으로, 한 다리는 뒤로 뻗고 우아하게 돈다 ----
+    if (this.sideDash) {
+      const sd = this.sideDash, u = Math.min(1, sd.t / sd.dur), k = Math.sin(u * Math.PI), sgn = sd.dir.dot(this.side) > 0 ? 1 : -1;
+      p.hipsY += 0.06 * k; p.hipsZ += sgn * 0.08 * k; p.waistZ += -sgn * 0.12 * k; p.chestX += -0.1 * k; p.headX += -0.15 * k; p.headZ += sgn * 0.12 * k;
+      if (sgn > 0) { p.shLX += -2.9 * k; p.shLZ += 0.55 * k; p.elL += -0.7 * k; p.shRX += -1.3 * k; p.shRZ += -1.35 * k; p.elR += -0.25 * k; }
+      else { p.shRX += -2.9 * k; p.shRZ += -0.55 * k; p.elR += -0.7 * k; p.shLX += -1.3 * k; p.shLZ += 1.35 * k; p.elL += -0.25 * k; }
+      p.thighLX += (sgn > 0 ? 0.55 : -0.25) * k; p.thighRX += (sgn > 0 ? -0.25 : 0.55) * k; p.shinL += (sgn > 0 ? 0.9 : 0.15) * k; p.shinR += (sgn > 0 ? 0.15 : 0.9) * k;
     }
     // ---- 스태거 ----
     if (this.stagger > 0) {
@@ -7810,7 +8139,7 @@ class Fighter {
 
   _applyNow(p) {
     this.rig.root.position.set(this.pos.x, this.airY - (this.fallY || 0), this.pos.z);
-    this.rig.root.rotation.y = this.yaw + this.koAngle;
+    this.rig.root.rotation.y = this.yaw + this.koAngle + (this.spin || 0);
     applyPose(this.rig, p);
     this.updateWorldPoints();
   }
@@ -7824,7 +8153,7 @@ class Fighter {
     const po = new Array(29);
     let i = 0; for (const k in this.pose) po[i++] = Math.round(this.pose[k] * 100);   // 0.01 단위 정수 (소수점 문자열보다 짧아 4인 60Hz 페이로드를 줄인다)
     return {
-      x: +this.pos.x.toFixed(2), z: +this.pos.z.toFixed(2), y: +(this.yaw + this.koAngle).toFixed(3), rx: +this.rig.root.rotation.x.toFixed(2), ay: +this.airY.toFixed(2),
+      x: +this.pos.x.toFixed(2), z: +this.pos.z.toFixed(2), y: +(this.yaw + this.koAngle + (this.spin || 0)).toFixed(3), rx: +this.rig.root.rotation.x.toFixed(2), ay: +this.airY.toFixed(2),
       hp: +this.hp.toFixed(1), f: flags, fy: +(this.fallY || 0).toFixed(2),
       st: +Math.max(0, this.stagger).toFixed(2), sk: this.staggerKind === 'groggy' ? 2 : this.staggerKind === 'liver' ? 1 : 0, dI: +d.intensity.toFixed(3), sw: +d.sway.toFixed(3), sv: +d.swayVel.toFixed(2),
       bl: +d.blend.toFixed(2), ga: +d.gauge.toFixed(1), ch: d.charge, ra: +this.rattle.toFixed(2),
@@ -8622,12 +8951,12 @@ const { CHARACTERS } = __M.Rig;
 // 캐릭터별 목소리 톤 (여성 캐릭터는 높고 빠르게)
 const PITCH = {
   ippo: 1.15, miyata: 1.05, mashiba: 0.72, sendo: 0.65, coach: 0.5,
-  chaechae: 1.35, jjeonghyo: 1.15, ohsh: 1.45,         // 여성
+  chaechae: 1.35, jjeonghyo: 1.15, ohsh: 1.45, ulala: 1.3,         // 여성
   ppyeo: 0.85, jungjuwon: 0.7, gokomong: 0.8,          // 남성
 };
 const RATE = {
   ippo: 1.3, miyata: 1.25, mashiba: 1.05, sendo: 0.95, coach: 1.15,
-  chaechae: 1.45, jjeonghyo: 1.1, ohsh: 1.35,
+  chaechae: 1.45, jjeonghyo: 1.1, ohsh: 1.35, ulala: 1.4,
   ppyeo: 1.2, jungjuwon: 1.0, gokomong: 0.85,
 };
 const genderOf = (charKey) => (charKey === 'coach' ? 'm' : ((CHARACTERS[charKey] && CHARACTERS[charKey].gender) || 'm'));
@@ -9493,6 +9822,7 @@ const { Intro } = __M.Intro;
 const { CHARACTERS, CHARACTER_ORDER, HIDDEN_ORDER } = __M.Rig;
 const { buildPortraits } = __M.Portraits;
 const { AuraFx } = __M.AuraFx;
+const { LaserFx } = __M.LaserFx;
 const { KITS, SPECIALS } = __M.Specials;
 const { TouchControls, isTouchDevice } = __M.Touch;
 const { Music } = __M.Music;
@@ -9569,6 +9899,7 @@ class Game {
     this.sparks = new HitSparks(this.scene);
     this.ultFx = new UltimateFx(this.scene, this.audio, this.fx, this.camera);
     this.auraFx = new AuraFx(this.scene);   // 게이지 MAX 오로라 (전원 화면에 보인다)
+    this.laserFx = new LaserFx(this.scene); // 우랄라 레이저 탄
     // 거리감 보조: 내 발밑에 리치 반경 링 (상대가 사거리 안이면 붉게)
     this.reachRing = new THREE.Mesh(new THREE.RingGeometry(0.92, 1.0, 48), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide }));
     this.reachRing.rotation.x = -Math.PI / 2; this.reachRing.position.y = 0.015; this.reachRing.visible = false;
@@ -9729,6 +10060,7 @@ class Game {
       jjeonghyo: { style: '히든 · 3대 500', st: '<b>기본</b> 덤벨 펀치(무겁고 느림) · <b>U</b> 덤벨 훅 · <b>I</b> 데드리프트 업(띄움) · <b>L</b> <b>바벨 내려찍기</b><br><i>기 게이지 20% 느림 · 체력 최고</i>', pw: 5, sp: 2, hp: 5 },
       ohsh: { style: '히든 · 빵 러버', st: '<b>기본</b> 빵 들고 타격(가볍고 빠름) · <b>U</b> 갑자기 때리기(기습·스턴) · <b>I</b> 빵 던지기 · <b>L</b> <b>간식 폭격</b>(소금빵·호두과자 120개 낙하)<br><i>가장 작고 약하지만 가장 빨리 기가 참</i>', pw: 1, sp: 5, hp: 1 },
       jungjuwon: { style: '히든 · 헤드폰 먹방', st: '<b>기본</b> 묵직한 타격 · <b>U</b> 삼각김밥 던지기 · <b>I</b> 배치기(띄움) · <b>L</b> <b>커피 폭격</b>(상대를 잡고 카페에서 꺼낸 커피 50잔 우다다 투척 · 가드 관통)<br><i>체력 두 번째로 높음</i>', pw: 4, sp: 2, hp: 5 },
+      ulala: { style: '히든 · 스페이스 리포터', st: '<b>기본</b> 쌍권총 레이저(원거리 — 멀리서도 맞는다) · <b>U</b> 유혹하기(광역 매혹 스턴) · <b>I</b> 사이드 스텝(A/D 방향으로 순간 회피) · <b>L</b> <b>댄스 타임</b>(제자리에서 같이 춤추다 상대 쓰러짐 · 체력 1/3 삭제)<br><i>체력이 가장 약하다. 거리를 지켜라</i>', pw: 2, sp: 4, hp: 1 },
       gokomong: { style: '히든 · ISTP 무감정', st: '<b>기본</b> 귀찮아 펀치(낭창) · <b>U</b> 집가서 아기봐야돼 킥(발 판정·띄움) · <b>I</b> 귀찮아 2연 · <b>L</b> <b>칼차단</b>(푸념을 끊고 도리도리 → 상처받아 기절)<br><i>무난한 올라운더</i>', pw: 3, sp: 3, hp: 3 },
       ppyeo: { style: '히든 · 오토바이 라이더', st: '<b>기본</b> 뼈펀치(리치 최장) · <b>U</b> 뼈 찌르기 · <b>I</b> 회전 팔꿈치 · <b>L</b> <b>뚝배기 강화</b>(망치로 머리를 +1강…+20강까지 초고속 연타)<br><i>리치·화력·속도 모두 상위. 얇은 몸에 비해 맷집도 붙었다</i>', pw: 4, sp: 4, hp: 3 },
     };
@@ -10418,6 +10750,7 @@ class Game {
     this._lastRecv = 0; this._lastRecvTs = 0; this.jitter = undefined; this._sendGap = 0; this._moveHist = null; this._vis = null;   // 지터 통계는 판마다 새로 (지난 판 마지막 스냅샷과의 간격이 지터로 오인되지 않게)
     if (this.ultFx) this.ultFx.clear();
     if (this.auraFx) this.auraFx.clear();
+    if (this.laserFx) this.laserFx.clear();
     this.camCtl.initialized = false; this.camCtl.orbitYaw = undefined;   // 시야 방향은 새 경기 시작 방향으로 다시 잡는다
     // 셰이더 예열: 새 파이터·잔상·스파크 재질을 등장씬 동안 백그라운드로 컴파일해 둔다 (첫 타격·첫 필살기 때 멈춤 방지)
     try { const r = this.renderer.compileAsync ? this.renderer.compileAsync(this.scene, this.camera) : null; if (r && r.catch) r.catch(() => {}); } catch (e) {}
@@ -10947,6 +11280,9 @@ class Game {
       if (hit) hits.push(hit);
       for (const e of f.events) {
         if (e.type === 'punchEnd') { const cb = this.coachBrains[f.slot]; if (cb) cb.onPunchEnd(e.hit); continue; }
+        if (e.type === 'shot') { this.laserFx.fire(e); if (this.mode === 'host') this.pendingEvents.push({ t: 'shot', id: e.id, x: +e.x.toFixed(2), y: +e.y.toFixed(2), z: +e.z.toFixed(2), dx: +e.dx.toFixed(3), dz: +e.dz.toFixed(3), hook: e.hook }); continue; }
+        if (e.type === 'shotEnd') { this.laserFx.end(e.id); if (this.mode === 'host') this.pendingEvents.push({ t: 'shotEnd', id: e.id }); continue; }
+        if (e.type === 'extraHit') { hits.push(e.ev); continue; }   // 한 프레임에 탄 두 발이 맞은 경우
         if (e.type === 'comboArt') {
           // 콤비네이션 성립 — 기술명을 띄우고 살짝 힘을 준다
           if (this.mode === 'host') this.pendingEvents.push({ t: 'cmb', s: f.slot, n: e.name, c: e.cry });
@@ -10970,7 +11306,7 @@ class Game {
           this.music.setDuck(0.3); setTimeout(() => this.music.setDuck(1), 3600);
           this.applySlow(f.slot, 0.35, 0.25);
           if (f.slot === this.localSlot || (tg && tg.slot === this.localSlot)) this.finisherWindFx();
-          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, ({ reels: '릴스 촬영 중!!', barbell: '3대 500!!', bike: '교통사고!!', forge: '뚝배기 강화!!', snackRain: '간식 폭격!!', cafeRush: '커피 마셔야 돼!!', coffeeBarrage: '커피 폭격!!', coldCut: '칼차단!!' })[e.kind] || '필살!!', 'groggy');
+          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, ({ reels: '릴스 촬영 중!!', barbell: '3대 500!!', bike: '교통사고!!', forge: '뚝배기 강화!!', snackRain: '간식 폭격!!', cafeRush: '커피 마셔야 돼!!', coffeeBarrage: '커피 폭격!!', danceTime: '댄스 타임!!', coldCut: '칼차단!!' })[e.kind] || '필살!!', 'groggy');
           if (this.mode === 'host') this.pendingEvents.push({ t: 'ult', s: f.slot, b: e.target, k: e.kind });
           continue;
         }
@@ -11140,12 +11476,12 @@ class Game {
         if (a) {
           this.ultFx.play(e.k, a, b);
           // 클라는 파이터 로직을 돌리지 않으므로 연출 카메라용 상태를 직접 세팅한다 (renderFrame 에서 감쇠)
-          const DUR = { reels: 3.4, snackRain: 3.6, cafeRush: 3.2, coldCut: 3.4, barbell: 3.6, bike: 3.0, forge: 3.3, coffeeBarrage: 3.6 };
+          const DUR = { reels: 3.4, snackRain: 3.6, cafeRush: 3.2, coldCut: 3.4, barbell: 3.6, bike: 3.0, forge: 3.3, coffeeBarrage: 3.6, danceTime: 3.6 };
           a.ultT = DUR[e.k] || 3.2; a.ultKind = e.k; a.ultTarget = b || a;
           this.music.setDuck(0.3); setTimeout(() => this.music.setDuck(1), 3600);
           this.applySlow(a.slot, 0.35, 0.25);
           if (a.slot === this.localSlot || (b && b.slot === this.localSlot)) this.finisherWindFx();
-          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, ({ reels: '릴스 촬영 중!!', barbell: '3대 500!!', bike: '교통사고!!', forge: '뚝배기 강화!!', snackRain: '간식 폭격!!', cafeRush: '커피 마셔야 돼!!', coffeeBarrage: '커피 폭격!!', coldCut: '칼차단!!' })[e.k] || '필살!!', 'groggy');
+          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, ({ reels: '릴스 촬영 중!!', barbell: '3대 500!!', bike: '교통사고!!', forge: '뚝배기 강화!!', snackRain: '간식 폭격!!', cafeRush: '커피 마셔야 돼!!', coffeeBarrage: '커피 폭격!!', danceTime: '댄스 타임!!', coldCut: '칼차단!!' })[e.k] || '필살!!', 'groggy');
         }
       }
       else if (e.t === 'ultblk') {
@@ -11160,6 +11496,8 @@ class Game {
         const f = this.fighters[e.s];
         if (f) { this.setBenched(f, false); this.audio.bell(1); this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, `${f.nick || f.name} 등장!`, 'dodge'); }
       }
+      else if (e.t === 'shot') this.laserFx.fire(e);
+      else if (e.t === 'shotEnd') this.laserFx.end(e.id);
       else if (e.t === 'rush') {
         const a = this.fighters[e.s], b = this.fighters[e.b];
         this.audio.impact(0.5);
@@ -11364,6 +11702,7 @@ class Game {
     this.sparks.update(rawDt);
     this.ultFx.update(rawDt);
     this.auraFx.update(rawDt, this.fighters);
+    this.laserFx.update(rawDt);
 
     // 잔상: 전원 기록, 시점 인물 + 상대만 표시
     for (const f of this.fighters) {

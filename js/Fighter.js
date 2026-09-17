@@ -115,11 +115,13 @@ export class Fighter {
     this.rattle = 0;
     this.airY = 0; this.airV = 0;      // 띄워짐 (가젤/스매시)
     this.ko = false; this.koT = 0; this.koSpin = 0; this.koAngle = 0; this.koLift = 0;
+    this.spin = 0;   // 피루엣(우랄라 사이드 스텝) 제자리 회전 각
     this.koFly = false; this.koLandT = -1;   // KO: 위로 붕 떠서 뒤로 날아가다 뒤통수부터 떨어진다
     this.combo = 0; this.comboTimer = 0;
     this.inputSeq = []; this.seqT = 0;   // 콤비네이션 입력 기록
     this.target = null;
     this.events = [];
+    this.shots = []; this._shotId = 0;   // 원거리 캐릭터(우랄라)의 레이저 탄
     this.gloveL = new THREE.Vector3(); this.gloveR = new THREE.Vector3();
     this.prevGloveL = new THREE.Vector3(); this.prevGloveR = new THREE.Vector3();
     this.footL = new THREE.Vector3(); this.footR = new THREE.Vector3();
@@ -355,6 +357,27 @@ export class Fighter {
       this.events.push({ type: 'special', kind });
       return true;
     }
+    if (spec.dash) {
+      // 사이드 스텝 (우랄라 I): A/D 누른 쪽(없으면 번갈아)으로 0.26초 빠르게 옆 이동. 이동 중엔 모든 공격 회피 (필살기 제외)
+      const sgn = this._dashSign || 1;
+      this.sideDash = { t: 0, dur: spec.dur, dir: this.side.clone().multiplyScalar(sgn) };
+      this.punch = null; this.queue.length = 0;
+      this.audio.dodge(sgn);
+      this.subs.show(this.specialLine(spec, slotKey), { duration: 0.5, mid: false });
+      this.events.push({ type: 'special', kind });
+      return true;
+    }
+    if (spec.self) {
+      // 자기 버프형 (우랄라 춤추기): 1.3초 춤추며 슈퍼아머, 기 게이지 +18, 가드 게이지 회복
+      this.danceT = spec.dur; this.dancePartner = null; this.danceVictim = false;
+      this.armor = spec.dur + 0.1;
+      this.dempsey.addGauge(spec.gauge || 15);
+      this.stam = Math.min(this.stamMax, this.stam + this.stamMax * 0.5);
+      this.audio.riser(0.3, 0.2);
+      this.subs.show(this.specialLine(spec, slotKey), { duration: 0.9, mid: true });
+      this.events.push({ type: 'special', kind });
+      return true;
+    }
     if (kind === 'dumbbellPress') this.audio.clang(0.9);
     else if (kind === 'marketerPunch') { this.audio.clang(0.3); this.audio.shutter(); }
     else if (kind === 'helmetBash') this.audio.engine(0.5);
@@ -375,7 +398,7 @@ export class Fighter {
     const fk = this.kit.finisher;
     const F = FINISHERS[fk] || FINISHERS.finisherHook;
     const charge = d.charge;
-    const ULT = { reels: 3.4, barbell: 3.6, bike: 3.0, forge: 3.3, snackRain: 3.6, coldCut: 3.4, cafeRush: 3.2, coffeeBarrage: 3.6 };
+    const ULT = { reels: 3.4, barbell: 3.6, bike: 3.0, forge: 3.3, snackRain: 3.6, coldCut: 3.4, cafeRush: 3.2, coffeeBarrage: 3.6, danceTime: 3.6 };
     if (fk === 'cafeRush') {
       // ---- 카페 돌격: 경로상의 모두에게 스턴 + 데미지 (넘어뜨리진 않는다) ----
       this.ultT = 3.2; this.ultKind = fk; this.ultTarget = this.target;
@@ -416,11 +439,18 @@ export class Fighter {
       // 연출 동안 나눠서 들어간다. 채채(릴스)·오승현(간식 폭격)은 기본 파워가 낮아 필살기만은 크게 (경량 캐릭터의 한 방)
       const ULT_MUL = { reels: 1.8, snackRain: 1.8, forge: 1.15, coffeeBarrage: 1.3 };
       tg.ultDmg = (34 + 7 * charge) * this.def.powerMul * (ULT_MUL[fk] || 1) * (guardPierce && tg.guard ? 0.5 : 1);
+      if (fk === 'danceTime') {
+        // 댄스 타임: 상대 최대 체력의 1/3 고정. 둘이 나란히 서서 같이 춤춘다 (기존 파트너 댄스 재사용)
+        tg.ultDmg = (tg.maxHp || tg.def.hp) / 3;
+        this.danceT = dur; this.dancePartner = tg; this.danceVictim = false;
+        tg.danceT = dur; tg.dancePartner = this; tg.danceVictim = true;
+        this.danceStay = true; tg.danceStay = true;   // 끌어오지 않고 각자 제자리에서 춤춘다
+      }
       if (guardPierce && tg.guard) { tg.guard = false; tg.stam = 0; tg.guardBroken = Math.max(tg.guardBroken || 0, 2.0); tg.events.push({ type: 'guardBreak' }); }
       tg.ultDmgRate = tg.ultDmg / dur;
       d.consume();
       this.audio.finisherWind(0.5);
-      const line = fk === 'reels' ? '잡았다! 릴스 각이야, 찍는다!' : fk === 'barbell' ? '자, 10회 3세트 간다!' : fk === 'snackRain' ? '비, 빵이 떨어진다…!' : fk === 'coldCut' ? '…그래서 어쩌라고.' : fk === 'forge' ? '망치로 뚝배기 강화하기!' : fk === 'coffeeBarrage' ? '커피 마셔야 돼!! 받아!!' : '어… 이거 무거운데—!!';
+      const line = fk === 'reels' ? '잡았다! 릴스 각이야, 찍는다!' : fk === 'barbell' ? '자, 10회 3세트 간다!' : fk === 'snackRain' ? '비, 빵이 떨어진다…!' : fk === 'coldCut' ? '…그래서 어쩌라고.' : fk === 'forge' ? '망치로 뚝배기 강화하기!' : fk === 'coffeeBarrage' ? '커피 마셔야 돼!! 받아!!' : fk === 'danceTime' ? '자, 댄스 타임!! 업, 다운, 츄!' : '어… 이거 무거운데—!!';
       this.subs.show(line, { duration: 1.6, strong: true });
       this.events.push({ type: 'ultStart', kind: fk, target: tg.slot, charge });
       return true;
@@ -479,6 +509,8 @@ export class Fighter {
     dmg *= tired;
     this.readSkill = Math.min(0.3, this.readSkill + 0.025);
 
+    // ---- 사이드 스텝 회피 (우랄라 I): 이동 중엔 필살기 빼고 전부 피한다 ----
+    if (this.sideDash && !ev.finisher) { this.dempsey.addGauge(2); return { dmg: 0, evaded: true, ko: false }; }
     // ---- 뎀프시롤 회피: 롤 중엔 공격도 하면서 상체를 크게 흔들어 70% 확률로 피한다 (필살기·카운터는 예외) ----
     if (this.stanceStyle === 'dempsey' && this.dempsey.active && !ev.finisher && !ev.counter && !counter) {
       if (Math.random() < (ev.fromU ? 0.1 : 0.7)) {   // U 반격기는 10% 만 회피
@@ -720,6 +752,15 @@ export class Fighter {
     }
     // (자동 전진/거리 유지 제거 — 제자리에서도 롤/스탠스 가능, 이동은 전부 WASD)
     if (this.backstep > 0) { this.backstep -= dt; this.pos.addScaledVector(this.forward, -4.2 * dt); }
+    if (this.sideDash) {
+      const sd = this.sideDash; sd.t += dt;
+      const k = Math.min(1, sd.t / sd.dur), spd = 5.2 * (1 - k * k);   // 초반 빠르고 끝에서 멈춘다 (약 1.5m)
+      this._advance(sd.dir, spd * dt);
+      // 빙그르르 한 바퀴 (이동 방향으로), 끝에서 정확히 원래 방향
+      const sgn = sd.dir.dot(this.side) > 0 ? 1 : -1;
+      this.spin = sgn * Math.PI * 2 * (1 - Math.pow(1 - k, 2.2));
+      if (sd.t >= sd.dur) { this.sideDash = null; this.spin = 0; }
+    }
     this.pos.addScaledVector(this.knock, dt);
     // KO 로 떠 있는 동안은 공중에서 거의 안 줄어든다 (뒤로 시원하게 날아가게)
     this.knock.multiplyScalar(Math.exp(-dt * (this.ko && this.koFly ? 1.1 : this.stagger > 0 ? 9 : 6.5)));
@@ -866,7 +907,7 @@ export class Fighter {
     } else if (!this.busy && !this.ko) {
       if (finPress && d.maxSpeed) this.startFinisher();
       else if (input.justPressed('KeyU')) this.startSpecial('U');
-      else if (input.justPressed('KeyI')) this.startSpecial('I');
+      else if (input.justPressed('KeyI')) { this._dashSign = input.isDown('KeyA') ? 1 : input.isDown('KeyD') ? -1 : -(this._lastDash || 1); this._lastDash = this._dashSign; this.startSpecial('I'); }
       else {
         const press = jPress ? 'J' : kPress ? 'K' : null;
         if (press) {
@@ -1092,8 +1133,8 @@ export class Fighter {
       const pu = this.punch;
       pu.t += dt;
       const info = applyPunchToPose(p, pu);
-      // 스텝인
-      if (tgt && !d.active) {
+      // 스텝인 (원거리 캐릭터의 기본 사격은 제자리에서 — 자동으로 파고들면 원거리의 의미가 없다)
+      if (tgt && !d.active && !(this.def.ranged && !pu.kind)) {
         const reach = this.reach;
         const stepSpd = pu.step || 3.2;
         if (info.p < 0.28) {
@@ -1107,10 +1148,42 @@ export class Fighter {
       }
       if (pu.t >= pu.dur) { this.punch = null; this.events.push({ type: 'punchEnd', hit: !!pu.hit }); }
       if (!d.active) this.bufferedHook = null;
+      // 원거리 캐릭터: 기본 펀치(스트레이트/훅)는 주먹 대신 레이저 탄을 쏜다. 탄 판정은 아래 shots 갱신에서
+      if (this.def.ranged && !pu.kind && (pu.type === 'straight' || pu.type === 'hook') && !pu.shotFired && info.p > 0.22) {
+        pu.shotFired = true; pu.hit = true;   // 주먹 판정은 쓰지 않는다
+        this._applyNow(p);
+        const from = (pu.side === 'L' ? this.gloveL : this.gloveR).clone();
+        const dir = this.forward.clone();
+        const id = ++this._shotId;
+        this.shots.push({ id, pos: from, dir, side: pu.side, type: pu.type, power: pu.power, life: 0.7, maxSpeed: d.maxSpeed, dempsey: d.active, heavy: pu.type === 'hook' });
+        this.events.push({ type: 'shot', id, x: from.x, y: from.y, z: from.z, dx: dir.x, dz: dir.z, side: pu.side, hook: pu.type === 'hook' });
+        this.audio.whoosh(pu.side === 'L' ? -1 : 1, 1.6, 0.35);
+      }
       if (!pu.hit && info.p > (pu.kind ? 0.24 : 0.3) && info.p < 0.66) {
         this._applyNow(p);
         const radius = 0.85 * (pu.hitRadius || (pu.type === 'flicker' ? (st === 'flicker' && d.active ? 0.55 : 0.48) : pu.kind ? 0.62 : 0.42));
         hitEvent = tryHit(pu.side, radius, (tg, h) => { pu.hit = true; return { attacker: this, target: tg, side: pu.side, type: pu.type, power: pu.power, pos: h.point.clone(), zone: pu.zoneForce || h.zone, dir: this.forward.clone(), maxSpeed: d.maxSpeed, dempsey: d.active, finisher: !!pu.rollFinish, roll: !!pu.roll, charge: pu.rollFinish ? d.charge : 0, heavy: !!pu.heavy, counter: !!pu.counter || !!pu.forceCounter, counterMul: pu.counterMul || 1, launch: pu.launch || 0, liver: !!pu.liver, staggerT: pu.staggerT || 0, kind: pu.kind || null, fromU: !!pu.fromU }; }, !!pu.kick);
+      }
+    }
+
+    // ---- 레이저 탄 (원거리): 14m/s 직진, 몸통 선분에 닿으면 펀치와 같은 피격 이벤트 ----
+    if (this.shots.length) {
+      const SPD = 14;
+      for (let i = this.shots.length - 1; i >= 0; i--) {
+        const sh = this.shots[i];
+        sh.pos.addScaledVector(sh.dir, SPD * dt); sh.life -= dt;
+        let done = sh.life <= 0 || Math.abs(sh.pos.x) > 7 || Math.abs(sh.pos.z) > 7;
+        if (!done) {
+          for (const f of others) {
+            if (pointSegmentDist(sh.pos, f.hipsPos, f.headPos) < 0.42) {
+              const zone = sh.pos.y > f.hipsPos.y + (f.headPos.y - f.hipsPos.y) * 0.72 ? 'head' : 'body';
+              const ev = { attacker: this, target: f, side: sh.side, type: sh.type, power: sh.power, pos: sh.pos.clone(), zone, dir: sh.dir.clone(), maxSpeed: sh.maxSpeed, dempsey: sh.dempsey, finisher: false, roll: false, charge: 0, heavy: sh.heavy, counter: false, counterMul: 1, launch: 0, liver: false, staggerT: 0, kind: null, fromU: false, laser: true };
+              if (!hitEvent) hitEvent = ev; else this.events.push({ type: 'extraHit', ev });
+              done = true; break;
+            }
+          }
+        }
+        if (done) { this.events.push({ type: 'shotEnd', id: sh.id }); this.shots.splice(i, 1); }
       }
     }
 
@@ -1463,8 +1536,7 @@ export class Fighter {
         this.yaw = Math.atan2(this.forward.x, this.forward.z);
         this.side.set(this.forward.z, 0, -this.forward.x);
       } else if (pr) {
-        const want = pr.pos.clone().addScaledVector(pr.forward, 0.95);
-        this.pos.lerp(want, Math.min(1, dt * 8));
+        if (!this.danceStay) { const want = pr.pos.clone().addScaledVector(pr.forward, 0.95); this.pos.lerp(want, Math.min(1, dt * 8)); }
         this.forward.copy(pr.pos).sub(this.pos).setY(0).normalize();
         this.yaw = Math.atan2(this.forward.x, this.forward.z);
       }
@@ -1478,10 +1550,18 @@ export class Fighter {
       p.thighLX += -0.25 + sw * 0.35; p.thighRX += -0.25 - sw * 0.35; p.shinL += Math.max(0, sw) * 0.7; p.shinR += Math.max(0, -sw) * 0.7;
       this.queue.length = 0;
       if (this.danceT <= 0) {
-        this.danceT = 0; this.dancePartner = null;
+        this.danceT = 0; this.dancePartner = null; this.danceStay = false;
         if (this.danceVictim && !this.ko) { this.downT = this.downDur; this.hp = Math.max(0, this.hp - 6); if (this.hp <= 0) this._die(); }
         this.danceVictim = false;
       }
+    }
+    // ---- 피루엣 포즈: 발끝으로 서서 한 팔은 머리 위 곡선, 한 팔은 옆으로, 한 다리는 뒤로 뻗고 우아하게 돈다 ----
+    if (this.sideDash) {
+      const sd = this.sideDash, u = Math.min(1, sd.t / sd.dur), k = Math.sin(u * Math.PI), sgn = sd.dir.dot(this.side) > 0 ? 1 : -1;
+      p.hipsY += 0.06 * k; p.hipsZ += sgn * 0.08 * k; p.waistZ += -sgn * 0.12 * k; p.chestX += -0.1 * k; p.headX += -0.15 * k; p.headZ += sgn * 0.12 * k;
+      if (sgn > 0) { p.shLX += -2.9 * k; p.shLZ += 0.55 * k; p.elL += -0.7 * k; p.shRX += -1.3 * k; p.shRZ += -1.35 * k; p.elR += -0.25 * k; }
+      else { p.shRX += -2.9 * k; p.shRZ += -0.55 * k; p.elR += -0.7 * k; p.shLX += -1.3 * k; p.shLZ += 1.35 * k; p.elL += -0.25 * k; }
+      p.thighLX += (sgn > 0 ? 0.55 : -0.25) * k; p.thighRX += (sgn > 0 ? -0.25 : 0.55) * k; p.shinL += (sgn > 0 ? 0.9 : 0.15) * k; p.shinR += (sgn > 0 ? 0.15 : 0.9) * k;
     }
     // ---- 스태거 ----
     if (this.stagger > 0) {
@@ -1595,7 +1675,7 @@ export class Fighter {
 
   _applyNow(p) {
     this.rig.root.position.set(this.pos.x, this.airY - (this.fallY || 0), this.pos.z);
-    this.rig.root.rotation.y = this.yaw + this.koAngle;
+    this.rig.root.rotation.y = this.yaw + this.koAngle + (this.spin || 0);
     applyPose(this.rig, p);
     this.updateWorldPoints();
   }
@@ -1609,7 +1689,7 @@ export class Fighter {
     const po = new Array(29);
     let i = 0; for (const k in this.pose) po[i++] = Math.round(this.pose[k] * 100);   // 0.01 단위 정수 (소수점 문자열보다 짧아 4인 60Hz 페이로드를 줄인다)
     return {
-      x: +this.pos.x.toFixed(2), z: +this.pos.z.toFixed(2), y: +(this.yaw + this.koAngle).toFixed(3), rx: +this.rig.root.rotation.x.toFixed(2), ay: +this.airY.toFixed(2),
+      x: +this.pos.x.toFixed(2), z: +this.pos.z.toFixed(2), y: +(this.yaw + this.koAngle + (this.spin || 0)).toFixed(3), rx: +this.rig.root.rotation.x.toFixed(2), ay: +this.airY.toFixed(2),
       hp: +this.hp.toFixed(1), f: flags, fy: +(this.fallY || 0).toFixed(2),
       st: +Math.max(0, this.stagger).toFixed(2), sk: this.staggerKind === 'groggy' ? 2 : this.staggerKind === 'liver' ? 1 : 0, dI: +d.intensity.toFixed(3), sw: +d.sway.toFixed(3), sv: +d.swayVel.toFixed(2),
       bl: +d.blend.toFixed(2), ga: +d.gauge.toFixed(1), ch: d.charge, ra: +this.rattle.toFixed(2),

@@ -154,6 +154,13 @@ export const SPECIALS = {
     wind: { x: -0.3, y: 1.3, z: 0.4, el: -2.4 }, strike: { x: -1.3, y: -1.2, z: 0.4, el: -1.6 },
     body(p, w, s, sgn) { p.waistY += sgn * (1.1 * w - 1.6 * s); p.chestY += sgn * (0.5 * w - 0.8 * s); p.hipsRotY += sgn * (0.4 * w - 0.6 * s); p.hipsY += -0.12 * w; },
   },
+  // ---- 히든: 우랄라 (유혹하기 / 춤추기) ----
+  seduce: {
+    name: 'チュッ', ko: '유혹하기', side: 'R', dur: 0.55, power: 0.25, cd: 6.5, heavy: false, staggerT: 1.6, hitRadius: 3.2, step: 0,
+    wind: { x: -1.6, y: 0.4, z: 0.3, el: -2.4 }, strike: { x: -1.4, y: -0.6, z: 0.9, el: -0.6 },
+    body(p, w, s, sgn) { p.waistY += sgn * (-0.2 * w + 0.35 * s); p.headZ += 0.25 * s; p.hipsX += -sgn * 0.12 * s; p.hipsRotY += sgn * 0.2 * s; p.headX += -0.15 * s; },
+  },
+  sideDash: { name: 'ピルエット', ko: '피루엣', self: true, dash: true, dur: 0.42, cd: 2.4 },
 };
 
 // 캐릭터별 키 배정 + 스탠스 + 필살
@@ -170,6 +177,7 @@ export const KITS = {
   ohsh:      { stance: 'counter', finisher: 'snackRain', U: 'suddenSmack',  I: 'breadThrow', cdU: 4.5 },
   jungjuwon: { stance: 'smash',   finisher: 'coffeeBarrage',  U: 'onigiriThrow', I: 'bellyBump', cdU: 4.5 },
   gokomong:  { stance: 'counter', finisher: 'coldCut', U: 'babyKick',      I: 'lazyJab',   cdU: 6 },
+  ulala:     { stance: 'flicker', finisher: 'danceTime', U: 'seduce',    I: 'sideDash', cdU: 6.5 },
 };
 
 export const STANCE_LINES = {
@@ -187,4 +195,5 @@ export const HIDDEN_LINES = {
   jungjuwon: { intro: '커피 좋아~', max: '배고픈데 한 판 더?', fin: '커피 마셔야 돼!!', u: '이거나 먹어!', hit: ['우걱', '냠', '헤드폰 벗겨지겠네'] },
   gokomong: { intro: '…귀찮은데.', max: '빨리 끝내자.', fin: '그래서 어쩌라고.', u: '집 가서 아기 봐야 돼.', hit: ['…', '음', '하아'] },
   ppyeo: { intro: '난 먹어도 살 안 쪄.', max: '시동 건다.', fin: '부아아앙—!!', u: '헬멧은 필수지!', hit: ['뼈!', '뼈뼈!', '부릉'] },
+  ulala: { intro: '스페이스 채널 5, 우랄라입니다!', max: '자, 리듬 타볼까?', fin: '댄스 타임!!', u: '츄~♥', hit: ['츄!', '업!', '다운!'] },
 };

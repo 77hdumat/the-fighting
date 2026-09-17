@@ -25,6 +25,7 @@ import { Intro } from './Intro.js';
 import { CHARACTERS, CHARACTER_ORDER, HIDDEN_ORDER } from './Rig.js';
 import { buildPortraits } from './Portraits.js';
 import { AuraFx } from './AuraFx.js';
+import { LaserFx } from './LaserFx.js';
 import { KITS, SPECIALS } from './Specials.js';
 import { TouchControls, isTouchDevice } from './Touch.js';
 import { Music } from './Music.js';
@@ -101,6 +102,7 @@ class Game {
     this.sparks = new HitSparks(this.scene);
     this.ultFx = new UltimateFx(this.scene, this.audio, this.fx, this.camera);
     this.auraFx = new AuraFx(this.scene);   // 게이지 MAX 오로라 (전원 화면에 보인다)
+    this.laserFx = new LaserFx(this.scene); // 우랄라 레이저 탄
     // 거리감 보조: 내 발밑에 리치 반경 링 (상대가 사거리 안이면 붉게)
     this.reachRing = new THREE.Mesh(new THREE.RingGeometry(0.92, 1.0, 48), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide }));
     this.reachRing.rotation.x = -Math.PI / 2; this.reachRing.position.y = 0.015; this.reachRing.visible = false;
@@ -261,6 +263,7 @@ class Game {
       jjeonghyo: { style: '히든 · 3대 500', st: '<b>기본</b> 덤벨 펀치(무겁고 느림) · <b>U</b> 덤벨 훅 · <b>I</b> 데드리프트 업(띄움) · <b>L</b> <b>바벨 내려찍기</b><br><i>기 게이지 20% 느림 · 체력 최고</i>', pw: 5, sp: 2, hp: 5 },
       ohsh: { style: '히든 · 빵 러버', st: '<b>기본</b> 빵 들고 타격(가볍고 빠름) · <b>U</b> 갑자기 때리기(기습·스턴) · <b>I</b> 빵 던지기 · <b>L</b> <b>간식 폭격</b>(소금빵·호두과자 120개 낙하)<br><i>가장 작고 약하지만 가장 빨리 기가 참</i>', pw: 1, sp: 5, hp: 1 },
       jungjuwon: { style: '히든 · 헤드폰 먹방', st: '<b>기본</b> 묵직한 타격 · <b>U</b> 삼각김밥 던지기 · <b>I</b> 배치기(띄움) · <b>L</b> <b>커피 폭격</b>(상대를 잡고 카페에서 꺼낸 커피 50잔 우다다 투척 · 가드 관통)<br><i>체력 두 번째로 높음</i>', pw: 4, sp: 2, hp: 5 },
+      ulala: { style: '히든 · 스페이스 리포터', st: '<b>기본</b> 쌍권총 레이저(원거리 — 멀리서도 맞는다) · <b>U</b> 유혹하기(광역 매혹 스턴) · <b>I</b> 사이드 스텝(A/D 방향으로 순간 회피) · <b>L</b> <b>댄스 타임</b>(제자리에서 같이 춤추다 상대 쓰러짐 · 체력 1/3 삭제)<br><i>체력이 가장 약하다. 거리를 지켜라</i>', pw: 2, sp: 4, hp: 1 },
       gokomong: { style: '히든 · ISTP 무감정', st: '<b>기본</b> 귀찮아 펀치(낭창) · <b>U</b> 집가서 아기봐야돼 킥(발 판정·띄움) · <b>I</b> 귀찮아 2연 · <b>L</b> <b>칼차단</b>(푸념을 끊고 도리도리 → 상처받아 기절)<br><i>무난한 올라운더</i>', pw: 3, sp: 3, hp: 3 },
       ppyeo: { style: '히든 · 오토바이 라이더', st: '<b>기본</b> 뼈펀치(리치 최장) · <b>U</b> 뼈 찌르기 · <b>I</b> 회전 팔꿈치 · <b>L</b> <b>뚝배기 강화</b>(망치로 머리를 +1강…+20강까지 초고속 연타)<br><i>리치·화력·속도 모두 상위. 얇은 몸에 비해 맷집도 붙었다</i>', pw: 4, sp: 4, hp: 3 },
     };
@@ -950,6 +953,7 @@ class Game {
     this._lastRecv = 0; this._lastRecvTs = 0; this.jitter = undefined; this._sendGap = 0; this._moveHist = null; this._vis = null;   // 지터 통계는 판마다 새로 (지난 판 마지막 스냅샷과의 간격이 지터로 오인되지 않게)
     if (this.ultFx) this.ultFx.clear();
     if (this.auraFx) this.auraFx.clear();
+    if (this.laserFx) this.laserFx.clear();
     this.camCtl.initialized = false; this.camCtl.orbitYaw = undefined;   // 시야 방향은 새 경기 시작 방향으로 다시 잡는다
     // 셰이더 예열: 새 파이터·잔상·스파크 재질을 등장씬 동안 백그라운드로 컴파일해 둔다 (첫 타격·첫 필살기 때 멈춤 방지)
     try { const r = this.renderer.compileAsync ? this.renderer.compileAsync(this.scene, this.camera) : null; if (r && r.catch) r.catch(() => {}); } catch (e) {}
@@ -1479,6 +1483,9 @@ class Game {
       if (hit) hits.push(hit);
       for (const e of f.events) {
         if (e.type === 'punchEnd') { const cb = this.coachBrains[f.slot]; if (cb) cb.onPunchEnd(e.hit); continue; }
+        if (e.type === 'shot') { this.laserFx.fire(e); if (this.mode === 'host') this.pendingEvents.push({ t: 'shot', id: e.id, x: +e.x.toFixed(2), y: +e.y.toFixed(2), z: +e.z.toFixed(2), dx: +e.dx.toFixed(3), dz: +e.dz.toFixed(3), hook: e.hook }); continue; }
+        if (e.type === 'shotEnd') { this.laserFx.end(e.id); if (this.mode === 'host') this.pendingEvents.push({ t: 'shotEnd', id: e.id }); continue; }
+        if (e.type === 'extraHit') { hits.push(e.ev); continue; }   // 한 프레임에 탄 두 발이 맞은 경우
         if (e.type === 'comboArt') {
           // 콤비네이션 성립 — 기술명을 띄우고 살짝 힘을 준다
           if (this.mode === 'host') this.pendingEvents.push({ t: 'cmb', s: f.slot, n: e.name, c: e.cry });
@@ -1502,7 +1509,7 @@ class Game {
           this.music.setDuck(0.3); setTimeout(() => this.music.setDuck(1), 3600);
           this.applySlow(f.slot, 0.35, 0.25);
           if (f.slot === this.localSlot || (tg && tg.slot === this.localSlot)) this.finisherWindFx();
-          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, ({ reels: '릴스 촬영 중!!', barbell: '3대 500!!', bike: '교통사고!!', forge: '뚝배기 강화!!', snackRain: '간식 폭격!!', cafeRush: '커피 마셔야 돼!!', coffeeBarrage: '커피 폭격!!', coldCut: '칼차단!!' })[e.kind] || '필살!!', 'groggy');
+          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, ({ reels: '릴스 촬영 중!!', barbell: '3대 500!!', bike: '교통사고!!', forge: '뚝배기 강화!!', snackRain: '간식 폭격!!', cafeRush: '커피 마셔야 돼!!', coffeeBarrage: '커피 폭격!!', danceTime: '댄스 타임!!', coldCut: '칼차단!!' })[e.kind] || '필살!!', 'groggy');
           if (this.mode === 'host') this.pendingEvents.push({ t: 'ult', s: f.slot, b: e.target, k: e.kind });
           continue;
         }
@@ -1672,12 +1679,12 @@ class Game {
         if (a) {
           this.ultFx.play(e.k, a, b);
           // 클라는 파이터 로직을 돌리지 않으므로 연출 카메라용 상태를 직접 세팅한다 (renderFrame 에서 감쇠)
-          const DUR = { reels: 3.4, snackRain: 3.6, cafeRush: 3.2, coldCut: 3.4, barbell: 3.6, bike: 3.0, forge: 3.3, coffeeBarrage: 3.6 };
+          const DUR = { reels: 3.4, snackRain: 3.6, cafeRush: 3.2, coldCut: 3.4, barbell: 3.6, bike: 3.0, forge: 3.3, coffeeBarrage: 3.6, danceTime: 3.6 };
           a.ultT = DUR[e.k] || 3.2; a.ultKind = e.k; a.ultTarget = b || a;
           this.music.setDuck(0.3); setTimeout(() => this.music.setDuck(1), 3600);
           this.applySlow(a.slot, 0.35, 0.25);
           if (a.slot === this.localSlot || (b && b.slot === this.localSlot)) this.finisherWindFx();
-          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, ({ reels: '릴스 촬영 중!!', barbell: '3대 500!!', bike: '교통사고!!', forge: '뚝배기 강화!!', snackRain: '간식 폭격!!', cafeRush: '커피 마셔야 돼!!', coffeeBarrage: '커피 폭격!!', coldCut: '칼차단!!' })[e.k] || '필살!!', 'groggy');
+          this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, ({ reels: '릴스 촬영 중!!', barbell: '3대 500!!', bike: '교통사고!!', forge: '뚝배기 강화!!', snackRain: '간식 폭격!!', cafeRush: '커피 마셔야 돼!!', coffeeBarrage: '커피 폭격!!', danceTime: '댄스 타임!!', coldCut: '칼차단!!' })[e.k] || '필살!!', 'groggy');
         }
       }
       else if (e.t === 'ultblk') {
@@ -1692,6 +1699,8 @@ class Game {
         const f = this.fighters[e.s];
         if (f) { this.setBenched(f, false); this.audio.bell(1); this.fx.addPopup(this.fx.w / 2, this.fx.h * 0.3, `${f.nick || f.name} 등장!`, 'dodge'); }
       }
+      else if (e.t === 'shot') this.laserFx.fire(e);
+      else if (e.t === 'shotEnd') this.laserFx.end(e.id);
       else if (e.t === 'rush') {
         const a = this.fighters[e.s], b = this.fighters[e.b];
         this.audio.impact(0.5);
@@ -1896,6 +1905,7 @@ class Game {
     this.sparks.update(rawDt);
     this.ultFx.update(rawDt);
     this.auraFx.update(rawDt, this.fighters);
+    this.laserFx.update(rawDt);
 
     // 잔상: 전원 기록, 시점 인물 + 상대만 표시
     for (const f of this.fighters) {

@@ -157,7 +157,7 @@ export class UltimateFx {
     if (!target) return;
     const root = new THREE.Group();
     this.scene.add(root);
-    const DUR = { reels: 3.4, snackRain: 3.6, cafeRush: 3.2, coldCut: 3.4, forge: 3.3, coffeeBarrage: 3.6 };
+    const DUR = { reels: 3.4, snackRain: 3.6, cafeRush: 3.2, coldCut: 3.4, forge: 3.3, coffeeBarrage: 3.6, danceTime: 3.6 };
     const item = { kind, root, t: 0, dur: DUR[kind] || 3.2, parts: [], attacker, target, tp: target.pos.clone() };
     if (kind === 'reels') this._buildReels(item, attacker);
     else if (kind === 'snackRain') this._buildSnackRain(item);
@@ -167,6 +167,7 @@ export class UltimateFx {
     else if (kind === 'bike') this._buildBike(item, attacker);
     else if (kind === 'forge') this._buildForge(item, attacker);
     else if (kind === 'coffeeBarrage') this._buildCoffee(item, attacker);
+    else if (kind === 'danceTime') this._buildDance(item, attacker);
     this.active.push(item);
   }
 
@@ -347,6 +348,74 @@ export class UltimateFx {
       d.t += dt; d.v.y -= 12 * dt; d.m.position.addScaledVector(d.v, dt);
       if (d.t > 0.4 || d.m.position.y < 0.02) { d.t = -1; d.m.visible = false; }
     }
+  }
+
+  _buildDance(item, attacker) {
+    // 우랄라 댄스 타임: 머리 위 미러볼 + 돌아가는 색 조명 + 떠오르는 음표·하트 + 'DANCE TIME!' 말풍선
+    const g = item.root;
+    const ball = new THREE.Group(); g.add(ball); item.ball = ball;
+    const core = outlined(new THREE.SphereGeometry(0.32, 16, 12), 0xd8dbe4, ball);
+    for (let i = 0; i < 26; i++) {   // 거울 조각 반짝이
+      const tile = outlined(new THREE.BoxGeometry(0.08, 0.08, 0.02), i % 2 ? 0xffffff : 0x8fd6f2, ball);
+      const a = Math.random() * Math.PI * 2, b = (Math.random() - 0.5) * Math.PI * 0.8;
+      tile.position.set(Math.cos(a) * Math.cos(b) * 0.33, Math.sin(b) * 0.33, Math.sin(a) * Math.cos(b) * 0.33);
+      tile.lookAt(0, 0, 0); tile.castShadow = false;
+    }
+    outlined(new THREE.CylinderGeometry(0.012, 0.012, 3.0, 6), 0x8a8fa0, ball, new THREE.Vector3(0, 1.8, 0)).castShadow = false;
+    ball.scale.setScalar(0.001);
+    // 색 조명 원뿔 4개 (반투명 가산)
+    item.beams = [];
+    const cols = [0xff5fd0, 0x5fc8ff, 0xffe45f, 0x8cff6a];
+    for (let i = 0; i < 4; i++) {
+      const m = new THREE.Mesh(new THREE.ConeGeometry(0.9, 4.2, 14, 1, true), new THREE.MeshBasicMaterial({ color: cols[i], transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+      m.userData.shared = false; m.visible = false; g.add(m);
+      item.beams.push({ m, ph: i * Math.PI / 2 });
+    }
+    item.notes = [];
+    for (let i = 0; i < 18; i++) {
+      const isHeart = i % 3 === 0;
+      const n = isHeart ? makeHeart() : (() => { const gr = new THREE.Group(); outlined(new THREE.SphereGeometry(0.07, 10, 8), 0x2b2b3a, gr, new THREE.Vector3(0, 0, 0)).scale.set(1, 0.7, 1); outlined(new THREE.BoxGeometry(0.025, 0.28, 0.02), 0x2b2b3a, gr, new THREE.Vector3(0.06, 0.13, 0)); outlined(new THREE.BoxGeometry(0.12, 0.03, 0.02), 0x2b2b3a, gr, new THREE.Vector3(0.11, 0.26, 0)); return gr; })();
+      n.visible = false; g.add(n);
+      item.notes.push({ m: n, delay: 0.3 + i * 0.17, t: 0, x: (Math.random() - 0.5) * 2.4, z: (Math.random() - 0.5) * 1.6, spd: 0.9 + Math.random() * 0.7 });
+    }
+    item.title = makeBubble('DANCE TIME!', '#ff5fd0', '#ffffff'); item.title.visible = false; item.title.scale.setScalar(1.3); g.add(item.title);
+  }
+
+  _updDance(it, dt, tp) {
+    const u = it.t, att = it.attacker; if (!att) return;
+    const mid = att.pos.clone().add(tp).multiplyScalar(0.5);
+    // 미러볼: 두 사람 위에서 내려와 돈다
+    const pop = Math.min(1, u / 0.5);
+    it.ball.scale.setScalar(Math.max(0.001, (1 - Math.pow(1 - pop, 3)) * (u > it.dur ? Math.max(0, 1 - (u - it.dur) / 0.4) : 1)));
+    it.ball.position.set(mid.x, 2.7, mid.z);
+    it.ball.rotation.y = u * 2.2;
+    // 조명: 미러볼에서 사방으로 돌며 바닥을 쓸어간다
+    for (const b of it.beams) {
+      b.m.visible = u > 0.3 && u < it.dur + 0.2;
+      const a = u * 1.6 + b.ph;
+      b.m.position.set(mid.x, 2.7 - 2.1, mid.z);
+      b.m.rotation.set(0, 0, 0);
+      b.m.rotateY(a); b.m.rotateX(Math.PI + 0.45 + Math.sin(u * 2.3 + b.ph) * 0.2);
+      b.m.material.opacity = 0.16 + 0.1 * Math.sin(u * 9 + b.ph);
+    }
+    for (const n of it.notes) {
+      if (u < n.delay) continue;
+      n.t += dt;
+      if (n.t === dt) { n.m.visible = true; n.m.position.set(mid.x + n.x, 0.8, mid.z + n.z); }
+      n.m.position.y += n.spd * dt; n.m.position.x += Math.sin(n.t * 3 + n.x * 5) * 0.3 * dt;
+      n.m.rotation.z = Math.sin(n.t * 4) * 0.3; n.m.rotation.y += dt * 2;
+      const fade = Math.max(0, 1 - n.t / 1.8);
+      n.m.scale.setScalar(Math.max(0.001, (0.5 + 0.5 * Math.min(1, n.t * 4)) * fade));
+      if (fade <= 0) n.m.visible = false;
+    }
+    if (it.title) {
+      it.title.visible = u > 0.15 && u < 1.8;
+      it.title.position.set(mid.x, 2.1 + Math.sin(u * 6) * 0.05, mid.z);
+      if (this.cam) it.title.lookAt(this.cam.position);
+    }
+    // 비트마다 플래시
+    const beat = Math.floor(u * 3.2);
+    if (beat !== it._beat) { it._beat = beat; if (this.fx && u > 0.3 && u < it.dur) this.fx.flash = Math.max(this.fx.flash || 0, 0.08); if (u > 0.3 && u < it.dur) this.audio.blip(beat % 2 === 0); }
   }
 
   _buildColdCut(item, attacker) {
@@ -567,6 +636,7 @@ export class UltimateFx {
       else if (it.kind === 'bike') this._updBike(it, dt, tp);
       else if (it.kind === 'forge') this._updForge(it, dt, tp);
       else if (it.kind === 'coffeeBarrage') this._updCoffee(it, dt, tp);
+      else if (it.kind === 'danceTime') this._updDance(it, dt, tp);
       if (it.t > it.dur + 1.4) {
         this._release(it);
         this.active.splice(i, 1);

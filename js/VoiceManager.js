@@ -11,12 +11,12 @@ import { CHARACTERS } from './Rig.js';
 // 캐릭터별 목소리 톤 (여성 캐릭터는 높고 빠르게)
 const PITCH = {
   ippo: 1.15, miyata: 1.05, mashiba: 0.72, sendo: 0.65, coach: 0.5,
-  chaechae: 1.35, jjeonghyo: 1.15, ohsh: 1.45,         // 여성
+  chaechae: 1.35, jjeonghyo: 1.15, ohsh: 1.45, ulala: 1.3,         // 여성
   ppyeo: 0.85, jungjuwon: 0.7, gokomong: 0.8,          // 남성
 };
 const RATE = {
   ippo: 1.3, miyata: 1.25, mashiba: 1.05, sendo: 0.95, coach: 1.15,
-  chaechae: 1.45, jjeonghyo: 1.1, ohsh: 1.35,
+  chaechae: 1.45, jjeonghyo: 1.1, ohsh: 1.35, ulala: 1.4,
   ppyeo: 1.2, jungjuwon: 1.0, gokomong: 0.85,
 };
 const genderOf = (charKey) => (charKey === 'coach' ? 'm' : ((CHARACTERS[charKey] && CHARACTERS[charKey].gender) || 'm'));

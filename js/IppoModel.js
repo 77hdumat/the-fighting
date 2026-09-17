@@ -130,7 +130,7 @@ export function ippoHairGeometry(P,style='ippo-reference') {
       }
       if(style==='longblack')for(let i=0;i<9;i++){const a=i/9*Math.PI*2;blade([Math.sin(a)*.09,.14,Math.cos(a)*.08-.03],[Math.sin(a)*.145,.225+Math.sin(i)*.025,Math.cos(a)*.13-.04],.029,.021);}
     }else{
-      const mane=style==='mane',slick=style==='slick',count=mane?24:22;
+      const mane=style==='mane',slick=style==='slick'||style==='twintail',count=mane?24:22;   // 트윈테일은 두피에 붙는 매끈한 머리 + Rig 쪽 꽁지
       for(let i=0;i<count;i++){
         const a=i/count*Math.PI*2,x=Math.sin(a),z=Math.cos(a),rear=Math.max(0,-z);
         blade([x*.10,.12+Math.sin(i)*.014,z*.09-.025],[x*(mane?.19:slick?.145:.17),slick?.14+.03*rear:.23+Math.sin(i*1.8)*.028,z*(slick?.14:.16)-(mane?.09:slick?.11:.035)],.034,.025);
@@ -158,10 +158,54 @@ export function ippoHairGeometry(P,style='ippo-reference') {
 }
 
 const faces=new Map();
+/** 예쁜 얼굴 (우랄라): 크고 둥근 눈 + 하늘색 홍채 + 긴 속눈썹 + 가는 아치 눈썹 + 볼터치 + 작은 분홍 입술. 만화 여주인공 얼굴 */
+function prettyFace(g,def,blink,hurt){
+  const irisCol=def.irisColor||'#4fb6ff',lash='#2a1a2e';
+  // 볼터치
+  for(const sign of [-1,1]){const cx=256+sign*128;const bl=g.createRadialGradient(cx,300,4,cx,300,46);bl.addColorStop(0,'rgba(255,120,150,.42)');bl.addColorStop(1,'rgba(255,120,150,0)');g.fillStyle=bl;g.beginPath();g.arc(cx,300,46,0,Math.PI*2);g.fill();}
+  for(const sign of [-1,1]){
+    g.save();g.translate(sign<0?150:362,214);g.scale(sign,1);
+    if(blink){
+      // 감은 눈: 아래로 볼록한 곡선 + 속눈썹
+      g.strokeStyle=lash;g.lineWidth=8;g.lineCap='round';g.beginPath();g.moveTo(-66,-2);g.quadraticCurveTo(-4,26,64,-6);g.stroke();
+      g.lineWidth=5;for(let i=0;i<4;i++){const x=20+i*13;g.beginPath();g.moveTo(x,8-i*3);g.lineTo(x+9,22-i*4);g.stroke();}
+    } else {
+      const h=hurt?.7:1;g.save();g.scale(1,h);
+      // 흰자: 크고 둥근 아몬드
+      g.beginPath();g.moveTo(-70,-4);g.quadraticCurveTo(-30,-58,40,-46);g.quadraticCurveTo(84,-30,70,18);g.quadraticCurveTo(30,58,-40,42);g.quadraticCurveTo(-82,26,-70,-4);g.closePath();
+      g.fillStyle='#fbfbff';g.fill();g.save();g.clip();
+      // 홍채: 하늘색 그라데이션 + 큰 하이라이트 두 개
+      const iris=g.createRadialGradient(0,4,6,0,4,40);iris.addColorStop(0,'#0c2a4a');iris.addColorStop(.45,irisCol);iris.addColorStop(.85,'#9fe0ff');iris.addColorStop(1,'#2f6fa8');
+      g.fillStyle=iris;g.beginPath();g.ellipse(0,4,36,40,0,0,Math.PI*2);g.fill();
+      g.fillStyle='#0a0c14';g.beginPath();g.ellipse(0,6,18,22,0,0,Math.PI*2);g.fill();
+      g.fillStyle='rgba(40,20,60,.28)';g.fillRect(-90,-70,180,34);   // 윗 눈꺼풀 그림자
+      g.fillStyle='#fff';g.beginPath();g.ellipse(-13,-12,12,14,0,0,Math.PI*2);g.fill();g.beginPath();g.arc(12,20,5,0,Math.PI*2);g.fill();
+      g.restore();
+      // 윗 라인 굵게 + 속눈썹 3~4가닥 (바깥쪽으로 길게)
+      g.strokeStyle=lash;g.lineWidth=9;g.lineCap='round';g.beginPath();g.moveTo(-70,-4);g.quadraticCurveTo(-30,-58,40,-46);g.quadraticCurveTo(70,-40,74,-14);g.stroke();
+      g.lineWidth=6;for(let i=0;i<4;i++){const x=28+i*14,y=-48+i*7;g.beginPath();g.moveTo(x,y);g.lineTo(x+16,y-16+i*2);g.stroke();}
+      g.lineWidth=3;g.strokeStyle='rgba(42,26,46,.7)';g.beginPath();g.moveTo(-58,26);g.quadraticCurveTo(0,58,64,22);g.stroke();
+      g.restore();
+    }
+    // 가는 아치 눈썹 (머리색 계열 진한 톤)
+    g.strokeStyle=def.browColor||'#7a2d55';g.lineWidth=7;g.lineCap='round';g.beginPath();
+    const lift=hurt?6:0;g.moveTo(-70,-78+lift);g.quadraticCurveTo(-10,-112,66,-88+lift);g.stroke();
+    g.restore();
+  }
+  // 코: 작은 점 두 개
+  g.strokeStyle='rgba(140,70,60,.55)';g.lineWidth=3;g.lineCap='round';g.beginPath();g.moveTo(246,322);g.quadraticCurveTo(252,318,258,322);g.stroke();
+  // 입: 작고 도톰한 분홍 입술, 미소
+  g.fillStyle='#ff4f7d';g.strokeStyle='#a8244f';g.lineWidth=3;
+  if(hurt){g.beginPath();g.ellipse(256,392,20,14,0,0,Math.PI*2);g.fill();g.stroke();g.fillStyle='#4d1a2a';g.beginPath();g.ellipse(256,394,10,8,0,0,Math.PI*2);g.fill();}
+  else{g.beginPath();g.moveTo(228,384);g.quadraticCurveTo(256,372,284,384);g.quadraticCurveTo(268,404,256,404);g.quadraticCurveTo(244,404,228,384);g.closePath();g.fill();g.stroke();
+    g.fillStyle='rgba(255,255,255,.55)';g.beginPath();g.ellipse(248,392,7,3,0,0,Math.PI*2);g.fill();}
+}
+
 export function ippoFaceTexture(expression='focused',def={referenceIppo:true}) {
-  const key=[def.name,def.eyes,def.brows,def.mouth,def.gender,expression].join('|');
+  const key=[def.name,def.eyes,def.brows,def.mouth,def.gender,def.pretty?'pretty':'',expression].join('|');
   if(faces.has(key))return faces.get(key);
   const c=document.createElement('canvas');c.width=c.height=512;const g=c.getContext('2d'),blink=expression==='blink',hurt=expression==='hurt';
+  if(def.pretty){prettyFace(g,def,blink,hurt);const tex=new THREE.CanvasTexture(c);tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=4;faces.set(key,tex);return tex;}
   for(const sign of [-1,1]){
     g.save();g.translate(sign<0?151:361,204);g.scale(sign,1);
     if(!def.referenceIppo)g.scale(def.eyes==='big'?.95:1,def.eyes==='narrow'?.62:def.eyes==='big'?1.08:.94);
