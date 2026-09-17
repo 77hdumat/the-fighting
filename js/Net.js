@@ -15,6 +15,7 @@ export class Net {
     this.onLeave = null;    // host: (slot)
     this.onOpen = null;
     this.onError = null;
+    this.onReconnect = null;  // host: 시그널링 재연결 성공
     this.mySlot = 0;
   }
 
@@ -34,29 +35,45 @@ export class Net {
         iceCandidatePoolSize: 4,
       },
     });
-    // 시그널링 서버와 끊기면(모바일 화면 꺼짐·망 전환) 이미 맺은 P2P 는 살아 있지만 새 참가/재접속이 안 된다 → 자동 재연결
+    // 시그널링 서버와 끊기면(모바일 화면 꺼짐·망 전환) 이미 맺은 P2P 는 살아 있지만 새 참가/재접속이 안 된다 → 자동 재연결.
+    // 게스트가 "접속 중…" 에서 못 벗어나는 대표 원인이 방장의 시그널링이 조용히 죽은 것이다.
+    const tryReconnect = () => { if (!peer.destroyed && this.peer === peer && peer.disconnected) { try { peer.reconnect(); } catch (e) {} } };
     peer.on('disconnected', () => {
       if (peer.destroyed || this.peer !== peer) return;
       clearTimeout(this._reconnT);
-      this._reconnT = setTimeout(() => { if (!peer.destroyed && this.peer === peer && peer.disconnected) { try { peer.reconnect(); } catch (e) {} } }, 1200);
+      this._reconnT = setTimeout(tryReconnect, 1200);
     });
+    // 화면이 다시 켜지거나 망이 돌아오면 기다리지 않고 바로
+    const wake = () => { if (document.visibilityState === 'visible') tryReconnect(); };
+    document.addEventListener('visibilitychange', wake); window.addEventListener('online', wake);
+    this._unwake = () => { document.removeEventListener('visibilitychange', wake); window.removeEventListener('online', wake); };
     return peer;
   }
 
   /** 클라: 이 시간 안에 데이터채널이 안 열리면 timeout 에러 (기본 15초) */
-  static JOIN_TIMEOUT = 15000;
+  static JOIN_TIMEOUT = 12000;
 
-  /** code 를 주면 그 코드로 방을 연다 (호스트 승계). 아직 이전 호스트 ID 가 안 풀렸으면 잠시 후 재시도 */
+  /**
+   * code 를 주면 그 코드로 방을 연다 (호스트 승계). 아직 이전 호스트 ID 가 안 풀렸으면 잠시 후 재시도.
+   * 한 번 열린 뒤의 unavailable-id 는 시그널링 재연결 중 서버에 내 옛 소켓이 아직 남아 있는 것 → 같은 코드로 계속 재시도
+   * (코드를 바꾸면 게스트가 옛 코드로 붙다 영원히 "접속 중…" 에 걸린다).
+   */
   host(maxClients = 3, code = null, tries = 0) {
     this.role = 'host';
     this.code = code || makeCode();
-    this.peer = this._mkPeer(PREFIX + this.code);
-    this.peer.on('open', () => this.onOpen && this.onOpen(this.code));
+    const myCode = this.code;
+    this.peer = this._mkPeer(PREFIX + myCode);
+    let opened = false;
+    this.peer.on('open', () => {
+      if (opened) { this.onReconnect && this.onReconnect(); return; }   // 시그널링 재연결 — 방은 그대로
+      opened = true; this.onOpen && this.onOpen(myCode);
+    });
     this.peer.on('error', (e) => {
       if (e.type === 'unavailable-id') {
-        this.peer.destroy();
-        if (code && tries < 10) setTimeout(() => this.host(maxClients, code, tries + 1), 900);
-        else this.host(maxClients);
+        if (this.peer && !this.peer.destroyed) this.peer.destroy();
+        if (this.peer && this.peer.id !== PREFIX + myCode) return;    // 이미 다른 피어로 넘어감
+        if (opened || code) { if (tries < 40) setTimeout(() => { if (this.role === 'host' && this.code === myCode) this.host(maxClients, myCode, tries + 1); }, 1500); else this.onError && this.onError(e); }
+        else this.host(maxClients);                                    // 처음부터 겹친 코드 → 새 코드
         return;
       }
       this.onError && this.onError(e);
@@ -64,15 +81,32 @@ export class Net {
     this.peer.on('connection', (c) => {
       const slot = this.conns.findIndex((x) => !x) ;
       const idx = slot === -1 ? this.conns.length : slot;
-      if (idx >= maxClients || this.started) { c.on('open', () => { c.send({ t: 'full' }); setTimeout(() => c.close(), 300); }); return; }
+      // 자리가 없을 때만 여기서 거절. 경기 중 참가 여부는 게임 쪽(onJoin)이 정한다 (경기 종료 화면에서는 받아 준다)
+      if (idx >= maxClients) { c.on('open', () => { c.send({ t: 'full', why: 'slots' }); setTimeout(() => c.close(), 300); }); return; }
       this.conns[idx] = c;
+      c._lastRx = performance.now(); c._hb = false;
       c.on('open', () => { c.send({ t: 'welcome', slot: idx + 1 }); this.onJoin && this.onJoin(idx + 1); });
-      c.on('data', (m) => this.onMessage && this.onMessage(m, idx + 1));
+      c.on('data', (m) => {
+        c._lastRx = performance.now();
+        if (m && m.t === 'hb') { c._hb = true; try { c.send({ t: 'hb', t0: m.t0 }); } catch (e) {} return; }   // 하트비트는 게임에 안 넘긴다
+        this.onMessage && this.onMessage(m, idx + 1);
+      });
       const gone = () => { if (this.conns[idx] !== c) return; this.conns[idx] = null; this.onLeave && this.onLeave(idx + 1); };
       c.on('close', gone);
       c.on('error', gone);
+      c.on('iceStateChanged', (st) => { if (st === 'failed' || st === 'closed') { try { c.close(); } catch (e) {} gone(); } });
     });
+    // 하트비트가 끊긴 게스트는 정리한다 (탭 종료·화면 꺼짐은 WebRTC 가 30초 이상 지나야 알아채므로).
+    // 하트비트를 한 번이라도 보낸(=새 빌드) 게스트만 대상.
+    this._hbTimer = setInterval(() => {
+      const now = performance.now();
+      this.conns.forEach((c, i) => { if (c && c._hb && now - c._lastRx > Net.HB_TIMEOUT) { try { c.close(); } catch (e) {} if (this.conns[i] === c) { this.conns[i] = null; this.onLeave && this.onLeave(i + 1); } } });
+    }, 2000);
   }
+
+  /** 하트비트: 1초마다, 8초 침묵이면 끊긴 것으로 본다 */
+  static HB_INTERVAL = 1000;
+  static HB_TIMEOUT = 8000;
 
   join(code) {
     this.role = 'client';
@@ -86,13 +120,28 @@ export class Net {
       // 대신 순서가 뒤바뀔 수 있으므로 스냅샷/입력에는 시퀀스 번호를 붙여 오래된 것을 버린다 (main.js)
       const c = this.peer.connect(PREFIX + this.code, { serialization: 'json', reliable: false });
       this.conn = c;
-      c.on('open', () => { opened = true; clearTimeout(this._joinT); this.onOpen && this.onOpen(this.code); });
+      let lastRx = performance.now();
+      c.on('open', () => {
+        opened = true; clearTimeout(this._joinT); lastRx = performance.now();
+        // 하트비트: 방장이 조용히 사라진 것(폰 화면 꺼짐·앱 종료)을 몇 초 안에 알아채고 재접속으로 넘어간다
+        clearInterval(this._hbTimer);
+        this._hbTimer = setInterval(() => {
+          if (this.conn !== c) { clearInterval(this._hbTimer); return; }
+          if (!c.open) return;
+          try { c.send({ t: 'hb', t0: performance.now() }); } catch (e) {}
+          if (performance.now() - lastRx > Net.HB_TIMEOUT) { clearInterval(this._hbTimer); try { c.close(); } catch (e) {} }
+        }, Net.HB_INTERVAL);
+        this.onOpen && this.onOpen(this.code);
+      });
       c.on('data', (m) => {
+        lastRx = performance.now();
+        if (m && m.t === 'hb') { const r = performance.now() - m.t0; this.rtt = this.rtt ? this.rtt * 0.8 + r * 0.2 : r; return; }
         if (m.t === 'welcome') this.mySlot = m.slot;
         this.onMessage && this.onMessage(m, 0);
       });
-      c.on('close', () => this.onError && this.onError({ type: 'closed' }));
+      c.on('close', () => { clearInterval(this._hbTimer); this.onError && this.onError({ type: 'closed' }); });
       c.on('error', (e) => this.onError && this.onError({ type: 'conn-error', detail: e }));
+      c.on('iceStateChanged', (st) => { if (st === 'failed' || st === 'closed') { try { c.close(); } catch (e) {} } });
     });
     this.peer.on('error', (e) => this.onError && this.onError(e));
   }
@@ -115,8 +164,9 @@ export class Net {
 
   close() {
     // 콜백 먼저 끊는다 — destroy 중 나오는 close/error 이벤트가 새 Net 의 상태를 건드리지 않게
-    this.onMessage = this.onJoin = this.onLeave = this.onOpen = this.onError = null;
-    clearTimeout(this._joinT); clearTimeout(this._reconnT);
+    this.onMessage = this.onJoin = this.onLeave = this.onOpen = this.onError = this.onReconnect = null;
+    clearTimeout(this._joinT); clearTimeout(this._reconnT); clearInterval(this._hbTimer);
+    if (this._unwake) { this._unwake(); this._unwake = null; }
     try { this.peer && this.peer.destroy(); } catch (e) {}
     this.peer = null; this.conns = []; this.conn = null; this.role = 'none';
   }

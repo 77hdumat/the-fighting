@@ -494,7 +494,7 @@ class Game {
     try { this.net.close(); } catch (e) {}
     this.net = new Net();
     this.roster = null; this.names = [this.myNick]; this.chars = [this.myChar]; this.intros = [this.myIntro];
-    this.mode = 'solo'; this.kicked = false; this.migrating = false;
+    this.mode = 'solo'; this.kicked = false; this.migrating = false; this.rejoining = false; this.joinRejected = false; this.joined = false; this.joinTries = 0;
     try { history.replaceState(null, '', location.pathname); } catch (e) {}
     this.showMenu();
     if (reason) this.lobbyMsg(reason);
@@ -661,7 +661,12 @@ class Game {
     this.seats = [0, 1, 2, 3];   // 좌석 → netSlot (방장이 드래그로 바꾼다)
     net.onOpen = (code) => { try { history.replaceState(null, '', `?r=${code}`); } catch (e) {} this.showLobby(code); this.showRoomRules(); this.renderRoster(this.roster); document.getElementById('btn-start').classList.remove('hidden'); this.lobbyMsg('친구에게 코드를 알려주세요. 참가한 사람끼리만 싸웁니다 (2~4명). 시작 버튼으로 시작'); this.broadcastLobby(); };
     net.onError = (e) => this.lobbyMsg('연결 오류: ' + (e.type || e));
-    net.onJoin = (slot) => { this.inSeq[slot] = 0; this.netInputs[slot] = new InputState(); this.names[slot] = 'P' + (slot + 1); this.roster[slot] = { type: 'remote', name: this.names[slot] }; this.renderRoster(this.roster); this.broadcastLobby(); if (this.started) this.net.conns[slot - 1].send({ t: 'full' }); };
+    net.onJoin = (slot) => {
+      // 경기 진행 중엔 못 들어온다 (끝난 뒤 결과 화면이면 받아 주고, 다음 경기부터 참가)
+      if (this.started && !this.over) { const c = this.net.conns[slot - 1]; try { c.send({ t: 'full', why: 'playing' }); } catch (e) {} setTimeout(() => { try { c.close(); } catch (e) {} }, 300); this.net.conns[slot - 1] = null; return; }
+      this.inSeq[slot] = 0; this.netInputs[slot] = new InputState(); this.names[slot] = 'P' + (slot + 1); this.roster[slot] = { type: 'remote', name: this.names[slot] }; this.renderRoster(this.roster); this.broadcastLobby();
+    };
+    net.onReconnect = () => { this.addChat(0, '서버와 다시 연결됨', true); };
     net.onLeave = (slot) => {
       this.roster[slot] = { type: 'empty' }; this.renderRoster(this.roster); this.broadcastLobby();
       this.addChat(0, `${this.chatName(slot)} 퇴장`, true); this.net.broadcast({ t: 'chat', sys: true, text: `${this.chatName(slot)} 퇴장` });
@@ -723,31 +728,43 @@ class Game {
     this.startMatch('host', cfg);
   }
 
-  joinRoom(code) {
+  joinRoom(code, opts = {}) {
     const net = this.net;
+    this.joined = false; this.joinRejected = false;
     net.onOpen = () => { this.joinTries = 0; this.showLobby(code); this.showRoomRules(); this.showChat(true); this.lobbyMsg('접속 완료. 방장이 시작할 때까지 대기…'); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); };
     net.onError = (e) => {
-      if (e.type === 'closed' && !this.migrating) { if (!this.kicked) this.migrateHost(); return; }
+      if (e.type === 'closed') {
+        if (this.kicked) return;                                     // leaveRoom 이 처리
+        if (this.joinRejected) { this.leaveRoom(this.joinRejected); return; }
+        if (this.migrating) { /* 아래 승계 재시도 로직으로 */ }
+        else if (this.joined) { this.reconnectRoom(code); return; }   // 잘 붙어 있다가 끊김 → 같은 방장에게 먼저 재접속
+        else { this.reconnectRoom(code); return; }                    // 열리다 말고 끊김 → 재접속
+      }
+      if (e.type === 'peer-unavailable' && this.rejoining && !this.migrating) {
+        // 재접속인데 방장 ID 가 서버에 없다 = 방장이 정말 나갔다 → 승계
+        this.rejoining = false; this.migrateHost(); return;
+      }
       if (e.type === 'timeout' && !this.migrating) {
-        // 시그널링은 됐는데 P2P 가 안 붙음 (방화벽/NAT). 새 Peer 로 두 번까지 재시도 → 그래도 안 되면 안내
+        // 시그널링은 됐는데 P2P 가 안 붙음 (방화벽/NAT, 또는 방장 시그널링이 조용히 죽음). 새 Peer 로 재시도 → 그래도 안 되면 안내
         this.joinTries = (this.joinTries || 0) + 1;
-        if (this.joinTries <= 2) { this.lobbyMsg(`호스트에 연결이 안 됩니다. 다시 시도 중… (${this.joinTries}/2)`); this.net.close(); this.net = new Net(); this.joinRoom(code); }
-        else { this.joinTries = 0; this.leaveRoom('호스트에 연결하지 못했습니다. 양쪽 모두 Wi-Fi/데이터를 바꿔 보거나 방을 다시 만들어 주세요'); }
+        if (this.joinTries <= 3) { this.net.close(); this.net = new Net(); this.joinRoom(code, { msg: `방장에게 연결이 안 됩니다. 다시 시도 중… (${this.joinTries}/3)` }); }
+        else { this.joinTries = 0; this.rejoining = false; this.leaveRoom('방장에게 연결하지 못했습니다. 방장이 방을 다시 만들거나, 양쪽 Wi-Fi/데이터를 바꿔 보세요'); }
         return;
       }
       if ((e.type === 'peer-unavailable' || e.type === 'closed' || e.type === 'timeout') && this.migrating) {
         // 승계 중: 새 방장이 아직 방을 못 열었을 수 있음 → 재시도
         if (this.migrateTimer) return;   // 같은 시도에서 closed + unavailable 둘 다 올 수 있음 → 한 번만
-        if (this.migrateTries < 8) { this.migrateTries++; this.lobbyMsg(`새 방장에게 재접속 중… (${this.migrateTries})`); const c = this.net.code; this.net.close(); this.net = new Net(); this.migrateTimer = setTimeout(() => { this.migrateTimer = null; this.joinRoom(c); }, 1500); }
+        if (this.migrateTries < 8) { this.migrateTries++; const c = this.net.code; this.net.close(); this.net = new Net(); this.migrateTimer = setTimeout(() => { this.migrateTimer = null; this.joinRoom(c, { msg: `새 방장에게 재접속 중… (${this.migrateTries})` }); }, 1500); }
         else { this.migrating = false; this.leaveRoom('방이 사라졌습니다'); }
         return;
       }
-      this.lobbyMsg(e.type === 'peer-unavailable' ? '그 코드의 방이 없습니다' : '연결 오류: ' + (e.type || e));
+      if (e.type === 'peer-unavailable') { this.leaveRoom('그 코드의 방이 없습니다 (코드 확인 · 방장이 방을 닫았을 수 있음)'); return; }
+      this.lobbyMsg('연결 오류: ' + (e.type || e));
     };
     net.onMessage = (m) => {
-      if (m.t === 'welcome') { this.snapSeq = 0; this.snaps = []; this.playT = null; this.migrating = false; this.migrateTries = 0; this.lastSlot = m.slot; this.names = []; this.chars = []; net.send({ t: 'hello', name: this.myNick, char: this.myChar, intro: this.myIntro }); }
+      if (m.t === 'welcome') { this.joined = true; this.rejoining = false; this.snapSeq = 0; this.snaps = []; this.playT = null; this.migrating = false; this.migrateTries = 0; this.lastSlot = m.slot; this.names = []; this.chars = []; net.send({ t: 'hello', name: this.myNick, char: this.myChar, intro: this.myIntro }); }
       else if (m.t === 'lobby') { if (m.map) this.myMap = m.map; if (m.rule) this.myRule = m.rule; if (m.seats) this.seats = m.seats; this.showRoomRules(); this.rosterRaw = m.roster; this.names = m.names || []; this.chars = m.chars || []; this.renderRoster(m.roster.map((r, i) => (i === net.mySlot ? { type: 'local', name: r.name } : i === 0 ? { type: 'remote', name: r.name } : r))); }
-      else if (m.t === 'full') this.lobbyMsg('방이 가득 찼거나 이미 시작됨');
+      else if (m.t === 'full') { this.joinRejected = m.why === 'playing' ? '경기가 진행 중입니다. 끝나면 다시 참가하세요' : '방이 가득 찼습니다 (최대 4명)'; this.lobbyMsg(this.joinRejected); }
       else if (m.t === 'start') { this.setMap(m.map || 'ring'); this.names = []; m.cfg.forEach((c) => { this.names[c.netSlot] = c.name; }); this.localSlot = Math.max(0, m.cfg.findIndex((c) => c.netSlot === net.mySlot)); this.startMatch('client', m.cfg); }
       else if (m.t === 'snap') { if (this.phase === 'fight') this.onSnapshot(m); }
       else if (m.t === 'pong') { const r = performance.now() - m.t0; this.rtt = this.rtt ? this.rtt * 0.8 + r * 0.2 : r; }
@@ -757,13 +774,35 @@ class Game {
       else if (m.t === 'over') this.showWinner(m.winner, m.team !== undefined ? m.team : null);
       else if (m.t === 'tolobby') { this.mode = 'client'; this.returnToLobby(); }
       else if (m.t === 'kicked') { this.kicked = true; this.leaveRoom('방장이 강퇴했습니다'); }
+      else if (m.t === 'restart' && !this.started) {
+        // 결과 화면에서 들어온 참가자: 첫 경기 시작과 같은 절차로 합류
+        if (m.cfg) { this.setMap(this.myMap || 'ring'); this.names = []; m.cfg.forEach((c) => { this.names[c.netSlot] = c.name; }); this.localSlot = Math.max(0, m.cfg.findIndex((c) => c.netSlot === net.mySlot)); this.startMatch('client', m.cfg); }
+      }
       else if (m.t === 'restart') { if (m.cfg) { this.cfg = m.cfg; this.localSlot = Math.max(0, m.cfg.findIndex((c) => c.netSlot === net.mySlot)); } document.getElementById('next-overlay').classList.add('hidden'); this.resetMatch(); }
     };
-    this.lobbyMsg('접속 중…');
+    this.lobbyMsg(opts.msg || '접속 중…');
     document.getElementById('menu').classList.add('hidden');
     document.getElementById('lobby').classList.remove('hidden');
     document.getElementById('room-code').textContent = code.toUpperCase();
     net.join(code);
+  }
+
+  /**
+   * 클라: 연결이 끊겼을 때 — 방장이 나간 건지, 내 쪽(화면 꺼짐·망 전환)이 끊긴 건지 모른다.
+   * 먼저 같은 코드로 재접속해 보고, 방장 ID 가 서버에 없으면(peer-unavailable) 그때 승계(migrateHost)한다.
+   * 전에는 끊기면 무조건 승계로 가서, 살아 있는 방장과 같은 코드를 두고 다투다 새 방을 파 버렸다.
+   */
+  reconnectRoom(code) {
+    if (this.reconnectLock && performance.now() - this.reconnectLock < 2000) return;
+    this.reconnectLock = performance.now();
+    this.rejoinTries = this.joined ? 0 : (this.rejoinTries || 0) + 1;   // 붙었다 끊긴 건 횟수 초기화, 열리다 만 건 누적
+    if (this.rejoinTries > 3) { this.rejoinTries = 0; this.leaveRoom('방에 연결이 유지되지 않습니다. 잠시 후 다시 참가해 보세요'); return; }
+    if (this.started) this.teardownMatch();
+    this.rejoining = true;
+    this.net.close(); this.net = new Net();
+    this.showLobby(code);
+    this.lobbyMsg('연결이 끊겼습니다. 재접속 중…');
+    setTimeout(() => { if (this.net.role === 'none') this.joinRoom(code, { msg: '연결이 끊겼습니다. 재접속 중…' }); }, 1000);
   }
 
   /** 정적 지오메트리의 행렬 갱신을 끈다 (매 프레임 updateMatrixWorld 비용 절감) */
