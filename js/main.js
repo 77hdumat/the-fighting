@@ -934,7 +934,7 @@ class Game {
     for (const f of this.fighters) if (!f.isAI) this.coachBrains[f.slot] = new CoachBrain();
     document.getElementById('coach').classList.add('hidden');
     this.hitStop = 0; this.slowMo = 0; this.snaps = []; this.playT = null; this._pred = null;
-    this._lastRecv = 0; this._lastRecvTs = 0; this.jitter = undefined; this._sendGap = 0;   // 지터 통계는 판마다 새로 (지난 판 마지막 스냅샷과의 간격이 지터로 오인되지 않게)
+    this._lastRecv = 0; this._lastRecvTs = 0; this.jitter = undefined; this._sendGap = 0; this._moveHist = null; this._vis = null;   // 지터 통계는 판마다 새로 (지난 판 마지막 스냅샷과의 간격이 지터로 오인되지 않게)
     if (this.ultFx) this.ultFx.clear();
     if (this.auraFx) this.auraFx.clear();
     this.camCtl.initialized = false;
@@ -1424,10 +1424,12 @@ class Game {
       this.simulate(rawDt);
       if (this.mode === 'host') {
         this.snapAccum += rawDt;
-        if (this.snapAccum >= 1 / SNAP_HZ - 0.002) {
-          // 남은 누적을 이월해 평균 주기를 정확히 SNAP_HZ 로 맞춘다 (렉 스파이크 뒤 폭주는 한 주기로 제한)
-          this.snapAccum = Math.min(this.snapAccum - 1 / SNAP_HZ, 1 / SNAP_HZ);
-          this.net.broadcast({ t: 'snap', q: ++this.outSeq, ts: this.realTime, f: this.fighters.map((f) => f.snapshot()), ev: this.pendingEvents });
+        // 3~4인은 스냅샷이 2배 크고 받는 사람도 많다 → 30Hz 로 (호스트 폰 업로드 대역폭 보호)
+        const hz = this.fighters.length > 2 ? 30 : SNAP_HZ;
+        if (this.snapAccum >= 1 / hz - 0.002) {
+          // 남은 누적을 이월해 평균 주기를 정확히 hz 로 맞춘다 (렉 스파이크 뒤 폭주는 한 주기로 제한)
+          this.snapAccum = Math.min(this.snapAccum - 1 / hz, 1 / hz);
+          this.net.broadcastDroppable({ t: 'snap', q: ++this.outSeq, ts: this.realTime, f: this.fighters.map((f) => f.snapshot()), ev: this.pendingEvents });
           this.pendingEvents = [];
         }
       }
@@ -1755,27 +1757,41 @@ class Game {
   }
 
   /**
-   * 내 캐릭터만 로컬 예측: 입력을 즉시 반영하고(오프셋 누적), 서버 위치로 부드럽게 되돌린다.
-   * 왕복 지연(입력→호스트→스냅샷) 때문에 게스트의 내 캐릭터가 늦게 따라오던 버벅임을 없앤다.
+   * 내 캐릭터만 로컬 예측 (서버 조정 방식).
+   * 기준은 '가장 최신' 스냅샷의 내 위치(보간 지연 없이) + 아직 호스트에 반영되지 않은 내 이동(최근 RTT 동안의 입력)을 다시 얹는다.
+   * 예전 방식(고정 시정수로 오프셋 누적)은 걷는 동안 항상 ~0.7m 앞서 보이고 멈추면 뒤로 미끄러져,
+   * 게스트가 사거리 안이라 생각하고 친 펀치가 호스트에선 빗나가는 원인이었다.
    */
   predictLocal(rawDt) {
     const f = this.localFighter; if (!f || f.benched) return;
-    if (f.falling || f.ko || f.fallY > 0.01 || f.downT > 0) { if (this._pred) this._pred.set(0, 0, 0); return; }
-    if (!this._pred) this._pred = new THREE.Vector3();
-    const p = this._pred;
-    const blocked = f.ko || f.downT > 0 || f.stagger > 0 || !!f.finisher || f.airY > 0.01;
+    const n = this.snaps.length; if (!n) return;
+    if (!this._moveHist) this._moveHist = [];
+    const hist = this._moveHist;
+    const now = performance.now();
+    if (f.falling || f.ko || f.fallY > 0.01 || f.downT > 0) { hist.length = 0; this._vis = null; return; }
+    // 1) 이번 프레임 내 이동량 기록 (호스트와 같은 속도식)
+    const blocked = f.stagger > 0 || !!f.finisher || f.airY > 0.01 || f.ultT > 0 || f.ultVictimT > 0 || f.danceT > 0;
+    let dx = 0, dz = 0;
     if (!blocked) {
-      const speed = 2.5 * Math.pow(f.def.speedMul, 0.75) * (f.dempsey.active ? 0.9 : 1) * (f.guard ? 0.55 : 1);
-      p.x += this.move.x * speed * rawDt;
-      p.z += this.move.z * speed * rawDt;
+      const speed = 2.5 * Math.pow(f.def.speedMul, 0.75) * (f.dempsey.active ? (f.stanceStyle === 'smash' ? 0.6 : 0.9) : 1) * (f.boostT > 0 ? 1.45 : 1);
+      dx = this.move.x * speed * rawDt; dz = this.move.z * speed * rawDt;
     }
-    // 서버 위치로 수렴 (0.35초 시정수) + 과도한 어긋남 방지
-    const decay = Math.exp(-rawDt / 0.35);
-    p.multiplyScalar(decay);
-    const max = 0.7;
-    const len = Math.hypot(p.x, p.z);
-    if (len > max) { p.x *= max / len; p.z *= max / len; }
-    f.pos.x += p.x; f.pos.z += p.z;
+    hist.push({ t: now, dx, dz });
+    while (hist.length && hist[0].t < now - 1500) hist.shift();
+    // 2) 최신 스냅샷의 내 위치 + 그 스냅샷에 아직 안 실린 입력(대략 최근 RTT 동안 보낸 것)을 재적용
+    const latest = this.snaps[n - 1];
+    const sp = latest.d.f[f.slot];
+    const rtt = Math.min(400, this.rtt || this.net.rtt || 60);
+    const cutoff = latest.recv - rtt - 12;
+    let px = sp.x, pz = sp.z;
+    for (const h of hist) if (h.t > cutoff) { px += h.dx; pz += h.dz; }
+    // 3) 화면 위치는 목표로 부드럽게 수렴 (스냅샷마다 목표가 조금씩 달라져도 튀지 않게). 크게 어긋나면 그냥 점프
+    if (!this._vis) this._vis = { x: px, z: pz };
+    const v = this._vis;
+    const err = Math.hypot(px - v.x, pz - v.z);
+    if (err > 1.2) { v.x = px; v.z = pz; }
+    else { const k = Math.min(1, rawDt * 16); v.x += (px - v.x) * k; v.z += (pz - v.z) * k; }
+    f.pos.x = v.x; f.pos.z = v.z;
     if (this.mapKind === 'cliff') {
       // 암벽은 경계가 원형이고 밖으로 나갈 수 있어야 한다 (낙사 판정은 호스트가 한다)
       const r = Math.hypot(f.pos.x, f.pos.z), lim = (this.ring && this.ring.radius ? this.ring.radius(f.pos.x, f.pos.z) : 6.2) + 1.2;
@@ -1784,6 +1800,7 @@ class Game {
       f.pos.x = Math.max(-4.15, Math.min(4.15, f.pos.x));
       f.pos.z = Math.max(-4.15, Math.min(4.15, f.pos.z));
     }
+    v.x = f.pos.x; v.z = f.pos.z;
     f._applyNow(f.pose);
     // 펀치/가드 예측 포즈를 서버 포즈 위에 덮는다
     f.applyPrediction(rawDt, f.punchProgress > 0.001, this.input.isDown('ShiftLeft') || this.input.isDown('ShiftRight'));

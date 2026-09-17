@@ -150,6 +150,27 @@ export class Net {
   broadcast(msg) {
     for (const c of this.conns) if (c && c.open) { try { c.send(msg); } catch (e) {} }
   }
+
+  /** 송신 버퍼에 이만큼 이상 쌓여 있으면(아직 망에 못 내보낸 바이트) 그 게스트는 혼잡한 것으로 본다 */
+  static CONGESTED_BYTES = 3000;
+
+  /**
+   * host → 모든 클라, 단 '버릴 수 있는' 메시지(스냅샷). 회선이 느린 게스트에게는 큐에 쌓지 않고 이번 것을 건너뛴다.
+   * 쌓아 두면 지연이 계속 늘다가 한꺼번에 도착해 '미끄러지다 뚝 끊기고, 안 맞다가 우다다 맞는' 현상이 된다.
+   * 건너뛴 스냅샷의 이벤트(ev)는 게스트별로 모아 두었다가 다음에 보낼 때 같이 보낸다 (타격·효과음 유실 방지).
+   */
+  broadcastDroppable(msg) {
+    const ev = msg.ev || [];
+    for (const c of this.conns) {
+      if (!c || !c.open) continue;
+      const dc = c.dataChannel;
+      const congested = dc && dc.bufferedAmount > Net.CONGESTED_BYTES;
+      if (congested) { if (ev.length) c._evq = (c._evq || []).concat(ev); c._dropped = (c._dropped || 0) + 1; continue; }
+      let out = msg;
+      if (c._evq && c._evq.length) { out = Object.assign({}, msg, { ev: c._evq.concat(ev) }); c._evq = null; }
+      try { c.send(out); } catch (e) {}
+    }
+  }
   /** client → host */
   send(msg) { if (this.conn && this.conn.open) { try { this.conn.send(msg); } catch (e) {} } }
 
