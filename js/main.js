@@ -1427,9 +1427,8 @@ class Game {
         // 이벤트(타격·효과음·연출)는 매 프레임 즉시, 신뢰 채널로 (스냅샷 주기를 기다리지 않는다 → 피격 확인이 더 빠르다)
         if (this.pendingEvents.length) { this.net.broadcast({ t: 'ev', ev: this.pendingEvents }); this.pendingEvents = []; }
         this.snapAccum += rawDt;
-        // 인원이 많을수록 스냅샷이 크고 받는 사람도 많다 → 2인 60Hz / 3인 45Hz / 4인 30Hz (호스트 폰 업로드 보호)
-        const n = this.fighters.length;
-        const hz = n <= 2 ? SNAP_HZ : n === 3 ? 45 : 30;
+        // 인원과 무관하게 60Hz. 회선이 못 따라오는 게스트는 broadcastDroppable 이 송신 버퍼를 보고 알아서 건너뛴다 (자동 감속)
+        const hz = SNAP_HZ;
         if (this.snapAccum >= 1 / hz - 0.002) {
           // 남은 누적을 이월해 평균 주기를 정확히 hz 로 맞춘다 (렉 스파이크 뒤 폭주는 한 주기로 제한)
           this.snapAccum = Math.min(this.snapAccum - 1 / hz, 1 / hz);

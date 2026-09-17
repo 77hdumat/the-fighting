@@ -1535,7 +1535,7 @@ export class Fighter {
     if (this.ko) flags |= 1; if (d.active) flags |= 2; if (d.maxSpeed) flags |= 4; if (this.guard) flags |= 8;
     if (this.stagger > 0) flags |= 16; if (this.finisher) flags |= 32; if (this.boostT > 0) flags |= 64; if (this.ropeCharge > 0) flags |= 128; if (this.downT > 0) flags |= 256; if (this.benched) flags |= 512; if (this.fallT > 0) flags |= 1024;
     const po = new Array(29);
-    let i = 0; for (const k in this.pose) po[i++] = +this.pose[k].toFixed(2);   // 소수 2자리면 시각 차이 없음, 페이로드는 20~30% 감소
+    let i = 0; for (const k in this.pose) po[i++] = Math.round(this.pose[k] * 100);   // 0.01 단위 정수 (소수점 문자열보다 짧아 4인 60Hz 페이로드를 줄인다)
     return {
       x: +this.pos.x.toFixed(2), z: +this.pos.z.toFixed(2), y: +(this.yaw + this.koAngle).toFixed(3), rx: +this.rig.root.rotation.x.toFixed(2), ay: +this.airY.toFixed(2),
       hp: +this.hp.toFixed(1), f: flags, fy: +(this.fallY || 0).toFixed(2),
@@ -1576,7 +1576,7 @@ export class Fighter {
     // 가드 게이지는 호스트가 권위를 가진다 — 클라는 보간 없이 받은 값을 그대로 쓴다
     if (b.sm !== undefined) this.stam = b.sm;
     if (b.gb !== undefined) this.guardBroken = b.gb;
-    let i = 0; for (const k in this.pose) { this.pose[k] = L(a.po[i], b.po[i]); i++; }
+    let i = 0; for (const k in this.pose) { this.pose[k] = L(a.po[i], b.po[i]) * 0.01; i++; }
     this._applyNow(this.pose);
   }
 }

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta name="build-id" content="1789626413">
+<meta name="build-id" content="1789626734">
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -539,7 +539,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   }
 }
 </script>
-<script>window.__BUILD_ID = "1789626413";</script>
+<script>window.__BUILD_ID = "1789626734";</script>
 </head>
 <body>
   <canvas id="gl" tabindex="0"></canvas>
@@ -7384,7 +7384,7 @@ class Fighter {
     if (this.ko) flags |= 1; if (d.active) flags |= 2; if (d.maxSpeed) flags |= 4; if (this.guard) flags |= 8;
     if (this.stagger > 0) flags |= 16; if (this.finisher) flags |= 32; if (this.boostT > 0) flags |= 64; if (this.ropeCharge > 0) flags |= 128; if (this.downT > 0) flags |= 256; if (this.benched) flags |= 512; if (this.fallT > 0) flags |= 1024;
     const po = new Array(29);
-    let i = 0; for (const k in this.pose) po[i++] = +this.pose[k].toFixed(2);   // 소수 2자리면 시각 차이 없음, 페이로드는 20~30% 감소
+    let i = 0; for (const k in this.pose) po[i++] = Math.round(this.pose[k] * 100);   // 0.01 단위 정수 (소수점 문자열보다 짧아 4인 60Hz 페이로드를 줄인다)
     return {
       x: +this.pos.x.toFixed(2), z: +this.pos.z.toFixed(2), y: +(this.yaw + this.koAngle).toFixed(3), rx: +this.rig.root.rotation.x.toFixed(2), ay: +this.airY.toFixed(2),
       hp: +this.hp.toFixed(1), f: flags, fy: +(this.fallY || 0).toFixed(2),
@@ -7425,7 +7425,7 @@ class Fighter {
     // 가드 게이지는 호스트가 권위를 가진다 — 클라는 보간 없이 받은 값을 그대로 쓴다
     if (b.sm !== undefined) this.stam = b.sm;
     if (b.gb !== undefined) this.guardBroken = b.gb;
-    let i = 0; for (const k in this.pose) { this.pose[k] = L(a.po[i], b.po[i]); i++; }
+    let i = 0; for (const k in this.pose) { this.pose[k] = L(a.po[i], b.po[i]) * 0.01; i++; }
     this._applyNow(this.pose);
   }
 }
@@ -10452,9 +10452,8 @@ class Game {
         // 이벤트(타격·효과음·연출)는 매 프레임 즉시, 신뢰 채널로 (스냅샷 주기를 기다리지 않는다 → 피격 확인이 더 빠르다)
         if (this.pendingEvents.length) { this.net.broadcast({ t: 'ev', ev: this.pendingEvents }); this.pendingEvents = []; }
         this.snapAccum += rawDt;
-        // 인원이 많을수록 스냅샷이 크고 받는 사람도 많다 → 2인 60Hz / 3인 45Hz / 4인 30Hz (호스트 폰 업로드 보호)
-        const n = this.fighters.length;
-        const hz = n <= 2 ? SNAP_HZ : n === 3 ? 45 : 30;
+        // 인원과 무관하게 60Hz. 회선이 못 따라오는 게스트는 broadcastDroppable 이 송신 버퍼를 보고 알아서 건너뛴다 (자동 감속)
+        const hz = SNAP_HZ;
         if (this.snapAccum >= 1 / hz - 0.002) {
           // 남은 누적을 이월해 평균 주기를 정확히 hz 로 맞춘다 (렉 스파이크 뒤 폭주는 한 주기로 제한)
           this.snapAccum = Math.min(this.snapAccum - 1 / hz, 1 / hz);
