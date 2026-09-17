@@ -70,7 +70,6 @@ class Game {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
 
-    Net.fetchTurn();   // TURN 자격증명은 미리 받아 둔다 (방 만들기/참가 때 기다리지 않게)
     this.input = new Input();
     this.touch = new TouchControls(this.input);
     this.isTouch = isTouchDevice();

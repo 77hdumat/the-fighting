@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """dev.html + js/*.js 모듈을 하나의 HTML(인라인 module script)로 합쳐 index.html 을 만든다.
 - 배포본은 단일 파일이라 모듈별 캐시 버전이 섞이는 문제가 원천적으로 없다.
-- dempsey-standalone.html 은 같은 내용의 복사본. 코드/CSS만 인라인한다.
+- 코드/CSS만 인라인한다.
 - 바이너리 에셋은 assets/ 상대경로로 유지한다. 실사 모드는 HTTP(S)로 실행한다.
 개발 중엔 dev.html 을 열면 모듈 버전이 그대로 로드된다."""
 import re, os, pathlib, json, hashlib
@@ -83,8 +83,8 @@ html = _re.sub(r'<script type="module" src="js/main\.js[^"]*"[^>]*></script>', l
 html = html.replace('<head>', '<head>\n<meta name="build-id" content="' + build_id + '">\n<meta http-equiv="Cache-Control" content="no-cache">', 1)
 html = html.replace('</head>', '<script>window.__BUILD_ID = "' + build_id + '";</script>\n</head>', 1)
 (root / 'index.html').write_text(html, encoding='utf-8')
-(root / 'dempsey-standalone.html').write_text(html, encoding='utf-8')
+
 (root / 'version.json').write_text('{"build":"' + build_id + '"}\n', encoding='utf-8')
-print('built index.html + dempsey-standalone.html', len(html.encode('utf-8')), 'bytes; build', build_id, '; modules:', order)
+print('built index.html', len(html.encode('utf-8')), 'bytes; build', build_id, '; modules:', order)
 print('external rendering assets:', sum(a['bytes'] for a in asset_manifest['assets']), 'bytes; serve alongside assets/ over HTTP(S)')
 print('external effect/environment assets:', sum(a['bytes'] for a in effect_manifest['assets'] + environment_manifest['assets']), 'bytes')

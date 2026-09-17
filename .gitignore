@@ -14,3 +14,7 @@ ippo.jpeg
 mashiba.webp
 miyata.webp
 sendo.jpeg
+
+# 빌드 부산물·QA 산출물 — 배포(호스팅)에 불필요
+dempsey-standalone.html
+artifacts/
