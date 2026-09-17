@@ -38,21 +38,42 @@ export class Net {
     this.mySlot = 0;
   }
 
+  /**
+   * ICE 서버 목록. STUN 만으로는 대칭 NAT(모바일 데이터망) 뒤의 기기가 못 붙는다 → TURN(중계) 이 꼭 필요하다.
+   * 예전에 쓰던 무료 공개 TURN(openrelay.metered.ca) 은 2026년 현재 죽어서 relay 후보를 하나도 안 준다
+   * → 그게 "모바일(LTE)로는 방을 만들어도, 참가해도 안 붙는" 원인. index.html 의 window.TURN_SERVERS 에 살아 있는 TURN 을 넣어야 한다.
+   */
+  static iceServers() {
+    const list = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }];
+    const extra = (typeof window !== 'undefined' && Array.isArray(window.TURN_SERVERS)) ? window.TURN_SERVERS : [];
+    for (const t of extra) if (t && t.urls) list.push(t);
+    return list;
+  }
+
+  /** TURN 이 실제로 relay 후보를 주는지 한 번 확인 (로비 안내용). 결과: 'ok' | 'none' */
+  static probeTurn(timeoutMs = 6000) {
+    if (Net._turnProbe) return Net._turnProbe;
+    Net._turnProbe = new Promise((res) => {
+      try {
+        const turn = Net.iceServers().filter((s) => String(s.urls).includes('turn'));
+        if (!turn.length) return res('none');
+        const pc = new RTCPeerConnection({ iceServers: turn, iceTransportPolicy: 'relay' });
+        let done = false;
+        const finish = (v) => { if (done) return; done = true; try { pc.close(); } catch (e) {} res(v); };
+        pc.onicecandidate = (e) => { if (e.candidate && e.candidate.type === 'relay') finish('ok'); else if (!e.candidate) finish('none'); };
+        pc.createDataChannel('probe');
+        pc.createOffer().then((o) => pc.setLocalDescription(o)).catch(() => finish('none'));
+        setTimeout(() => finish('none'), timeoutMs);
+      } catch (e) { res('none'); }
+    });
+    return Net._turnProbe;
+  }
+
   _mkPeer(id) {
-    // STUN 만으로는 대칭 NAT(특히 모바일 데이터망) 뒤의 게스트가 호스트에 못 붙는다 → 공개 TURN 을 후보에 넣어 릴레이 폴백.
-    // (openrelay: metered.ca 가 운영하는 무료 공개 TURN. 직결이 되면 ICE 가 알아서 직결 경로를 고른다)
     const peer = new Peer(id, {
       debug: 1,
       pingInterval: 5000,
-      config: {
-        iceServers: [
-          { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] },
-          { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-          { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-          { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
-        ],
-        iceCandidatePoolSize: 4,
-      },
+      config: { iceServers: Net.iceServers(), iceCandidatePoolSize: 4 },
     });
     // 시그널링 서버와 끊기면(모바일 화면 꺼짐·망 전환) 이미 맺은 P2P 는 살아 있지만 새 참가/재접속이 안 된다 → 자동 재연결.
     // 게스트가 "접속 중…" 에서 못 벗어나는 대표 원인이 방장의 시그널링이 조용히 죽은 것이다.

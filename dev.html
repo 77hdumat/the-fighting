@@ -14,6 +14,14 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@900&family=Bangers&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+  // TURN(중계) 서버. 모바일 데이터망(대칭 NAT) 끼리는 STUN 직결이 안 되므로 여기 살아 있는 TURN 이 있어야 접속된다.
+  // 무료: https://www.metered.ca/ (Global TURN, 월 20GB) 또는 Cloudflare Calls TURN. 발급받은 값으로 아래를 채운다.
+  // 예) { urls: 'turn:a.relay.metered.ca:80', username: '...', credential: '...' },
+  //     { urls: 'turn:a.relay.metered.ca:443', username: '...', credential: '...' },
+  //     { urls: 'turns:a.relay.metered.ca:443?transport=tcp', username: '...', credential: '...' },
+  window.TURN_SERVERS = [];
+</script>
 <script type="importmap">
 {
   "imports": {
@@ -257,6 +265,6 @@
       setInterval(function () { checkVersion(false); }, 60000);
     })();
   </script>
-  <script type="module" src="js/main.js?v=1789630163" onerror="__bootFail('모듈 로드 실패 (구버전 캐시)')"></script>
+  <script type="module" src="js/main.js?v=1789630861" onerror="__bootFail('모듈 로드 실패 (구버전 캐시)')"></script>
 </body>
 </html>

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta name="build-id" content="1789630163">
+<meta name="build-id" content="1789630861">
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -533,6 +533,14 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
 
 </style>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+  // TURN(중계) 서버. 모바일 데이터망(대칭 NAT) 끼리는 STUN 직결이 안 되므로 여기 살아 있는 TURN 이 있어야 접속된다.
+  // 무료: https://www.metered.ca/ (Global TURN, 월 20GB) 또는 Cloudflare Calls TURN. 발급받은 값으로 아래를 채운다.
+  // 예) { urls: 'turn:a.relay.metered.ca:80', username: '...', credential: '...' },
+  //     { urls: 'turn:a.relay.metered.ca:443', username: '...', credential: '...' },
+  //     { urls: 'turns:a.relay.metered.ca:443?transport=tcp', username: '...', credential: '...' },
+  window.TURN_SERVERS = [];
+</script>
 <script type="importmap">
 {
   "imports": {
@@ -544,7 +552,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   }
 }
 </script>
-<script>window.__BUILD_ID = "1789630163";</script>
+<script>window.__BUILD_ID = "1789630861";</script>
 </head>
 <body>
   <canvas id="gl" tabindex="0"></canvas>
@@ -926,21 +934,42 @@ class Net {
     this.mySlot = 0;
   }
 
+  /**
+   * ICE 서버 목록. STUN 만으로는 대칭 NAT(모바일 데이터망) 뒤의 기기가 못 붙는다 → TURN(중계) 이 꼭 필요하다.
+   * 예전에 쓰던 무료 공개 TURN(openrelay.metered.ca) 은 2026년 현재 죽어서 relay 후보를 하나도 안 준다
+   * → 그게 "모바일(LTE)로는 방을 만들어도, 참가해도 안 붙는" 원인. index.html 의 window.TURN_SERVERS 에 살아 있는 TURN 을 넣어야 한다.
+   */
+  static iceServers() {
+    const list = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }];
+    const extra = (typeof window !== 'undefined' && Array.isArray(window.TURN_SERVERS)) ? window.TURN_SERVERS : [];
+    for (const t of extra) if (t && t.urls) list.push(t);
+    return list;
+  }
+
+  /** TURN 이 실제로 relay 후보를 주는지 한 번 확인 (로비 안내용). 결과: 'ok' | 'none' */
+  static probeTurn(timeoutMs = 6000) {
+    if (Net._turnProbe) return Net._turnProbe;
+    Net._turnProbe = new Promise((res) => {
+      try {
+        const turn = Net.iceServers().filter((s) => String(s.urls).includes('turn'));
+        if (!turn.length) return res('none');
+        const pc = new RTCPeerConnection({ iceServers: turn, iceTransportPolicy: 'relay' });
+        let done = false;
+        const finish = (v) => { if (done) return; done = true; try { pc.close(); } catch (e) {} res(v); };
+        pc.onicecandidate = (e) => { if (e.candidate && e.candidate.type === 'relay') finish('ok'); else if (!e.candidate) finish('none'); };
+        pc.createDataChannel('probe');
+        pc.createOffer().then((o) => pc.setLocalDescription(o)).catch(() => finish('none'));
+        setTimeout(() => finish('none'), timeoutMs);
+      } catch (e) { res('none'); }
+    });
+    return Net._turnProbe;
+  }
+
   _mkPeer(id) {
-    // STUN 만으로는 대칭 NAT(특히 모바일 데이터망) 뒤의 게스트가 호스트에 못 붙는다 → 공개 TURN 을 후보에 넣어 릴레이 폴백.
-    // (openrelay: metered.ca 가 운영하는 무료 공개 TURN. 직결이 되면 ICE 가 알아서 직결 경로를 고른다)
     const peer = new Peer(id, {
       debug: 1,
       pingInterval: 5000,
-      config: {
-        iceServers: [
-          { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] },
-          { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-          { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-          { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
-        ],
-        iceCandidatePoolSize: 4,
-      },
+      config: { iceServers: Net.iceServers(), iceCandidatePoolSize: 4 },
     });
     // 시그널링 서버와 끊기면(모바일 화면 꺼짐·망 전환) 이미 맺은 P2P 는 살아 있지만 새 참가/재접속이 안 된다 → 자동 재연결.
     // 게스트가 "접속 중…" 에서 못 벗어나는 대표 원인이 방장의 시그널링이 조용히 죽은 것이다.
@@ -10014,10 +10043,21 @@ class Game {
       }
     };
     this.showChat(true);
+    this.probeTurn();
     this.lobbyMsg('방 생성 중…');
     document.getElementById('menu').classList.add('hidden');
     document.getElementById('lobby').classList.remove('hidden');
     net.host(3, code);
+  }
+
+  /** TURN 이 살아 있는지 확인해 로비 안내에 쓴다 (한 번만) */
+  probeTurn() {
+    if (this.turnState) return;
+    this.turnState = 'probing';
+    Net.probeTurn().then((r) => {
+      this.turnState = r;
+      if (r === 'none' && this.net.role !== 'none' && !this.started) this.lobbyMsg('⚠ 중계(TURN) 서버 없음 — 같은 Wi-Fi/핫스팟끼리만 연결됩니다 (모바일 데이터 ↔ 다른 망은 불가)');
+    });
   }
 
   broadcastLobby() { this.net.broadcast({ t: 'lobby', roster: this.roster, names: this.names, chars: this.chars, map: this.myMap, rule: this.myRule, seats: this.seats }); }
@@ -10046,6 +10086,7 @@ class Game {
   joinRoom(code, opts = {}) {
     const net = this.net;
     this.joined = false; this.joinRejected = false;
+    this.probeTurn();
     net.onOpen = () => { this.joinTries = 0; this.showLobby(code); this.showRoomRules(); this.showChat(true); this.lobbyMsg('접속 완료. 방장이 시작할 때까지 대기…'); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); };
     net.onError = (e) => {
       if (e.type === 'closed') {
@@ -10063,7 +10104,7 @@ class Game {
         // 시그널링은 됐는데 P2P 가 안 붙음 (방화벽/NAT, 또는 방장 시그널링이 조용히 죽음). 새 Peer 로 재시도 → 그래도 안 되면 안내
         this.joinTries = (this.joinTries || 0) + 1;
         if (this.joinTries <= 3) { this.net.close(); this.net = new Net(); this.joinRoom(code, { msg: `방장에게 연결이 안 됩니다. 다시 시도 중… (${this.joinTries}/3)` }); }
-        else { this.joinTries = 0; this.rejoining = false; this.leaveRoom('방장에게 연결하지 못했습니다. 방장이 방을 다시 만들거나, 양쪽 Wi-Fi/데이터를 바꿔 보세요'); }
+        else { this.joinTries = 0; this.rejoining = false; this.leaveRoom(this.turnState === 'none' ? '방장에게 연결하지 못했습니다. 중계(TURN) 서버가 없어 같은 Wi-Fi/핫스팟에서만 연결됩니다 — 둘 다 같은 네트워크로 접속해 보세요' : '방장에게 연결하지 못했습니다. 방장이 방을 다시 만들거나, 양쪽 Wi-Fi/데이터를 바꿔 보세요'); }
         return;
       }
       if ((e.type === 'peer-unavailable' || e.type === 'closed' || e.type === 'timeout') && this.migrating) {

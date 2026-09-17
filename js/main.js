@@ -713,10 +713,21 @@ class Game {
       }
     };
     this.showChat(true);
+    this.probeTurn();
     this.lobbyMsg('방 생성 중…');
     document.getElementById('menu').classList.add('hidden');
     document.getElementById('lobby').classList.remove('hidden');
     net.host(3, code);
+  }
+
+  /** TURN 이 살아 있는지 확인해 로비 안내에 쓴다 (한 번만) */
+  probeTurn() {
+    if (this.turnState) return;
+    this.turnState = 'probing';
+    Net.probeTurn().then((r) => {
+      this.turnState = r;
+      if (r === 'none' && this.net.role !== 'none' && !this.started) this.lobbyMsg('⚠ 중계(TURN) 서버 없음 — 같은 Wi-Fi/핫스팟끼리만 연결됩니다 (모바일 데이터 ↔ 다른 망은 불가)');
+    });
   }
 
   broadcastLobby() { this.net.broadcast({ t: 'lobby', roster: this.roster, names: this.names, chars: this.chars, map: this.myMap, rule: this.myRule, seats: this.seats }); }
@@ -745,6 +756,7 @@ class Game {
   joinRoom(code, opts = {}) {
     const net = this.net;
     this.joined = false; this.joinRejected = false;
+    this.probeTurn();
     net.onOpen = () => { this.joinTries = 0; this.showLobby(code); this.showRoomRules(); this.showChat(true); this.lobbyMsg('접속 완료. 방장이 시작할 때까지 대기…'); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); };
     net.onError = (e) => {
       if (e.type === 'closed') {
@@ -762,7 +774,7 @@ class Game {
         // 시그널링은 됐는데 P2P 가 안 붙음 (방화벽/NAT, 또는 방장 시그널링이 조용히 죽음). 새 Peer 로 재시도 → 그래도 안 되면 안내
         this.joinTries = (this.joinTries || 0) + 1;
         if (this.joinTries <= 3) { this.net.close(); this.net = new Net(); this.joinRoom(code, { msg: `방장에게 연결이 안 됩니다. 다시 시도 중… (${this.joinTries}/3)` }); }
-        else { this.joinTries = 0; this.rejoining = false; this.leaveRoom('방장에게 연결하지 못했습니다. 방장이 방을 다시 만들거나, 양쪽 Wi-Fi/데이터를 바꿔 보세요'); }
+        else { this.joinTries = 0; this.rejoining = false; this.leaveRoom(this.turnState === 'none' ? '방장에게 연결하지 못했습니다. 중계(TURN) 서버가 없어 같은 Wi-Fi/핫스팟에서만 연결됩니다 — 둘 다 같은 네트워크로 접속해 보세요' : '방장에게 연결하지 못했습니다. 방장이 방을 다시 만들거나, 양쪽 Wi-Fi/데이터를 바꿔 보세요'); }
         return;
       }
       if ((e.type === 'peer-unavailable' || e.type === 'closed' || e.type === 'timeout') && this.migrating) {
