@@ -1154,11 +1154,14 @@ export class Fighter {
         pu.shotFired = true; pu.hit = true;   // 주먹 판정은 쓰지 않는다
         this._applyNow(p);
         const dir = this.forward.clone();
-        const from = (pu.side === 'L' ? this.gloveL : this.gloveR).clone().addScaledVector(dir, 0.22);
-        const id = ++this._shotId;
-        this.shots.push({ id, pos: from, dir, side: pu.side, type: pu.type, power: pu.power, life: 0.7, maxSpeed: d.maxSpeed, dempsey: d.active, heavy: pu.type === 'hook' });
-        this.events.push({ type: 'shot', id, x: from.x, y: from.y, z: from.z, dx: dir.x, dz: dir.z, side: pu.side, hook: pu.type === 'hook' });
-        this.audio.whoosh(pu.side === 'L' ? -1 : 1, 1.6, 0.35);
+        // 쌍권총: J/K 구분 없이 두 총에서 동시에 두 발 (한 발 위력은 60%, 둘 다 맞으면 120%)
+        for (const side of ['L', 'R']) {
+          const from = (side === 'L' ? this.gloveL : this.gloveR).clone().addScaledVector(dir, 0.22);
+          const id = ++this._shotId;
+          this.shots.push({ id, pos: from, dir: dir.clone(), side, type: pu.type, power: pu.power * 0.6, life: 0.7, maxSpeed: d.maxSpeed, dempsey: d.active, heavy: pu.type === 'hook' });
+          this.events.push({ type: 'shot', id, x: from.x, y: from.y, z: from.z, dx: dir.x, dz: dir.z, side, hook: pu.type === 'hook' });
+        }
+        this.audio.whoosh(0, 1.6, 0.4);
       }
       if (!pu.hit && info.p > (pu.kind ? 0.24 : 0.3) && info.p < 0.66) {
         this._applyNow(p);
