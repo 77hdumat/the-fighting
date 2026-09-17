@@ -368,11 +368,14 @@ export class Fighter {
 
   startFinisher() {
     const d = this.dempsey;
-    if (this.busy || !d.maxSpeed) return false;
+    if (this.busy || this.rollT > 0 || !d.maxSpeed) return false;
+    // 동시 필살: 먼저 시작한 쪽이 진행되고, 상대가 필살기(연출·롤·대시) 중이면 내 입력은 무시된다 (게이지는 남는다)
+    const tg0 = this.target;
+    if (tg0 && (tg0.ultT > 0 || tg0.rollT > 0 || tg0.finisher || tg0.ultVictimT > 0)) return false;
     const fk = this.kit.finisher;
     const F = FINISHERS[fk] || FINISHERS.finisherHook;
     const charge = d.charge;
-    const ULT = { reels: 3.4, barbell: 3.6, bike: 3.0, snackRain: 3.6, coldCut: 3.4, cafeRush: 3.2 };
+    const ULT = { reels: 3.4, barbell: 3.6, bike: 3.0, forge: 3.3, snackRain: 3.6, coldCut: 3.4, cafeRush: 3.2 };
     if (fk === 'cafeRush') {
       // ---- 카페 돌격: 경로상의 모두에게 스턴 + 데미지 (넘어뜨리진 않는다) ----
       this.ultT = 3.2; this.ultKind = fk; this.ultTarget = this.target;
@@ -410,12 +413,12 @@ export class Fighter {
       this.punch = null; this.queue.length = 0; this.armor = dur;
       tg.ultVictimT = dur; tg.ultVictimKind = fk; tg.punch = null; tg.queue.length = 0; tg.stagger = 0; tg.dempsey.stop();
       // 연출 동안 나눠서 들어간다. 채채(릴스)·오승현(간식 폭격)은 기본 파워가 낮아 필살기만은 크게 (경량 캐릭터의 한 방)
-      const ULT_MUL = { reels: 1.8, snackRain: 1.8 };
+      const ULT_MUL = { reels: 1.8, snackRain: 1.8, forge: 1.15 };
       tg.ultDmg = (34 + 7 * charge) * this.def.powerMul * (ULT_MUL[fk] || 1);
       tg.ultDmgRate = tg.ultDmg / dur;
       d.consume();
       this.audio.finisherWind(0.5);
-      const line = fk === 'reels' ? '잡았다! 릴스 각이야, 찍는다!' : fk === 'barbell' ? '자, 10회 3세트 간다!' : fk === 'snackRain' ? '비, 빵이 떨어진다…!' : fk === 'coldCut' ? '…그래서 어쩌라고.' : '어… 이거 무거운데—!!';
+      const line = fk === 'reels' ? '잡았다! 릴스 각이야, 찍는다!' : fk === 'barbell' ? '자, 10회 3세트 간다!' : fk === 'snackRain' ? '비, 빵이 떨어진다…!' : fk === 'coldCut' ? '…그래서 어쩌라고.' : fk === 'forge' ? '망치로 뚝배기 강화하기!' : '어… 이거 무거운데—!!';
       this.subs.show(line, { duration: 1.6, strong: true });
       this.events.push({ type: 'ultStart', kind: fk, target: tg.slot, charge });
       return true;
@@ -1237,6 +1240,27 @@ export class Fighter {
             if (!o._rushReleased) { o._rushReleased = true; o.knock.addScaledVector(this.forward, 3.4); o.stagger = Math.max(o.stagger, 1.4); o.staggerImmune = 1.2; o.audio.stagger(); }
           }
         }
+      } else if (k === 'forge') {
+        // 망치 강화: 0.45초 들어올린 뒤 0.11초마다 내려친다 (+1강 … +20강) → 마지막에 만세
+        const u = 3.3 - this.ultT;
+        const HIT0 = 0.45, STEP = 0.11, N = 20;
+        if (u < HIT0) {
+          const kk = u / HIT0;
+          p.shLX += -1.2 - 1.7 * kk; p.shRX += -1.2 - 1.7 * kk; p.elL += -0.9 + 0.5 * kk; p.elR += -0.9 + 0.5 * kk;
+          p.waistX += -0.35 * kk; p.headX += -0.3 * kk; p.hipsY += -0.08 * kk;
+        } else if (u < HIT0 + STEP * N) {
+          const ph = ((u - HIT0) % STEP) / STEP;              // 0 → 1: 치켜들기(0~0.45) → 내려찍기(0.45~1)
+          const up = ph < 0.45 ? ph / 0.45 : 1 - (ph - 0.45) / 0.55;
+          const slam = 1 - up;
+          p.shLX += -1.2 - 1.6 * up; p.shRX += -1.2 - 1.6 * up; p.elL += -0.5 - 0.4 * up; p.elR += -0.5 - 0.4 * up;
+          p.shLY += -0.25; p.shRY += 0.25;
+          p.waistX += -0.3 * up + 0.5 * slam; p.headX += -0.25 * up + 0.35 * slam; p.hipsY += -0.06 * slam;
+          p.thighLX += -0.15 * slam; p.thighRX += -0.15 * slam; p.shinL += 0.25 * slam; p.shinR += 0.25 * slam;
+        } else {
+          const kk = Math.min(1, (u - HIT0 - STEP * N) / 0.3);
+          p.shLX += -2.9 * kk; p.shRX += -2.9 * kk; p.elL += -0.3; p.elR += -0.3; p.shLZ += 0.5 * kk; p.shRZ += -0.5 * kk;
+          p.headX += -0.35 * kk; p.hipsY += Math.abs(Math.sin(t * 12)) * 0.07 * kk;
+        }
       } else if (k === 'bike') {
         // ① 웅크려 들어올림 → ② 머리 위에서 휘청 → ③ 미끄러져 놓침 → ④ 반동으로 뒤로 휘청
         const u = (3.0 - this.ultT);
@@ -1368,6 +1392,20 @@ export class Fighter {
           p.thighLX += -1.0 * k2; p.thighRX += -0.95 * k2; p.shinL += 1.7 * k2; p.shinR += 1.6 * k2;
           p.waistZ += Math.sin(t * 4) * 0.2 * k2;
         }
+      } else if (k === 'forge') {
+        // 망치에 맞을 때마다 조금씩 땅으로 박힌다 (+20강이면 무릎까지) → 끝나면 눈 돌아가며 주저앉음
+        const u = 3.3 - this.ultVictimT;
+        const HIT0 = 0.45, STEP = 0.11, N = 20;
+        const n = Math.max(0, Math.min(N, Math.floor((u - HIT0) / STEP) + 1));   // 지금까지 맞은 횟수
+        const ph = u < HIT0 ? 0 : ((u - HIT0) % STEP) / STEP;
+        const jolt = n > 0 && u < HIT0 + STEP * N ? Math.max(0, 1 - ph * 3) : 0;   // 맞은 직후 0.037초 동안 움찔
+        const sink = n / N;
+        p.hipsY += -0.42 * sink - 0.06 * jolt; p.headX += 0.35 * sink + 0.5 * jolt; p.waistX += 0.25 * sink + 0.2 * jolt;
+        p.thighLX += -0.5 * sink; p.thighRX += -0.5 * sink; p.shinL += 0.9 * sink; p.shinR += 0.9 * sink;
+        p.shLX += -0.9 + Math.sin(t * 25) * 0.5 * jolt; p.shRX += -0.9 - Math.sin(t * 25) * 0.5 * jolt; p.elL += -1.2; p.elR += -1.2;
+        p.headY += Math.sin(t * 40) * 0.25 * jolt; p.headZ += (n % 2 ? 1 : -1) * 0.18 * jolt;
+        if (jolt > 0.5) this.rattle = Math.max(this.rattle, 0.5);
+        if (u >= HIT0 + STEP * N) { const k2 = Math.min(1, (u - HIT0 - STEP * N) / 0.4); p.headY += Math.sin(t * 8) * 0.6 * k2; p.waistZ += Math.sin(t * 5) * 0.25 * k2; this.rattle = Math.max(this.rattle, 0.6); }
       } else if (k === 'bike') {
         const u = 3.0 - this.ultVictimT;
         if (u < 1.4) { p.shLX += -1.6; p.shRX += -1.6; p.elL += -1.8; p.elR += -1.8; p.headX += -0.3; p.waistX += -0.15 + Math.sin(t * 18) * 0.05; }

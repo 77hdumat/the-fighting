@@ -157,7 +157,7 @@ export class UltimateFx {
     if (!target) return;
     const root = new THREE.Group();
     this.scene.add(root);
-    const DUR = { reels: 3.4, snackRain: 3.6, cafeRush: 3.2, coldCut: 3.4 };
+    const DUR = { reels: 3.4, snackRain: 3.6, cafeRush: 3.2, coldCut: 3.4, forge: 3.3 };
     const item = { kind, root, t: 0, dur: DUR[kind] || 3.2, parts: [], attacker, target, tp: target.pos.clone() };
     if (kind === 'reels') this._buildReels(item, attacker);
     else if (kind === 'snackRain') this._buildSnackRain(item);
@@ -165,6 +165,7 @@ export class UltimateFx {
     else if (kind === 'coldCut') this._buildColdCut(item, attacker);
     else if (kind === 'barbell') this._buildRack(item);
     else if (kind === 'bike') this._buildBike(item, attacker);
+    else if (kind === 'forge') this._buildForge(item, attacker);
     this.active.push(item);
   }
 
@@ -293,6 +294,79 @@ export class UltimateFx {
     g.add(bar); item.bar = bar;
   }
 
+  _buildForge(item, attacker) {
+    // 뼈석원: 강화 망치. 자루(나무) + 쇠머리 + 검은 띠. 피벗은 손 위치, 자루가 위로 뻗고 머리가 끝에
+    const g = item.root;
+    const h = new THREE.Group();
+    const handle = outlined(new THREE.CylinderGeometry(0.03, 0.035, 0.95, 8), 0x8a5a32, h, new THREE.Vector3(0, 0.45, 0));
+    const head = outlined(new THREE.BoxGeometry(0.36, 0.2, 0.2), 0xb9bcc6, h, new THREE.Vector3(0, 0.95, 0));
+    outlined(new THREE.BoxGeometry(0.38, 0.06, 0.22), 0x18181e, h, new THREE.Vector3(0, 0.95, 0));
+    outlined(new THREE.BoxGeometry(0.06, 0.24, 0.24), 0x18181e, h, new THREE.Vector3(0.17, 0.95, 0));
+    h.scale.setScalar(0.001);
+    g.add(h); item.hammer = h;
+    // 불꽃 별 (맞을 때마다 튄다)
+    item.stars = [];
+    for (let i = 0; i < 14; i++) {
+      const st = outlined(new THREE.TetrahedronGeometry(0.06), i % 3 ? 0xffc400 : 0xffffff, g);
+      st.castShadow = false; st.visible = false;
+      item.stars.push({ m: st, t: -1, v: new THREE.Vector3() });
+    }
+    item.hits = 0;
+  }
+
+  _updForge(it, dt, tp) {
+    const u = it.t, att = it.attacker; if (!att) return;
+    const HIT0 = 0.45, STEP = 0.11, N = 20;
+    const aim = new THREE.Vector3().subVectors(tp, att.pos).setY(0); if (aim.lengthSq() < 1e-4) aim.set(0, 0, 1); aim.normalize();
+    const yaw = Math.atan2(aim.x, aim.z);
+    const hm = it.hammer;
+    // 망치: 손 위치(가슴 앞)에서 뒤로 젖혔다가 상대 머리로 내려친다
+    const pop = Math.min(1, u / 0.25);
+    hm.scale.setScalar(Math.max(0.001, 0.55 * (1 - Math.pow(1 - pop, 3))));
+    let swing;   // 0 = 뒤로 치켜듦, 1 = 상대 머리에 닿음
+    if (u < HIT0) swing = 0.15 * (1 - u / HIT0);
+    else if (u < HIT0 + STEP * N) { const ph = ((u - HIT0) % STEP) / STEP; swing = ph < 0.45 ? 1 - ph / 0.45 : (ph - 0.45) / 0.55; swing = swing * swing; }
+    else swing = 0;
+    const dist = Math.min(1.1, att.pos.distanceTo(tp));
+    hm.position.copy(att.pos).addScaledVector(aim, 0.28).add(new THREE.Vector3(0, 1.32, 0));
+    hm.rotation.set(0, yaw, 0);
+    hm.rotateX(-1.1 + (1.1 + 0.55 + 0.25 * (1 - dist / 1.1)) * swing);   // 뒤로 -63° → 앞으로 +32°(+가까울수록 더)
+    // 타격 카운트: 내려찍기가 바닥에 닿는 순간(ph≥0.97)마다 한 번. 프레임을 건너뛰어도 빠진 횟수는 따라잡는다
+    if (u >= HIT0 && it.hits < N) {
+      const idx = Math.floor((u - HIT0) / STEP), ph = ((u - HIT0) % STEP) / STEP;
+      const reached = Math.min(N, idx + (ph >= 0.97 ? 1 : 0));
+      while (it.hits < reached) {
+        const k = ++it.hits;
+        this.audio.clang(0.6 + 0.4 * (k / N)); this.audio.impact(0.5 + 0.03 * k, 'hook');
+        if (this.fx) {
+          this.fx.flash = Math.max(this.fx.flash || 0, 0.12 + 0.02 * k);
+          if (this.cam) {
+            const v = new THREE.Vector3(tp.x, 1.55, tp.z).project(this.cam);
+            const big = k === N;
+            this.fx.addPopup((v.x * 0.5 + 0.5) * this.fx.w + (Math.random() - 0.5) * 120, (1 - (v.y * 0.5 + 0.5)) * this.fx.h - 40 - Math.random() * 60, big ? '+20강 성공!!!' : `+${k}강!`, big || k % 5 === 0 ? 'groggy' : 'dodge');
+          }
+        }
+        if (k === N) { this.audio.bassHit(); if (this.fx) this.fx.flash = Math.max(this.fx.flash || 0, 0.6); }
+        // 별 튀김
+        let spawned = 0;
+        for (const st of it.stars) {
+          if (st.t >= 0 && st.t < 0.35) continue;
+          if (spawned++ >= (k === N ? 14 : 4)) break;
+          st.t = 0; st.m.visible = true; st.m.position.set(tp.x, 1.5, tp.z);
+          const a = Math.random() * Math.PI * 2; st.v.set(Math.cos(a) * (1.5 + Math.random() * 2), 2 + Math.random() * 3, Math.sin(a) * (1.5 + Math.random() * 2));
+          st.m.scale.setScalar(k === N ? 2 : 1);
+        }
+      }
+    }
+    for (const st of it.stars) {
+      if (st.t < 0) continue;
+      st.t += dt; st.v.y -= 12 * dt; st.m.position.addScaledVector(st.v, dt);
+      st.m.rotation.x += dt * 9; st.m.rotation.y += dt * 7;
+      if (st.t > 0.45) { st.t = -1; st.m.visible = false; }
+    }
+    if (u > it.dur) hm.scale.setScalar(Math.max(0.001, 0.55 * Math.max(0, 1 - (u - it.dur) / 0.4)));
+  }
+
   _buildBike(item, attacker) {
     // 흰색 BMW 스타일 투어러: 흰 카울 + 검정 시트 + 실린더 + 파랑/흰 엠블럼
     const g = item.root;
@@ -376,6 +450,7 @@ export class UltimateFx {
       else if (it.kind === 'coldCut') this._updColdCut(it, dt, tp);
       else if (it.kind === 'barbell') this._updRack(it, dt, tp);
       else if (it.kind === 'bike') this._updBike(it, dt, tp);
+      else if (it.kind === 'forge') this._updForge(it, dt, tp);
       if (it.t > it.dur + 1.4) {
         this._release(it);
         this.active.splice(i, 1);
