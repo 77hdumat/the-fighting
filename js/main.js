@@ -938,7 +938,7 @@ class Game {
     this._lastRecv = 0; this._lastRecvTs = 0; this.jitter = undefined; this._sendGap = 0; this._moveHist = null; this._vis = null;   // 지터 통계는 판마다 새로 (지난 판 마지막 스냅샷과의 간격이 지터로 오인되지 않게)
     if (this.ultFx) this.ultFx.clear();
     if (this.auraFx) this.auraFx.clear();
-    this.camCtl.initialized = false;
+    this.camCtl.initialized = false; this.camCtl.orbitYaw = undefined;   // 시야 방향은 새 경기 시작 방향으로 다시 잡는다
     // 셰이더 예열: 새 파이터·잔상·스파크 재질을 등장씬 동안 백그라운드로 컴파일해 둔다 (첫 타격·첫 필살기 때 멈춤 방지)
     try { const r = this.renderer.compileAsync ? this.renderer.compileAsync(this.scene, this.camera) : null; if (r && r.catch) r.catch(() => {}); } catch (e) {}
   }
@@ -1966,26 +1966,7 @@ class Game {
       this.camera.updateProjectionMatrix();
       this.camCtl.initialized = false;
     }
-    // ---- 필살 연출 카메라: 하늘에서 떨어지는 유물·랙·오토바이가 확실히 보이는 와이드 샷 ----
-    const ultF = this.fighters.find((x) => x.ultT > 0);
-    if (ultF && ultF.ultTarget) {
-      const tg = ultF.ultTarget;
-      const mid = ultF.pos.clone().add(tg.pos).multiplyScalar(0.5);
-      const axis = new THREE.Vector3().subVectors(tg.pos, ultF.pos).setY(0).normalize();
-      const sideV = new THREE.Vector3(axis.z, 0, -axis.x);
-      const k = ultF.ultKind;
-      const up = k === 'reels' ? 1.75 : k === 'coldCut' ? 1.9 : k === 'snackRain' ? 3.0 : k === 'cafeRush' ? 3.4 : k === 'barbell' ? 2.6 : 2.2;
-      const back = k === 'reels' ? 3.6 : k === 'coldCut' ? 4.0 : k === 'cafeRush' ? 7.5 : k === 'snackRain' ? 6.4 : 5.6;
-      const want = mid.clone().addScaledVector(sideV, back * 0.75).addScaledVector(axis, -back * 0.5).add(new THREE.Vector3(0, up, 0));
-      this.camera.position.lerp(want, Math.min(1, rawDt * 3.4));
-      const lookBase = k === 'cafeRush' ? ultF.pos : tg.pos;
-      const look = lookBase.clone().add(new THREE.Vector3(0, k === 'reels' ? 1.15 : k === 'coldCut' ? 1.5 : k === 'snackRain' ? 1.8 : 1.3, 0));
-      this.camera.lookAt(look);
-      const wantFov = k === 'reels' ? 46 : k === 'coldCut' ? 48 : k === 'cafeRush' ? 66 : 58;
-      this.camera.fov += (wantFov - this.camera.fov) * Math.min(1, rawDt * 3);
-      this.camera.updateProjectionMatrix();
-      this.camCtl.initialized = false;   // 연출 끝나면 자연스럽게 다시 붙는다
-    }
+    // (필살 연출 카메라 제거: 필살기 때마다 옆·위로 돌아갔다 되돌아오는 시야 이동이 '카메라 고장' 처럼 느껴졌다. 항상 내 등 뒤 시야를 유지한다)
     if (opp.dempsey.active) this.camCtl.shakeAmp = Math.max(this.camCtl.shakeAmp, 0.01 * opp.dempsey.intensity);
 
     // 머리 스크린 속도
