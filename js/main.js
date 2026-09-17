@@ -1933,8 +1933,9 @@ class Game {
     {
       const pu = view.punch;
       const pr = pu ? pu.t / pu.dur : 0;
-      const lActive = pu && pu.side === 'L' && pr > 0.2 && pr < 0.62;
-      const rActive = pu && pu.side === 'R' && pr > 0.2 && pr < 0.62;
+      const ranged = !!(view.def.ranged && pu && !pu.kind);   // 사격은 궤적·바람 효과 없음 (장풍처럼 보인다)
+      const lActive = pu && !ranged && pu.side === 'L' && pr > 0.2 && pr < 0.62;
+      const rActive = pu && !ranged && pu.side === 'R' && pr > 0.2 && pr < 0.62;
       if (lActive) this.trailL.push(view.gloveL); else if (!pu&&this.trailL.strength<.02) this.trailL.clear();
       if (rActive) this.trailR.push(view.gloveR); else if (!pu&&this.trailR.strength<.02) this.trailR.clear();
       if (d.blend > 0) this.headTrail.push(view.headPos); else this.headTrail.clear();
@@ -1946,14 +1947,14 @@ class Game {
       if(this._trailOppSlot!==opp.slot){this.oppTrailL.clear();this.oppTrailR.clear();this._trailOppSlot=opp.slot;}
       const op=opp.punch,opr=op?op.t/op.dur:0;
       for(const side of ['L','R']){
-        const trail=side==='L'?this.oppTrailL:this.oppTrailR,active=op&&op.side===side&&opr>.2&&opr<.68;
+        const trail=side==='L'?this.oppTrailL:this.oppTrailR,active=op&&!(opp.def.ranged&&!op.kind)&&op.side===side&&opr>.2&&opr<.68;
         if(active)trail.push(side==='L'?opp.gloveL:opp.gloveR);else if(!op&&trail.strength<.02)trail.clear();
         trail.update(rawDt,this.camera,!!active);
       }
       // A brief pressure crescent also accompanies a punch that misses its target.
       for(const fighter of [view,opp]){
         const punch=fighter.punch,progress=punch?punch.t/punch.dur:0;
-        if(punch&&progress>.30&&progress<.58&&this.realTime-(fighter._windAt??-1)>.15){
+        if(punch&&!(fighter.def.ranged&&!punch.kind)&&progress>.30&&progress<.58&&this.realTime-(fighter._windAt??-1)>.15){
           fighter._windAt=this.realTime;
           const cur=punch.side==='L'?fighter.gloveL:fighter.gloveR,prev=punch.side==='L'?fighter.prevGloveL:fighter.prevGloveR;
           const motion=cur.clone().sub(prev);if(motion.lengthSq()>1e-7){

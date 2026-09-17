@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { buildBoxer, defaultPose, applyPose, copyPose, CHARACTERS } from './Rig.js';
 import { DempseyController } from './DempseyController.js';
-import { createPunch, applyPunchToPose, pointSegmentDist, segSegDist, easeOutCubic } from './Punch.js';
+import { createPunch, applyPunchToPose, applyAimToPose, pointSegmentDist, segSegDist, easeOutCubic } from './Punch.js';
 import { SPECIALS, KITS, HIDDEN_LINES } from './Specials.js';
 
 const RING_LIMIT = 4.15;   // 링 1.5배 확장
@@ -231,7 +231,7 @@ export class Fighter {
       this._predAge += dt; pu.t += dt;
       if (serverPunching) this._predPunch = null;
       else if (this._predAge > pu.dur * 1.3) { this._predPunch = null; this._predSwoosh = this._predNyang = false; }   // 호스트가 거부한 펀치 → 다음 소리는 건너뛰지 않는다
-      else { applyPunchToPose(this.pose, pu); touched = true; }
+      else { if (this.def.ranged && pu.type !== 'special') applyAimToPose(this.pose, pu); else applyPunchToPose(this.pose, pu); touched = true; }
     }
     // 가드도 즉시 반영 (서버 플래그가 아직 안 왔을 때만)
     if (guardHeld && !this.guard && !this.busy) {
@@ -300,6 +300,7 @@ export class Fighter {
     if (this.boostT > 0) power *= 1.3;   // 로프 반동 부스트
     this.punch = createPunch(side, type, dur, power);
     this.punch.heavy = (type === 'hook' && this.dempsey.active && st === 'dempsey') || !!opts.heavy || (type === 'hook' && this.def.style === 'power');
+    if (this.def.ranged && !opts.kind && (type === 'straight' || type === 'hook')) this.punch.ranged = true;   // 우랄라: 사격 (조준 자세 + 레이저 탄)
     if (opts.kind) { this.punch.kind = opts.kind; Object.assign(this.punch, opts); }
     if (opts.kick) this.punch.kick = true;
     if (opts.hitRadius) this.punch.hitRadius = opts.hitRadius;
@@ -743,7 +744,7 @@ export class Fighter {
 
     // ---- 이동 ----
     this.prevPos.copy(this.pos);
-    const canMove = (!this.punch || this.punch.t > this.punch.dur * 0.5) && !this.busy;
+    const canMove = (!this.punch || (this.punch.t > this.punch.dur * 0.5 && !this.punch.ranged)) && !this.busy;   // 사격 중엔 제자리
     if (canMove) {
       // 스탠스 중에도 자유 이동 (스매시 차지만 약간 느림)
       const stanceSlow = d.active ? (st === 'smash' ? 0.6 : 0.9) : 1;
@@ -1132,7 +1133,7 @@ export class Fighter {
     } else if (this.punch) {
       const pu = this.punch;
       pu.t += dt;
-      const info = applyPunchToPose(p, pu);
+      const info = pu.ranged ? applyAimToPose(p, pu) : applyPunchToPose(p, pu);
       // 스텝인 (원거리 캐릭터의 기본 사격은 제자리에서 — 자동으로 파고들면 원거리의 의미가 없다)
       if (tgt && !d.active && !(this.def.ranged && !pu.kind)) {
         const reach = this.reach;
@@ -1152,8 +1153,8 @@ export class Fighter {
       if (this.def.ranged && !pu.kind && (pu.type === 'straight' || pu.type === 'hook') && !pu.shotFired && info.p > 0.22) {
         pu.shotFired = true; pu.hit = true;   // 주먹 판정은 쓰지 않는다
         this._applyNow(p);
-        const from = (pu.side === 'L' ? this.gloveL : this.gloveR).clone();
         const dir = this.forward.clone();
+        const from = (pu.side === 'L' ? this.gloveL : this.gloveR).clone().addScaledVector(dir, 0.22);
         const id = ++this._shotId;
         this.shots.push({ id, pos: from, dir, side: pu.side, type: pu.type, power: pu.power, life: 0.7, maxSpeed: d.maxSpeed, dempsey: d.active, heavy: pu.type === 'hook' });
         this.events.push({ type: 'shot', id, x: from.x, y: from.y, z: from.z, dx: dir.x, dz: dir.z, side: pu.side, hook: pu.type === 'hook' });

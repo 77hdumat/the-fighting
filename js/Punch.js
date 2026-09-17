@@ -59,6 +59,29 @@ function mirror(k, side) {
  * 펀치 진행도에 따라 pose 에 팔/상체 회전을 덮어쓴다.
  * 반환값: { strike, wind } — 이펙트/히트 판정용 진행 강도
  */
+/**
+ * 원거리 사격 자세 (우랄라): 양팔을 앞으로 곧게 뻗어 두 손으로 조준한 채 제자리. 쏘는 쪽 팔만 반동으로 살짝 튄다.
+ * 펀치 모션 대신 쓰므로 '장풍' 처럼 안 보인다. 반환값은 applyPunchToPose 와 같은 형태.
+ */
+export function applyAimToPose(pose, punch) {
+  const p = clamp01(punch.t / punch.dur);
+  const side = punch.side, sgn = side === 'L' ? 1 : -1;
+  // 조준: 양 어깨 앞으로 -1.55, 팔꿈치 거의 펴고, 손을 가운데로 모은다
+  const settle = Math.min(1, p / 0.12);
+  pose.shLX += -1.55 * settle; pose.shRX += -1.55 * settle;
+  pose.shLY += -0.35 * settle; pose.shRY += 0.35 * settle;
+  pose.shLZ += 0.12 * settle; pose.shRZ += -0.12 * settle;
+  pose.elL += -0.12 * settle; pose.elR += -0.12 * settle;
+  pose.chestX += -0.05 * settle; pose.headX += -0.06 * settle; pose.hipsY += -0.03 * settle;
+  // 반동: 발사(0.22) 직후 쏘는 팔이 위·뒤로 튀었다가 0.25초 안에 복귀
+  const r = p < 0.22 ? 0 : Math.max(0, 1 - (p - 0.22) / 0.4);
+  const kick = Math.sin(r * Math.PI) ;
+  if (side === 'L') { pose.shLX += 0.35 * kick; pose.elL += -0.45 * kick; }
+  else { pose.shRX += 0.35 * kick; pose.elR += -0.45 * kick; }
+  pose.chestX += 0.08 * kick; pose.headX += 0.05 * kick; pose.waistY += -sgn * 0.06 * kick;
+  return { p, strike: kick, wind: 0 };
+}
+
 export function applyPunchToPose(pose, punch) {
   const p = clamp01(punch.t / punch.dur);
   const side = punch.side;

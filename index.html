@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta name="build-id" content="1789636988">
+<meta name="build-id" content="1789637622">
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -552,7 +552,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   }
 }
 </script>
-<script>window.__BUILD_ID = "1789636988";</script>
+<script>window.__BUILD_ID = "1789637622";</script>
 </head>
 <body>
   <canvas id="gl" tabindex="0"></canvas>
@@ -1550,6 +1550,29 @@ function mirror(k, side) {
  * 펀치 진행도에 따라 pose 에 팔/상체 회전을 덮어쓴다.
  * 반환값: { strike, wind } — 이펙트/히트 판정용 진행 강도
  */
+/**
+ * 원거리 사격 자세 (우랄라): 양팔을 앞으로 곧게 뻗어 두 손으로 조준한 채 제자리. 쏘는 쪽 팔만 반동으로 살짝 튄다.
+ * 펀치 모션 대신 쓰므로 '장풍' 처럼 안 보인다. 반환값은 applyPunchToPose 와 같은 형태.
+ */
+function applyAimToPose(pose, punch) {
+  const p = clamp01(punch.t / punch.dur);
+  const side = punch.side, sgn = side === 'L' ? 1 : -1;
+  // 조준: 양 어깨 앞으로 -1.55, 팔꿈치 거의 펴고, 손을 가운데로 모은다
+  const settle = Math.min(1, p / 0.12);
+  pose.shLX += -1.55 * settle; pose.shRX += -1.55 * settle;
+  pose.shLY += -0.35 * settle; pose.shRY += 0.35 * settle;
+  pose.shLZ += 0.12 * settle; pose.shRZ += -0.12 * settle;
+  pose.elL += -0.12 * settle; pose.elR += -0.12 * settle;
+  pose.chestX += -0.05 * settle; pose.headX += -0.06 * settle; pose.hipsY += -0.03 * settle;
+  // 반동: 발사(0.22) 직후 쏘는 팔이 위·뒤로 튀었다가 0.25초 안에 복귀
+  const r = p < 0.22 ? 0 : Math.max(0, 1 - (p - 0.22) / 0.4);
+  const kick = Math.sin(r * Math.PI) ;
+  if (side === 'L') { pose.shLX += 0.35 * kick; pose.elL += -0.45 * kick; }
+  else { pose.shRX += 0.35 * kick; pose.elR += -0.45 * kick; }
+  pose.chestX += 0.08 * kick; pose.headX += 0.05 * kick; pose.waistY += -sgn * 0.06 * kick;
+  return { p, strike: kick, wind: 0 };
+}
+
 function applyPunchToPose(pose, punch) {
   const p = clamp01(punch.t / punch.dur);
   const side = punch.side;
@@ -1624,7 +1647,7 @@ function applyPunchToPose(pose, punch) {
   }
   return { p, strike: strikeAmt, wind: windAmt };
 }
-return { easeOutQuad, easeOutCubic, easeInOut, clamp01, pointSegmentDist, segSegDist, createPunch, applyPunchToPose };
+return { easeOutQuad, easeOutCubic, easeInOut, clamp01, pointSegmentDist, segSegDist, createPunch, applyAimToPose, applyPunchToPose };
 })();
 // ===== HitSparks.js =====
 __M.HitSparks = (() => {
@@ -6467,7 +6490,7 @@ __M.Fighter = (() => {
 // 이동/가드/블록/펀치/스탠스(캐릭터별)/고유기(U,I)/필살(L)/피격/스태거/카운터 rattle/KO, 타겟팅
 const { buildBoxer, defaultPose, applyPose, copyPose, CHARACTERS } = __M.Rig;
 const { DempseyController } = __M.DempseyController;
-const { createPunch, applyPunchToPose, pointSegmentDist, segSegDist, easeOutCubic } = __M.Punch;
+const { createPunch, applyPunchToPose, applyAimToPose, pointSegmentDist, segSegDist, easeOutCubic } = __M.Punch;
 const { SPECIALS, KITS, HIDDEN_LINES } = __M.Specials;
 
 const RING_LIMIT = 4.15;   // 링 1.5배 확장
@@ -6695,7 +6718,7 @@ class Fighter {
       this._predAge += dt; pu.t += dt;
       if (serverPunching) this._predPunch = null;
       else if (this._predAge > pu.dur * 1.3) { this._predPunch = null; this._predSwoosh = this._predNyang = false; }   // 호스트가 거부한 펀치 → 다음 소리는 건너뛰지 않는다
-      else { applyPunchToPose(this.pose, pu); touched = true; }
+      else { if (this.def.ranged && pu.type !== 'special') applyAimToPose(this.pose, pu); else applyPunchToPose(this.pose, pu); touched = true; }
     }
     // 가드도 즉시 반영 (서버 플래그가 아직 안 왔을 때만)
     if (guardHeld && !this.guard && !this.busy) {
@@ -6764,6 +6787,7 @@ class Fighter {
     if (this.boostT > 0) power *= 1.3;   // 로프 반동 부스트
     this.punch = createPunch(side, type, dur, power);
     this.punch.heavy = (type === 'hook' && this.dempsey.active && st === 'dempsey') || !!opts.heavy || (type === 'hook' && this.def.style === 'power');
+    if (this.def.ranged && !opts.kind && (type === 'straight' || type === 'hook')) this.punch.ranged = true;   // 우랄라: 사격 (조준 자세 + 레이저 탄)
     if (opts.kind) { this.punch.kind = opts.kind; Object.assign(this.punch, opts); }
     if (opts.kick) this.punch.kick = true;
     if (opts.hitRadius) this.punch.hitRadius = opts.hitRadius;
@@ -7207,7 +7231,7 @@ class Fighter {
 
     // ---- 이동 ----
     this.prevPos.copy(this.pos);
-    const canMove = (!this.punch || this.punch.t > this.punch.dur * 0.5) && !this.busy;
+    const canMove = (!this.punch || (this.punch.t > this.punch.dur * 0.5 && !this.punch.ranged)) && !this.busy;   // 사격 중엔 제자리
     if (canMove) {
       // 스탠스 중에도 자유 이동 (스매시 차지만 약간 느림)
       const stanceSlow = d.active ? (st === 'smash' ? 0.6 : 0.9) : 1;
@@ -7596,7 +7620,7 @@ class Fighter {
     } else if (this.punch) {
       const pu = this.punch;
       pu.t += dt;
-      const info = applyPunchToPose(p, pu);
+      const info = pu.ranged ? applyAimToPose(p, pu) : applyPunchToPose(p, pu);
       // 스텝인 (원거리 캐릭터의 기본 사격은 제자리에서 — 자동으로 파고들면 원거리의 의미가 없다)
       if (tgt && !d.active && !(this.def.ranged && !pu.kind)) {
         const reach = this.reach;
@@ -7616,8 +7640,8 @@ class Fighter {
       if (this.def.ranged && !pu.kind && (pu.type === 'straight' || pu.type === 'hook') && !pu.shotFired && info.p > 0.22) {
         pu.shotFired = true; pu.hit = true;   // 주먹 판정은 쓰지 않는다
         this._applyNow(p);
-        const from = (pu.side === 'L' ? this.gloveL : this.gloveR).clone();
         const dir = this.forward.clone();
+        const from = (pu.side === 'L' ? this.gloveL : this.gloveR).clone().addScaledVector(dir, 0.22);
         const id = ++this._shotId;
         this.shots.push({ id, pos: from, dir, side: pu.side, type: pu.type, power: pu.power, life: 0.7, maxSpeed: d.maxSpeed, dempsey: d.active, heavy: pu.type === 'hook' });
         this.events.push({ type: 'shot', id, x: from.x, y: from.y, z: from.z, dx: dir.x, dz: dir.z, side: pu.side, hook: pu.type === 'hook' });
@@ -11730,8 +11754,9 @@ class Game {
     {
       const pu = view.punch;
       const pr = pu ? pu.t / pu.dur : 0;
-      const lActive = pu && pu.side === 'L' && pr > 0.2 && pr < 0.62;
-      const rActive = pu && pu.side === 'R' && pr > 0.2 && pr < 0.62;
+      const ranged = !!(view.def.ranged && pu && !pu.kind);   // 사격은 궤적·바람 효과 없음 (장풍처럼 보인다)
+      const lActive = pu && !ranged && pu.side === 'L' && pr > 0.2 && pr < 0.62;
+      const rActive = pu && !ranged && pu.side === 'R' && pr > 0.2 && pr < 0.62;
       if (lActive) this.trailL.push(view.gloveL); else if (!pu&&this.trailL.strength<.02) this.trailL.clear();
       if (rActive) this.trailR.push(view.gloveR); else if (!pu&&this.trailR.strength<.02) this.trailR.clear();
       if (d.blend > 0) this.headTrail.push(view.headPos); else this.headTrail.clear();
@@ -11743,14 +11768,14 @@ class Game {
       if(this._trailOppSlot!==opp.slot){this.oppTrailL.clear();this.oppTrailR.clear();this._trailOppSlot=opp.slot;}
       const op=opp.punch,opr=op?op.t/op.dur:0;
       for(const side of ['L','R']){
-        const trail=side==='L'?this.oppTrailL:this.oppTrailR,active=op&&op.side===side&&opr>.2&&opr<.68;
+        const trail=side==='L'?this.oppTrailL:this.oppTrailR,active=op&&!(opp.def.ranged&&!op.kind)&&op.side===side&&opr>.2&&opr<.68;
         if(active)trail.push(side==='L'?opp.gloveL:opp.gloveR);else if(!op&&trail.strength<.02)trail.clear();
         trail.update(rawDt,this.camera,!!active);
       }
       // A brief pressure crescent also accompanies a punch that misses its target.
       for(const fighter of [view,opp]){
         const punch=fighter.punch,progress=punch?punch.t/punch.dur:0;
-        if(punch&&progress>.30&&progress<.58&&this.realTime-(fighter._windAt??-1)>.15){
+        if(punch&&!(fighter.def.ranged&&!punch.kind)&&progress>.30&&progress<.58&&this.realTime-(fighter._windAt??-1)>.15){
           fighter._windAt=this.realTime;
           const cur=punch.side==='L'?fighter.gloveL:fighter.gloveR,prev=punch.side==='L'?fighter.prevGloveL:fighter.prevGloveR;
           const motion=cur.clone().sub(prev);if(motion.lengthSq()>1e-7){
