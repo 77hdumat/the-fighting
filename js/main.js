@@ -70,6 +70,7 @@ class Game {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
 
+    Net.fetchTurn();   // TURN 자격증명은 미리 받아 둔다 (방 만들기/참가 때 기다리지 않게)
     this.input = new Input();
     this.touch = new TouchControls(this.input);
     this.isTouch = isTouchDevice();
@@ -673,7 +674,7 @@ class Game {
     this.names = [this.myNick]; this.chars = [this.myChar]; this.intros = [this.myIntro];
     this.roster = [{ type: 'local', name: this.myNick, char: this.myChar }, { type: 'empty' }, { type: 'empty' }, { type: 'empty' }];
     this.seats = [0, 1, 2, 3];   // 좌석 → netSlot (방장이 드래그로 바꾼다)
-    net.onOpen = (code) => { try { history.replaceState(null, '', `?r=${code}`); } catch (e) {} this.showLobby(code); this.showRoomRules(); this.renderRoster(this.roster); document.getElementById('btn-start').classList.remove('hidden'); this.lobbyMsg('친구에게 코드를 알려주세요. 참가한 사람끼리만 싸웁니다 (2~4명). 시작 버튼으로 시작'); this.broadcastLobby(); };
+    net.onOpen = (code) => { try { history.replaceState(null, '', `?r=${code}`); } catch (e) {} this.showLobby(code); this.showRoomRules(); this.renderRoster(this.roster); document.getElementById('btn-start').classList.remove('hidden'); this.lobbyMsg('친구에게 코드를 알려주세요. 참가한 사람끼리만 싸웁니다 (2~4명). 시작 버튼으로 시작' + (this.turnState === 'none' ? ' · ⚠ 중계 서버 없음: 같은 Wi-Fi/핫스팟만' : '')); this.broadcastLobby(); };
     net.onError = (e) => this.lobbyMsg('연결 오류: ' + (e.type || e));
     net.onJoin = (slot) => {
       // 경기 진행 중엔 못 들어온다 (끝난 뒤 결과 화면이면 받아 주고, 다음 경기부터 참가)
@@ -726,7 +727,7 @@ class Game {
     this.turnState = 'probing';
     Net.probeTurn().then((r) => {
       this.turnState = r;
-      if (r === 'none' && this.net.role !== 'none' && !this.started) this.lobbyMsg('⚠ 중계(TURN) 서버 없음 — 같은 Wi-Fi/핫스팟끼리만 연결됩니다 (모바일 데이터 ↔ 다른 망은 불가)');
+      if (r === 'none' && this.net.role !== 'none' && !this.started) this.addChat(0, '⚠ 중계(TURN) 서버 없음 — 같은 Wi-Fi/핫스팟끼리만 연결됩니다 (모바일 데이터 ↔ 다른 망은 불가)', true);
     });
   }
 

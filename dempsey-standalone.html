@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta name="build-id" content="1789630861">
+<meta name="build-id" content="1789631508">
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -540,6 +540,9 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   //     { urls: 'turn:a.relay.metered.ca:443', username: '...', credential: '...' },
   //     { urls: 'turns:a.relay.metered.ca:443?transport=tcp', username: '...', credential: '...' },
   window.TURN_SERVERS = [];
+  // 또는 Cloudflare Realtime TURN (월 1TB 무료): cloudflare/turn-worker.js 를 Worker 로 배포하고 그 주소를 넣으면
+  // 접속 전에 단기 자격증명을 받아 와 TURN_SERVERS 에 합친다. (예: 'https://the-fighting-turn.xxx.workers.dev/turn')
+  window.TURN_ENDPOINT = '';
 </script>
 <script type="importmap">
 {
@@ -552,7 +555,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   }
 }
 </script>
-<script>window.__BUILD_ID = "1789630861";</script>
+<script>window.__BUILD_ID = "1789631508";</script>
 </head>
 <body>
   <canvas id="gl" tabindex="0"></canvas>
@@ -946,10 +949,25 @@ class Net {
     return list;
   }
 
+  /**
+   * window.TURN_ENDPOINT 가 있으면 거기서 단기 TURN 자격증명을 받아 TURN_SERVERS 에 합친다 (Cloudflare Realtime 등).
+   * 페이지 로드 직후 한 번 호출. 실패해도 게임은 STUN 만으로 계속 동작한다.
+   */
+  static fetchTurn() {
+    if (Net._turnFetch) return Net._turnFetch;
+    const ep = typeof window !== 'undefined' && window.TURN_ENDPOINT;
+    Net._turnFetch = !ep ? Promise.resolve() : fetch(ep, { cache: 'no-store' }).then((r) => r.json()).then((j) => {
+      const got = (j && j.iceServers) || [];
+      const cur = Array.isArray(window.TURN_SERVERS) ? window.TURN_SERVERS : [];
+      window.TURN_SERVERS = cur.concat(got.filter((s) => s && s.urls));
+    }).catch(() => {});
+    return Net._turnFetch;
+  }
+
   /** TURN 이 실제로 relay 후보를 주는지 한 번 확인 (로비 안내용). 결과: 'ok' | 'none' */
   static probeTurn(timeoutMs = 6000) {
     if (Net._turnProbe) return Net._turnProbe;
-    Net._turnProbe = new Promise((res) => {
+    Net._turnProbe = Net.fetchTurn().then(() => new Promise((res) => {
       try {
         const turn = Net.iceServers().filter((s) => String(s.urls).includes('turn'));
         if (!turn.length) return res('none');
@@ -961,7 +979,7 @@ class Net {
         pc.createOffer().then((o) => pc.setLocalDescription(o)).catch(() => finish('none'));
         setTimeout(() => finish('none'), timeoutMs);
       } catch (e) { res('none'); }
-    });
+    }));
     return Net._turnProbe;
   }
 
@@ -995,6 +1013,7 @@ class Net {
    * (코드를 바꾸면 게스트가 옛 코드로 붙다 영원히 "접속 중…" 에 걸린다).
    */
   host(maxClients = 3, code = null, tries = 0) {
+    if (!Net._turnDone) { Net.fetchTurn().then(() => { Net._turnDone = true; if (this.role === 'host') this.host(maxClients, code, tries); }); this.role = 'host'; return; }
     this.role = 'host';
     this.code = code || makeCode();
     const myCode = this.code;
@@ -1049,6 +1068,7 @@ class Net {
   static HB_TIMEOUT = 8000;
 
   join(code) {
+    if (!Net._turnDone) { Net.fetchTurn().then(() => { Net._turnDone = true; if (this.role === 'client') this.join(code); }); this.role = 'client'; return; }
     this.role = 'client';
     this.code = code.toUpperCase().trim();
     this.peer = this._mkPeer(undefined);
@@ -9400,6 +9420,7 @@ class Game {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
 
+    Net.fetchTurn();   // TURN 자격증명은 미리 받아 둔다 (방 만들기/참가 때 기다리지 않게)
     this.input = new Input();
     this.touch = new TouchControls(this.input);
     this.isTouch = isTouchDevice();
@@ -10003,7 +10024,7 @@ class Game {
     this.names = [this.myNick]; this.chars = [this.myChar]; this.intros = [this.myIntro];
     this.roster = [{ type: 'local', name: this.myNick, char: this.myChar }, { type: 'empty' }, { type: 'empty' }, { type: 'empty' }];
     this.seats = [0, 1, 2, 3];   // 좌석 → netSlot (방장이 드래그로 바꾼다)
-    net.onOpen = (code) => { try { history.replaceState(null, '', `?r=${code}`); } catch (e) {} this.showLobby(code); this.showRoomRules(); this.renderRoster(this.roster); document.getElementById('btn-start').classList.remove('hidden'); this.lobbyMsg('친구에게 코드를 알려주세요. 참가한 사람끼리만 싸웁니다 (2~4명). 시작 버튼으로 시작'); this.broadcastLobby(); };
+    net.onOpen = (code) => { try { history.replaceState(null, '', `?r=${code}`); } catch (e) {} this.showLobby(code); this.showRoomRules(); this.renderRoster(this.roster); document.getElementById('btn-start').classList.remove('hidden'); this.lobbyMsg('친구에게 코드를 알려주세요. 참가한 사람끼리만 싸웁니다 (2~4명). 시작 버튼으로 시작' + (this.turnState === 'none' ? ' · ⚠ 중계 서버 없음: 같은 Wi-Fi/핫스팟만' : '')); this.broadcastLobby(); };
     net.onError = (e) => this.lobbyMsg('연결 오류: ' + (e.type || e));
     net.onJoin = (slot) => {
       // 경기 진행 중엔 못 들어온다 (끝난 뒤 결과 화면이면 받아 주고, 다음 경기부터 참가)
@@ -10056,7 +10077,7 @@ class Game {
     this.turnState = 'probing';
     Net.probeTurn().then((r) => {
       this.turnState = r;
-      if (r === 'none' && this.net.role !== 'none' && !this.started) this.lobbyMsg('⚠ 중계(TURN) 서버 없음 — 같은 Wi-Fi/핫스팟끼리만 연결됩니다 (모바일 데이터 ↔ 다른 망은 불가)');
+      if (r === 'none' && this.net.role !== 'none' && !this.started) this.addChat(0, '⚠ 중계(TURN) 서버 없음 — 같은 Wi-Fi/핫스팟끼리만 연결됩니다 (모바일 데이터 ↔ 다른 망은 불가)', true);
     });
   }
 
