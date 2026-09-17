@@ -66,19 +66,21 @@ function mirror(k, side) {
 export function applyAimToPose(pose, punch) {
   const p = clamp01(punch.t / punch.dur);
   const side = punch.side, sgn = side === 'L' ? 1 : -1;
-  // 조준: 양 어깨 앞으로 -1.55, 팔꿈치 거의 펴고, 손을 가운데로 모은다
-  const settle = Math.min(1, p / 0.12);
-  pose.shLX += -1.55 * settle; pose.shRX += -1.55 * settle;
-  pose.shLY += -0.35 * settle; pose.shRY += 0.35 * settle;
-  pose.shLZ += 0.12 * settle; pose.shRZ += -0.12 * settle;
-  pose.elL += -0.12 * settle; pose.elR += -0.12 * settle;
-  pose.chestX += -0.05 * settle; pose.headX += -0.06 * settle; pose.hipsY += -0.03 * settle;
-  // 반동: 발사(0.22) 직후 쏘는 팔이 위·뒤로 튀었다가 0.25초 안에 복귀
+  // 조준 (참고 피규어 자세): 몸을 옆으로 틀고 쏘는 팔을 앞으로 쭉 뻗어 한 손 조준, 반대 팔은 허리 옆에 내려 총을 든다.
+  // 현재 값에서 목표로 수렴시켜 어떤 자세(가드)에서 시작해도 팔이 곧게 뻗는다
+  const settle = Math.min(1, p / 0.1);
+  const to = (k, v) => { pose[k] += (v - pose[k]) * settle; };
+  const A = side === 'L' ? 'L' : 'R', B = side === 'L' ? 'R' : 'L';
+  to('sh' + A + 'X', -1.66); to('el' + A, -0.03); to('sh' + A + 'Y', -sgn * 0.1); to('sh' + A + 'Z', sgn * 0.12);   // 쏘는 팔: 수평 앞으로 곧게
+  to('sh' + B + 'X', 0.25); to('el' + B, -0.9); to('sh' + B + 'Y', 0); to('sh' + B + 'Z', -sgn * 0.55);          // 반대 팔: 팔꿈치 접어 허리 옆
+  pose.waistY += -sgn * 0.55 * settle; pose.chestY += -sgn * 0.2 * settle; pose.hipsRotY += -sgn * 0.25 * settle;   // 상체를 옆으로 틀어 프로필 자세
+  pose.headY += sgn * 0.45 * settle;                                                                         // 얼굴은 상대를 본다
+  pose.chestX += -0.08 * settle; pose.hipsX += sgn * 0.08 * settle; pose.hipsY += -0.02 * settle;
+  // 반동: 발사(0.22) 직후 쏘는 팔이 위로 튀었다가 0.25초 안에 복귀
   const r = p < 0.22 ? 0 : Math.max(0, 1 - (p - 0.22) / 0.4);
-  const kick = Math.sin(r * Math.PI) ;
-  if (side === 'L') { pose.shLX += 0.35 * kick; pose.elL += -0.45 * kick; }
-  else { pose.shRX += 0.35 * kick; pose.elR += -0.45 * kick; }
-  pose.chestX += 0.08 * kick; pose.headX += 0.05 * kick; pose.waistY += -sgn * 0.06 * kick;
+  const kick = Math.sin(r * Math.PI);
+  pose['sh' + A + 'X'] += 0.32 * kick; pose['el' + A] += -0.3 * kick;
+  pose.chestX += 0.07 * kick; pose.headX += 0.04 * kick;
   return { p, strike: kick, wind: 0 };
 }
 

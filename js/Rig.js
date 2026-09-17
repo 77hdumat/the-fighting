@@ -218,7 +218,7 @@ export const CHARACTERS = {
     gloves: 0xffe3d2, noGloves: true, shoes: 0xffffff, shoesTrim: 0xff6a2a,
     hair: 0xff5fa8, hairStyle: 'twintail', brows: 'thin', eyes: 'big', mouth: 'grin', pretty: true, irisColor: '#4fb6ff', browColor: '#8a3a66',
     accessory: 'headset', skirt: 0xffffff, boots: 0xffffff, jetpack: 0xc9ccd6, hold: { L: 'raygun', R: 'raygun' },
-    prop: { height: 1.2, torsoW: 0.78, torsoD: 0.7, armR: 0.7, armLen: 1.12, legR: 0.7, legLen: 1.24, headS: 0.95, headY: 1.05, neck: 1.3, muscle: 0 },
+    prop: { height: 1.2, torsoW: 0.78, torsoD: 0.7, armR: 0.68, armLen: 1.28, legR: 0.7, legLen: 1.24, headS: 0.95, headY: 1.05, neck: 1.3, muscle: 0 },
     hp: 70, powerMul: 0.75, speedMul: 1.3, style: 'idol', guardMax: 60, guardRegen: 1.2, weaveCd: 1.0, gaugeMul: 1.1, hidden: true, ranged: true,
   },
 };
@@ -359,15 +359,18 @@ function geometriesFor(def) {
 // 손에 드는 소품: 책 / 덤벨 / 하이바(헬멧) / 녹차병
 function buildHeldItem(kind, glove, part, sx) {
   if (kind === 'raygun') {
-    // 레이저 권총: 파란 몸통 + 흰 손잡이 + 둥근 총구 (스페이스 채널 5)
-    const body = part(new THREE.CylinderGeometry(0.03, 0.036, 0.2, 10), 0x2b7fd6, glove, 0, -0.01, 0.12);
-    body.rotation.x = Math.PI / 2;
-    const ring = part(new THREE.TorusGeometry(0.038, 0.012, 8, 14), 0xffffff, body, 0, 0.06, 0, false);
+    // 레이저 권총 (스페이스 채널 5): 총신은 팔 축(-Y) 방향으로 뻗는다 → 팔을 앞으로 뻗으면 총구가 상대를 향한다.
+    // (Z 축으로 두면 팔을 들었을 때 총이 하늘을 봐서 막대사탕처럼 보인다)
+    const body = part(new THREE.CylinderGeometry(0.026, 0.034, 0.24, 10), 0x2b7fd6, glove, 0, -0.16, 0.01);        // 총신: 주먹 앞으로 뻗음
+    const ring = part(new THREE.TorusGeometry(0.036, 0.011, 8, 14), 0xffffff, body, 0, -0.06, 0, false);            // 흰 링
     ring.rotation.x = Math.PI / 2;
-    const tip = part(new THREE.SphereGeometry(0.03, 10, 8), 0x8fd6ff, body, 0, 0.115, 0, false);
+    const ring2 = part(new THREE.TorusGeometry(0.03, 0.008, 8, 14), 0xffffff, body, 0, 0.03, 0, false);
+    ring2.rotation.x = Math.PI / 2;
+    const tip = part(new THREE.SphereGeometry(0.032, 10, 8), 0x8fd6ff, body, 0, -0.13, 0, false);                   // 둥근 총구
     if (tip.material.emissive) { tip.material.emissive.set(0x4fb0ff); tip.material.emissiveIntensity = 1.4; }
-    const grip = part(new THREE.BoxGeometry(0.03, 0.09, 0.04), 0xffffff, glove, 0, -0.05, 0.05, false);
-    grip.rotation.x = 0.35;
+    part(new THREE.BoxGeometry(0.05, 0.05, 0.07), 0x2b7fd6, glove, 0, -0.03, 0.0, false);                            // 총 몸체(주먹 안)
+    const grip = part(new THREE.BoxGeometry(0.028, 0.06, 0.035), 0xffffff, glove, 0, 0.0, 0.055, false);              // 손잡이: 손바닥 쪽
+    grip.rotation.x = -0.4;
   } else if (kind === 'book') {
     const cover = part(new THREE.BoxGeometry(0.19, 0.25, 0.045), 0x8a2b2b, glove, 0, -0.02, 0.06);
     cover.rotation.set(0.25, sx * 0.25, 0);
