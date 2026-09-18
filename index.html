@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta name="build-id" content="1789697291">
+<meta name="build-id" content="1789698032">
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -555,7 +555,7 @@ body.touch #hud .menubtn.fsbtn { top: 130px; }
   }
 }
 </script>
-<script>window.__BUILD_ID = "1789697291";</script>
+<script>window.__BUILD_ID = "1789698032";</script>
 </head>
 <body>
   <canvas id="gl" tabindex="0"></canvas>
@@ -6659,6 +6659,9 @@ class Fighter {
     this.target = null;
     this.events = [];
     this.shots = []; this._shotId = 0;   // 원거리 캐릭터(우랄라)의 레이저 탄
+    this.hist = [];        // 호스트: 최근 0.6초 위치 기록 [{t, x, z}] — 게스트 판정 되감기(lag compensation)용
+    this.viewTs = 0;       // 이 파이터를 조종하는 게스트가 '지금 보고 있는' 호스트 시각(초). 0 이면 되감기 없음
+    this.hostNow = 0;
     this.gloveL = new THREE.Vector3(); this.gloveR = new THREE.Vector3();
     this.prevGloveL = new THREE.Vector3(); this.prevGloveR = new THREE.Vector3();
     this.footL = new THREE.Vector3(); this.footR = new THREE.Vector3();
@@ -7555,13 +7558,36 @@ class Fighter {
     let hitEvent = null;
     const others = fighters.filter((f) => f !== this && !f.benched && !this.sameTeam(f) && (!f.ko || f.koT < 1.2) && !(f.downT > 0));
     const _hit = { zone: 'head', point: new THREE.Vector3(), t: 0 };
+    // ---- 지연 보상: 게스트가 조종하는 파이터의 판정은 "게스트가 본 시각"의 상대 위치로 되감아서 한다 ----
+    // (게스트 화면에서 맞았으면 맞은 것. 최대 0.25초까지만 되감는다)
+    const rewindT = this.viewTs > 0 && this.hostNow > 0 ? Math.max(this.hostNow - 0.25, Math.min(this.hostNow, this.viewTs)) : 0;
+    const rewound = [];
+    const rewind = (f) => {
+      if (!rewindT || !f.hist || f.hist.length < 2 || f.ultVictimT > 0 || f.downT > 0) return;
+      const h = f.hist; let i = h.length - 1;
+      while (i > 0 && h[i - 1].t > rewindT) i--;
+      const a = h[Math.max(0, i - 1)], b = h[i];
+      const k = b.t > a.t ? Math.max(0, Math.min(1, (rewindT - a.t) / (b.t - a.t))) : 1;
+      const dx = a.x + (b.x - a.x) * k - f.pos.x, dz = a.z + (b.z - a.z) * k - f.pos.z;
+      if (Math.abs(dx) < 1e-4 && Math.abs(dz) < 1e-4) return;
+      f.pos.x += dx; f.pos.z += dz; f.hipsPos.x += dx; f.hipsPos.z += dz; f.headPos.x += dx; f.headPos.z += dz; f.chestPos.x += dx; f.chestPos.z += dz;
+      rewound.push({ f, dx, dz });
+    };
+    const unrewind = () => { for (const r of rewound) { r.f.pos.x -= r.dx; r.f.pos.z -= r.dz; r.f.hipsPos.x -= r.dx; r.f.hipsPos.z -= r.dz; r.f.headPos.x -= r.dx; r.f.headPos.z -= r.dz; r.f.chestPos.x -= r.dx; r.f.chestPos.z -= r.dz; } rewound.length = 0; };
     const tryHit = (side, radius, mk, useFoot = false) => {
       const glove = useFoot ? (side === 'L' ? this.footL : this.footR) : (side === 'L' ? this.gloveL : this.gloveR);
       const prev = useFoot ? (side === 'L' ? this.prevFootL : this.prevFootR) : (side === 'L' ? this.prevGloveL : this.prevGloveR);
+      let res = null;
       for (const f of others) {
+        rewind(f);
         _d.subVectors(f.pos, this.pos); _d.y = 0;
-        if (_d.dot(this.forward) <= 0.2) continue;
-        if (f.sweptHit(prev, glove, radius, _hit)) return mk(f, _hit);
+        if (_d.dot(this.forward) > 0.2 && f.sweptHit(prev, glove, radius, _hit)) {
+          res = mk(f, _hit);
+          // 타격 지점(이펙트 위치)은 되감기 전 현재 위치 기준으로 되돌린다
+          const r = rewound.find((x) => x.f === f); if (r && res && res.pos) { res.pos.x -= r.dx; res.pos.z -= r.dz; }
+        }
+        unrewind();
+        if (res) return res;
       }
       return null;
     };
@@ -7687,7 +7713,10 @@ class Fighter {
         let done = sh.life <= 0 || Math.abs(sh.pos.x) > 7 || Math.abs(sh.pos.z) > 7;
         if (!done) {
           for (const f of others) {
-            if (pointSegmentDist(sh.pos, f.hipsPos, f.headPos) < 0.42) {
+            rewind(f);
+            const hitNow = pointSegmentDist(sh.pos, f.hipsPos, f.headPos) < 0.42;
+            unrewind();
+            if (hitNow) {
               const zone = sh.pos.y > f.hipsPos.y + (f.headPos.y - f.hipsPos.y) * 0.72 ? 'head' : 'body';
               const ev = { attacker: this, target: f, side: sh.side, type: sh.type, power: sh.power, pos: sh.pos.clone(), zone, dir: sh.dir.clone(), maxSpeed: sh.maxSpeed, dempsey: sh.dempsey, finisher: false, roll: false, charge: 0, heavy: sh.heavy, counter: false, counterMul: 1, launch: 0, liver: false, staggerT: 0, kind: null, fromU: false, laser: true };
               if (!hitEvent) hitEvent = ev; else this.events.push({ type: 'extraHit', ev });
@@ -10544,6 +10573,7 @@ class Game {
         if (q && q <= last && last - q < 100000) return;
         this.inSeq[slot] = q;
         this.netInputs[slot].setNet(m.d[0], m.d[1], m.d[2], m.d[3]);
+        if (typeof m.v === 'number') this.netInputs[slot].viewTs = m.v;   // 게스트가 보고 있는 호스트 시각 (지연 보상)
       }
       else if (m.t === 'chat' && typeof m.text === 'string') { const text = m.text.slice(0, 120); this.addChat(slot, text); this.net.broadcast({ t: 'chat', from: slot, text }); }
       else if (m.t === 'skip') { this.voteSkip(slot); }
@@ -11327,7 +11357,12 @@ class Game {
       if (f.isAI) inp = f.brain.update(simDt, fs);
       else if (f.slot === this.localSlot) inp = this.localInput;
       else inp = this.netInputs[f.netSlot] || this.netInputs[1];
+      f.hostNow = this.realTime;
+      f.viewTs = (!f.isAI && f.slot !== this.localSlot && inp && inp.viewTs) ? inp.viewTs : 0;
       const hit = f.update(simDt, rawDt, inp, fs);
+      // 위치 기록 (지연 보상용, 0.6초)
+      f.hist.push({ t: this.realTime, x: f.pos.x, z: f.pos.z });
+      if (f.hist.length > 48) f.hist.shift();
       if (hit) hits.push(hit);
       for (const e of f.events) {
         if (e.type === 'punchEnd') { const cb = this.coachBrains[f.slot]; if (cb) cb.onPunchEnd(e.hit); continue; }
@@ -11595,6 +11630,25 @@ class Game {
     this.fighters.forEach((f, i) => { if (f === this.localFighter) f.applySnapshot(latest.d.f[i], latest.d.f[i], 1); else f.applySnapshot(A.d.f[i], B.d.f[i], t); });
     for (const f of this.fighters) f.target = f.targetSlot >= 0 ? this.fighters[f.targetSlot] : null;
     this.netBufMs = latest.ts - this.playT;
+    // ---- 상대 위치 외삽(dead reckoning): 최근 두 스냅샷의 속도로 (재생 지연 + 편도 지연) 만큼 앞당겨 그린다 ----
+    // 호스트가 판정하는 '지금' 위치에 가깝게 보이므로 멀리서 친 펀치가 빗나가는 일이 준다. 방향 급전환 시 살짝 튈 수 있어 0.5m 로 제한
+    const leadMs = Math.min(110, (this.rtt || 40) * 0.5 + Math.max(0, latest.ts - this.playT));
+    this.viewTs = (this.playT + leadMs) / 1000;   // 내가 보고 있는 호스트 시각 → 입력에 실어 보낸다 (호스트가 이 시각으로 판정을 되감는다)
+    if (n >= 2 && leadMs > 4) {
+      const P = this.snaps[n - 2], span2 = latest.ts - P.ts;
+      this.fighters.forEach((f, i) => {
+        if (f === this.localFighter) return;
+        const q = latest.d.f[i], p0 = P.d.f[i];
+        let vx = 0, vz = 0;
+        if (span2 > 1 && span2 < 120) { vx = (q.x - p0.x) / span2; vz = (q.z - p0.z) / span2; }
+        f._vx = (f._vx || 0) + (vx - (f._vx || 0)) * 0.35; f._vz = (f._vz || 0) + (vz - (f._vz || 0)) * 0.35;
+        const still = f.ko || f.downT > 0 || f.stagger > 0 || f.ultT > 0 || f.ultVictimT > 0 || f.danceT > 0;
+        if (still) return;
+        let dx = f._vx * leadMs, dz = f._vz * leadMs;
+        const L = Math.hypot(dx, dz); if (L > 0.5) { dx *= 0.5 / L; dz *= 0.5 / L; }
+        if (L > 0.002) { f.pos.x += dx; f.pos.z += dz; f._applyNow(f.pose); }
+      });
+    }
     this.predictLocal(rawDt);
   }
 
@@ -11609,7 +11663,7 @@ class Game {
     const changed = !last || last[0] !== d[0] || last[1] !== d[1] || last[2] !== d[2] || last[3] !== d[3];
     if (!changed && nowMs - this._lastSentT < 50) return;
     this._lastSent = d; this._lastSentT = nowMs;
-    this.net.sendFast({ t: 'in', q: ++this.outSeq, d });
+    this.net.sendFast({ t: 'in', q: ++this.outSeq, d, v: this.viewTs || 0 });
   }
 
   /**

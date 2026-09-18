@@ -97,6 +97,9 @@ export class Fighter {
     this.target = null;
     this.events = [];
     this.shots = []; this._shotId = 0;   // 원거리 캐릭터(우랄라)의 레이저 탄
+    this.hist = [];        // 호스트: 최근 0.6초 위치 기록 [{t, x, z}] — 게스트 판정 되감기(lag compensation)용
+    this.viewTs = 0;       // 이 파이터를 조종하는 게스트가 '지금 보고 있는' 호스트 시각(초). 0 이면 되감기 없음
+    this.hostNow = 0;
     this.gloveL = new THREE.Vector3(); this.gloveR = new THREE.Vector3();
     this.prevGloveL = new THREE.Vector3(); this.prevGloveR = new THREE.Vector3();
     this.footL = new THREE.Vector3(); this.footR = new THREE.Vector3();
@@ -993,13 +996,36 @@ export class Fighter {
     let hitEvent = null;
     const others = fighters.filter((f) => f !== this && !f.benched && !this.sameTeam(f) && (!f.ko || f.koT < 1.2) && !(f.downT > 0));
     const _hit = { zone: 'head', point: new THREE.Vector3(), t: 0 };
+    // ---- 지연 보상: 게스트가 조종하는 파이터의 판정은 "게스트가 본 시각"의 상대 위치로 되감아서 한다 ----
+    // (게스트 화면에서 맞았으면 맞은 것. 최대 0.25초까지만 되감는다)
+    const rewindT = this.viewTs > 0 && this.hostNow > 0 ? Math.max(this.hostNow - 0.25, Math.min(this.hostNow, this.viewTs)) : 0;
+    const rewound = [];
+    const rewind = (f) => {
+      if (!rewindT || !f.hist || f.hist.length < 2 || f.ultVictimT > 0 || f.downT > 0) return;
+      const h = f.hist; let i = h.length - 1;
+      while (i > 0 && h[i - 1].t > rewindT) i--;
+      const a = h[Math.max(0, i - 1)], b = h[i];
+      const k = b.t > a.t ? Math.max(0, Math.min(1, (rewindT - a.t) / (b.t - a.t))) : 1;
+      const dx = a.x + (b.x - a.x) * k - f.pos.x, dz = a.z + (b.z - a.z) * k - f.pos.z;
+      if (Math.abs(dx) < 1e-4 && Math.abs(dz) < 1e-4) return;
+      f.pos.x += dx; f.pos.z += dz; f.hipsPos.x += dx; f.hipsPos.z += dz; f.headPos.x += dx; f.headPos.z += dz; f.chestPos.x += dx; f.chestPos.z += dz;
+      rewound.push({ f, dx, dz });
+    };
+    const unrewind = () => { for (const r of rewound) { r.f.pos.x -= r.dx; r.f.pos.z -= r.dz; r.f.hipsPos.x -= r.dx; r.f.hipsPos.z -= r.dz; r.f.headPos.x -= r.dx; r.f.headPos.z -= r.dz; r.f.chestPos.x -= r.dx; r.f.chestPos.z -= r.dz; } rewound.length = 0; };
     const tryHit = (side, radius, mk, useFoot = false) => {
       const glove = useFoot ? (side === 'L' ? this.footL : this.footR) : (side === 'L' ? this.gloveL : this.gloveR);
       const prev = useFoot ? (side === 'L' ? this.prevFootL : this.prevFootR) : (side === 'L' ? this.prevGloveL : this.prevGloveR);
+      let res = null;
       for (const f of others) {
+        rewind(f);
         _d.subVectors(f.pos, this.pos); _d.y = 0;
-        if (_d.dot(this.forward) <= 0.2) continue;
-        if (f.sweptHit(prev, glove, radius, _hit)) return mk(f, _hit);
+        if (_d.dot(this.forward) > 0.2 && f.sweptHit(prev, glove, radius, _hit)) {
+          res = mk(f, _hit);
+          // 타격 지점(이펙트 위치)은 되감기 전 현재 위치 기준으로 되돌린다
+          const r = rewound.find((x) => x.f === f); if (r && res && res.pos) { res.pos.x -= r.dx; res.pos.z -= r.dz; }
+        }
+        unrewind();
+        if (res) return res;
       }
       return null;
     };
@@ -1125,7 +1151,10 @@ export class Fighter {
         let done = sh.life <= 0 || Math.abs(sh.pos.x) > 7 || Math.abs(sh.pos.z) > 7;
         if (!done) {
           for (const f of others) {
-            if (pointSegmentDist(sh.pos, f.hipsPos, f.headPos) < 0.42) {
+            rewind(f);
+            const hitNow = pointSegmentDist(sh.pos, f.hipsPos, f.headPos) < 0.42;
+            unrewind();
+            if (hitNow) {
               const zone = sh.pos.y > f.hipsPos.y + (f.headPos.y - f.hipsPos.y) * 0.72 ? 'head' : 'body';
               const ev = { attacker: this, target: f, side: sh.side, type: sh.type, power: sh.power, pos: sh.pos.clone(), zone, dir: sh.dir.clone(), maxSpeed: sh.maxSpeed, dempsey: sh.dempsey, finisher: false, roll: false, charge: 0, heavy: sh.heavy, counter: false, counterMul: 1, launch: 0, liver: false, staggerT: 0, kind: null, fromU: false, laser: true };
               if (!hitEvent) hitEvent = ev; else this.events.push({ type: 'extraHit', ev });

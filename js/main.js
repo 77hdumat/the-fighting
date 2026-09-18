@@ -698,6 +698,7 @@ class Game {
         if (q && q <= last && last - q < 100000) return;
         this.inSeq[slot] = q;
         this.netInputs[slot].setNet(m.d[0], m.d[1], m.d[2], m.d[3]);
+        if (typeof m.v === 'number') this.netInputs[slot].viewTs = m.v;   // 게스트가 보고 있는 호스트 시각 (지연 보상)
       }
       else if (m.t === 'chat' && typeof m.text === 'string') { const text = m.text.slice(0, 120); this.addChat(slot, text); this.net.broadcast({ t: 'chat', from: slot, text }); }
       else if (m.t === 'skip') { this.voteSkip(slot); }
@@ -1481,7 +1482,12 @@ class Game {
       if (f.isAI) inp = f.brain.update(simDt, fs);
       else if (f.slot === this.localSlot) inp = this.localInput;
       else inp = this.netInputs[f.netSlot] || this.netInputs[1];
+      f.hostNow = this.realTime;
+      f.viewTs = (!f.isAI && f.slot !== this.localSlot && inp && inp.viewTs) ? inp.viewTs : 0;
       const hit = f.update(simDt, rawDt, inp, fs);
+      // 위치 기록 (지연 보상용, 0.6초)
+      f.hist.push({ t: this.realTime, x: f.pos.x, z: f.pos.z });
+      if (f.hist.length > 48) f.hist.shift();
       if (hit) hits.push(hit);
       for (const e of f.events) {
         if (e.type === 'punchEnd') { const cb = this.coachBrains[f.slot]; if (cb) cb.onPunchEnd(e.hit); continue; }
@@ -1749,6 +1755,25 @@ class Game {
     this.fighters.forEach((f, i) => { if (f === this.localFighter) f.applySnapshot(latest.d.f[i], latest.d.f[i], 1); else f.applySnapshot(A.d.f[i], B.d.f[i], t); });
     for (const f of this.fighters) f.target = f.targetSlot >= 0 ? this.fighters[f.targetSlot] : null;
     this.netBufMs = latest.ts - this.playT;
+    // ---- 상대 위치 외삽(dead reckoning): 최근 두 스냅샷의 속도로 (재생 지연 + 편도 지연) 만큼 앞당겨 그린다 ----
+    // 호스트가 판정하는 '지금' 위치에 가깝게 보이므로 멀리서 친 펀치가 빗나가는 일이 준다. 방향 급전환 시 살짝 튈 수 있어 0.5m 로 제한
+    const leadMs = Math.min(110, (this.rtt || 40) * 0.5 + Math.max(0, latest.ts - this.playT));
+    this.viewTs = (this.playT + leadMs) / 1000;   // 내가 보고 있는 호스트 시각 → 입력에 실어 보낸다 (호스트가 이 시각으로 판정을 되감는다)
+    if (n >= 2 && leadMs > 4) {
+      const P = this.snaps[n - 2], span2 = latest.ts - P.ts;
+      this.fighters.forEach((f, i) => {
+        if (f === this.localFighter) return;
+        const q = latest.d.f[i], p0 = P.d.f[i];
+        let vx = 0, vz = 0;
+        if (span2 > 1 && span2 < 120) { vx = (q.x - p0.x) / span2; vz = (q.z - p0.z) / span2; }
+        f._vx = (f._vx || 0) + (vx - (f._vx || 0)) * 0.35; f._vz = (f._vz || 0) + (vz - (f._vz || 0)) * 0.35;
+        const still = f.ko || f.downT > 0 || f.stagger > 0 || f.ultT > 0 || f.ultVictimT > 0 || f.danceT > 0;
+        if (still) return;
+        let dx = f._vx * leadMs, dz = f._vz * leadMs;
+        const L = Math.hypot(dx, dz); if (L > 0.5) { dx *= 0.5 / L; dz *= 0.5 / L; }
+        if (L > 0.002) { f.pos.x += dx; f.pos.z += dz; f._applyNow(f.pose); }
+      });
+    }
     this.predictLocal(rawDt);
   }
 
@@ -1763,7 +1788,7 @@ class Game {
     const changed = !last || last[0] !== d[0] || last[1] !== d[1] || last[2] !== d[2] || last[3] !== d[3];
     if (!changed && nowMs - this._lastSentT < 50) return;
     this._lastSent = d; this._lastSentT = nowMs;
-    this.net.sendFast({ t: 'in', q: ++this.outSeq, d });
+    this.net.sendFast({ t: 'in', q: ++this.outSeq, d, v: this.viewTs || 0 });
   }
 
   /**
