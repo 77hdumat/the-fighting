@@ -761,7 +761,7 @@ class Game {
     const net = this.net;
     this.joined = false; this.joinRejected = false;
     this.probeTurn();
-    net.onOpen = () => { this.joinTries = 0; this.showLobby(code); this.showRoomRules(); this.showChat(true); this.lobbyMsg('접속 완료. 방장이 시작할 때까지 대기…'); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); };
+    net.onOpen = () => { this.joinTries = 0; this.usedTurn = !!net.withTurn; this.showLobby(code); this.showRoomRules(); this.showChat(true); this.lobbyMsg('접속 완료. 방장이 시작할 때까지 대기…'); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); };
     net.onError = (e) => {
       if (e.type === 'closed') {
         if (this.kicked) return;                                     // leaveRoom 이 처리
@@ -775,9 +775,9 @@ class Game {
         this.rejoining = false; this.migrateHost(); return;
       }
       if (e.type === 'timeout' && !this.migrating) {
-        // 시그널링은 됐는데 P2P 가 안 붙음 (방화벽/NAT, 또는 방장 시그널링이 조용히 죽음). 새 Peer 로 재시도 → 그래도 안 되면 안내
+        // 직결(STUN만) 이 7초 안에 안 붙음 → TURN(중계) 을 켜고 재시도. 그래도 안 되면 두 번 더 → 안내
         this.joinTries = (this.joinTries || 0) + 1;
-        if (this.joinTries <= 3) { this.net.close(); this.net = new Net(); this.joinRoom(code, { msg: `방장에게 연결이 안 됩니다. 다시 시도 중… (${this.joinTries}/3)` }); }
+        if (this.joinTries <= 3) { this.net.close(); this.net = new Net(); this.joinRoom(code, { msg: this.joinTries === 1 ? '직결이 안 됩니다. 중계 서버로 다시 시도 중…' : `방장에게 연결이 안 됩니다. 다시 시도 중… (${this.joinTries}/3)`, withTurn: true }); }
         else { this.joinTries = 0; this.rejoining = false; this.leaveRoom(this.turnState === 'none' ? '방장에게 연결하지 못했습니다. 중계(TURN) 서버가 없어 같은 Wi-Fi/핫스팟에서만 연결됩니다 — 둘 다 같은 네트워크로 접속해 보세요' : '방장에게 연결하지 못했습니다. 방장이 방을 다시 만들거나, 양쪽 Wi-Fi/데이터를 바꿔 보세요'); }
         return;
       }
@@ -815,7 +815,8 @@ class Game {
     document.getElementById('menu').classList.add('hidden');
     document.getElementById('lobby').classList.remove('hidden');
     document.getElementById('room-code').textContent = code.toUpperCase();
-    net.join(code);
+    // 재접속(방장 승계·끊김)은 지난번에 TURN 이 필요했으면 바로 TURN 으로
+    net.join(code, opts.withTurn !== undefined ? !!opts.withTurn : !!this.usedTurn);
   }
 
   /**

@@ -43,10 +43,20 @@ export class Net {
    * 예전에 쓰던 무료 공개 TURN(openrelay.metered.ca) 은 2026년 현재 죽어서 relay 후보를 하나도 안 준다
    * → 그게 "모바일(LTE)로는 방을 만들어도, 참가해도 안 붙는" 원인. index.html 의 window.TURN_SERVERS 에 살아 있는 TURN 을 넣어야 한다.
    */
-  static iceServers() {
+  /**
+   * withTurn=false 면 STUN 만 (직결 전용). 게스트는 처음엔 직결만 시도하고, 못 붙을 때만 TURN 을 켜서 재시도한다
+   * → 직결이 되는 사람은 절대 중계로 붙지 않는다 (ICE 가 잠깐 relay 로 시작했다가 늦게 바꾸는 일도 없다).
+   * TURN 은 UDP 만 쓴다. TCP/TLS 중계는 지연이 커서 게임에 안 맞는다 (UDP 가 완전히 막힌 망만 포기).
+   */
+  static iceServers(withTurn = true) {
     const list = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }];
+    if (!withTurn) return list;
     const extra = (typeof window !== 'undefined' && Array.isArray(window.TURN_SERVERS)) ? window.TURN_SERVERS : [];
-    for (const t of extra) if (t && t.urls) list.push(t);
+    for (const t of extra) {
+      if (!t || !t.urls) continue;
+      const urls = (Array.isArray(t.urls) ? t.urls : [t.urls]).filter((u) => /^turn:/.test(u) && !/transport=tcp/.test(u) || /^stun:/.test(u));
+      if (urls.length) list.push(Object.assign({}, t, { urls }));
+    }
     return list;
   }
 
@@ -87,11 +97,12 @@ export class Net {
     return Net._turnProbe;
   }
 
-  _mkPeer(id) {
+  _mkPeer(id, withTurn = true) {
+    this.withTurn = withTurn;
     const peer = new Peer(id, {
       debug: 1,
       pingInterval: 5000,
-      config: { iceServers: Net.iceServers(), iceCandidatePoolSize: 4 },
+      config: { iceServers: Net.iceServers(withTurn), iceCandidatePoolSize: 4 },
     });
     // 시그널링 서버와 끊기면(모바일 화면 꺼짐·망 전환) 이미 맺은 P2P 는 살아 있지만 새 참가/재접속이 안 된다 → 자동 재연결.
     // 게스트가 "접속 중…" 에서 못 벗어나는 대표 원인이 방장의 시그널링이 조용히 죽은 것이다.
@@ -171,14 +182,14 @@ export class Net {
   static HB_INTERVAL = 1000;
   static HB_TIMEOUT = 8000;
 
-  join(code) {
-    if (!Net._turnDone) { Net.fetchTurn().then(() => { Net._turnDone = true; if (this.role === 'client') this.join(code); }); this.role = 'client'; return; }
+  join(code, withTurn = false) {
+    if (!Net._turnDone) { Net.fetchTurn().then(() => { Net._turnDone = true; if (this.role === 'client') this.join(code, withTurn); }); this.role = 'client'; return; }
     this.role = 'client';
     this.code = code.toUpperCase().trim();
-    this.peer = this._mkPeer(undefined);
+    this.peer = this._mkPeer(undefined, withTurn);
     let opened = false;
-    // 접속 타임아웃: 시그널링은 됐는데 ICE 가 끝내 안 붙는 경우(방화벽·NAT) 무한 "접속 중…" 을 막는다
-    this._joinT = setTimeout(() => { if (!opened && this.onError) this.onError({ type: 'timeout' }); }, Net.JOIN_TIMEOUT);
+    // 접속 타임아웃: 직결 시도는 7초, TURN 포함 재시도는 12초. 시그널링은 됐는데 ICE 가 끝내 안 붙는 경우 무한 "접속 중…" 을 막는다
+    this._joinT = setTimeout(() => { if (!opened && this.onError) this.onError({ type: 'timeout', withTurn }); }, withTurn ? Net.JOIN_TIMEOUT : 7000);
     this.peer.on('open', () => {
       // reliable:false → 비순서(unordered) 채널. 손실된 패킷을 기다리느라 뒤 패킷까지 막히는(HOL) 일이 없어 게임용으로 낫다.
       // 대신 순서가 뒤바뀔 수 있으므로 스냅샷/입력에는 시퀀스 번호를 붙여 오래된 것을 버린다 (main.js)
