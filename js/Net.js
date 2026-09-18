@@ -50,10 +50,25 @@ export class Net {
     return list;
   }
 
+  /**
+   * window.TURN_ENDPOINT 가 있으면 거기서 단기 TURN 자격증명을 받아 TURN_SERVERS 에 합친다 (Cloudflare Realtime 등).
+   * 페이지 로드 직후 한 번 호출. 실패해도 게임은 STUN 만으로 계속 동작한다.
+   */
+  static fetchTurn() {
+    if (Net._turnFetch) return Net._turnFetch;
+    const ep = typeof window !== 'undefined' && window.TURN_ENDPOINT;
+    Net._turnFetch = !ep ? Promise.resolve() : fetch(ep, { cache: 'no-store' }).then((r) => r.json()).then((j) => {
+      const got = (j && j.iceServers) || [];
+      const cur = Array.isArray(window.TURN_SERVERS) ? window.TURN_SERVERS : [];
+      window.TURN_SERVERS = cur.concat(got.filter((s) => s && s.urls));
+    }).catch(() => {});
+    return Net._turnFetch;
+  }
+
   /** TURN 이 실제로 relay 후보를 주는지 한 번 확인 (로비 안내용). 결과: 'ok' | 'none' */
   static probeTurn(timeoutMs = 6000) {
     if (Net._turnProbe) return Net._turnProbe;
-    Net._turnProbe = new Promise((res) => {
+    Net._turnProbe = Net.fetchTurn().then(() => new Promise((res) => {
       try {
         const turn = Net.iceServers().filter((s) => String(s.urls).includes('turn'));
         if (!turn.length) return res('none');
@@ -65,7 +80,7 @@ export class Net {
         pc.createOffer().then((o) => pc.setLocalDescription(o)).catch(() => finish('none'));
         setTimeout(() => finish('none'), timeoutMs);
       } catch (e) { res('none'); }
-    });
+    }));
     return Net._turnProbe;
   }
 
@@ -99,6 +114,7 @@ export class Net {
    * (코드를 바꾸면 게스트가 옛 코드로 붙다 영원히 "접속 중…" 에 걸린다).
    */
   host(maxClients = 3, code = null, tries = 0) {
+    if (!Net._turnDone) { Net.fetchTurn().then(() => { Net._turnDone = true; if (this.role === 'host') this.host(maxClients, code, tries); }); this.role = 'host'; return; }
     this.role = 'host';
     this.code = code || makeCode();
     const myCode = this.code;
@@ -153,6 +169,7 @@ export class Net {
   static HB_TIMEOUT = 8000;
 
   join(code) {
+    if (!Net._turnDone) { Net.fetchTurn().then(() => { Net._turnDone = true; if (this.role === 'client') this.join(code); }); this.role = 'client'; return; }
     this.role = 'client';
     this.code = code.toUpperCase().trim();
     this.peer = this._mkPeer(undefined);
