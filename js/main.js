@@ -1451,7 +1451,7 @@ class Game {
         if (this.snapAccum >= 1 / hz - 0.002) {
           // 남은 누적을 이월해 평균 주기를 정확히 hz 로 맞춘다 (렉 스파이크 뒤 폭주는 한 주기로 제한)
           this.snapAccum = Math.min(this.snapAccum - 1 / hz, 1 / hz);
-          this.net.broadcastDroppable({ t: 'snap', q: ++this.outSeq, ts: this.realTime, f: this.fighters.map((f) => f.snapshot()), ev: [] });
+          this.net.broadcastDroppable({ t: 'snap', q: ++this.outSeq, ts: this.realTime, fm: Math.round(this.frameAvg), f: this.fighters.map((f) => f.snapshot()), ev: [] });
         }
       }
     }
@@ -1645,6 +1645,7 @@ class Game {
     }
     this._lastRecv = now; this._lastRecvTs = ts;
     this.snaps.push({ recv: now, ts, d: m });
+    if (m.fm !== undefined) this.hostFrameMs = m.fm;
     if (this.snaps.length > 10) this.snaps.shift();
     if (m.ev && m.ev.length) this.applyEvents(m.ev);
   }
@@ -2055,7 +2056,7 @@ class Game {
         // 방장 화면: 게스트별 경로·전송 주기·드롭률 (누가 렉의 원인인지 바로 보인다)
         const el = document.getElementById('netinfo');
         const gs = this.net.guestStats().filter(Boolean).map((g) => `${this.chatName(g.slot)} ${g.path === 'relay' ? '중계' : g.path === 'direct' ? '직결' : '?'} ${g.hz}Hz${g.drop > 0 ? ` 드롭${Math.round(g.drop * 100)}%` : ''}`);
-        if (el) el.textContent = `${this.netLabel}${gs.length ? ' · ' + gs.join(' · ') : ''}`;
+        if (el) el.textContent = `${this.netLabel} · ${Math.round(this.frameAvg)}ms/f${gs.length ? ' · ' + gs.join(' · ') : ''}`;
         this._pathT = (this._pathT || 0) + 1;
         if (this._pathT % 150 === 1) this.net.probeGuestPaths();
       }
@@ -2063,7 +2064,7 @@ class Game {
         const el = document.getElementById('netinfo');
         const path = this.net.pathType ? (this.net.pathType === 'relay' ? ' · 중계(relay)' : ' · 직결') : '';
         const fast = this.net.fastOpen ? ' · UDP' : '';
-        if (el) el.textContent = `${this.netLabel} · PING ${Math.round(this.rtt || 0)}ms · BUF ${Math.round(this.netBufMs || 0)}ms${path}${fast}`;
+        if (el) el.textContent = `${this.netLabel} · PING ${Math.round(this.rtt || 0)}ms · BUF ${Math.round(this.netBufMs || 0)}ms · ${Math.round(this.frameAvg)}ms/f · 호스트 ${this.hostFrameMs || '?'}ms/f${path}${fast}`;
         this._pathT = (this._pathT || 0) + 1;
         if (this._pathT % 150 === 1) this.net.probePath();
       }
