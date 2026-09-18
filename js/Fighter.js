@@ -11,30 +11,6 @@ const RING_LIMIT = 4.15;   // 링 1.5배 확장
 // 현재 경기장 (Game 이 맵을 만들 때 설정). cliff 는 로프가 없고 가장자리 밖은 낙사
 let ARENA = { kind: 'ring', radius: () => RING_LIMIT };
 // ---- 콤비네이션 (전 캐릭터 공통) ----
-// 입력을 순서대로 맞추면 마지막 타가 특수 마무리로 바뀐다.
-// 교대로 누르는 동안엔 스트레이트가 아니라 훅이 나가서 '붕붕' 휘두르는 그림이 된다.
-const COMBOS = [
-  { seq: 'JKJK', name: '붕붕 어퍼', cry: 'アッパーッ！！', stam: 18,
-    fire: (f, side) => f.startPunch(side, 'special', 0.44, 2.0 * f.def.powerMul,
-      { heavy: true, launch: 0.95, staggerT: 1.35, comboFinish: 'upper' }) },
-  { seq: 'KJKJ', name: '붕붕 어퍼', cry: 'アッパーッ！！', stam: 18,
-    fire: (f, side) => f.startPunch(side, 'special', 0.44, 2.0 * f.def.powerMul,
-      { heavy: true, launch: 0.95, staggerT: 1.35, comboFinish: 'upper' }) },
-  { seq: 'JJK', name: '원투 훅', cry: 'ワンツー…フック！', stam: 12,
-    fire: (f, side) => f.startPunch(side, 'hook', 0.30, 1.4 * f.def.powerMul,
-      { heavy: true, staggerT: 0.85, comboFinish: 'hook' }) },
-  { seq: 'KKJ', name: '원투 훅', cry: 'ワンツー…フック！', stam: 12,
-    fire: (f, side) => f.startPunch(side, 'hook', 0.30, 1.4 * f.def.powerMul,
-      { heavy: true, staggerT: 0.85, comboFinish: 'hook' }) },
-];
-/** 입력 꼬리와 가장 긴 것부터 맞춰 본다 */
-function matchCombo(seq) {
-  const s = seq.join('');
-  let best = null;
-  for (const c of COMBOS) if (s.endsWith(c.seq) && (!best || c.seq.length > best.seq.length)) best = c;
-  return best;
-}
-
 export function setArena(a) { ARENA = a || { kind: 'ring', radius: () => RING_LIMIT }; }
 const _d = new THREE.Vector3();
 const _g = new THREE.Vector3();
@@ -118,7 +94,6 @@ export class Fighter {
     this.spin = 0;   // 피루엣(우랄라 사이드 스텝) 제자리 회전 각
     this.koFly = false; this.koLandT = -1;   // KO: 위로 붕 떠서 뒤로 날아가다 뒤통수부터 떨어진다
     this.combo = 0; this.comboTimer = 0;
-    this.inputSeq = []; this.seqT = 0;   // 콤비네이션 입력 기록
     this.target = null;
     this.events = [];
     this.shots = []; this._shotId = 0;   // 원거리 캐릭터(우랄라)의 레이저 탄
@@ -190,22 +165,10 @@ export class Fighter {
     this.pos.x = nx; this.pos.z = nz;
   }
 
-  /**
-   * 클라 예측용 — 호스트와 같은 규칙으로 이번 입력이 어떤 펀치가 될지 고른다.
-   * 클라는 스냅샷으로 구동되어 update() 의 콤비네이션 판정을 돌리지 않으므로,
-   * 예측이 항상 스트레이트면 콤보가 '안 먹은 것처럼' 보인다.
-   */
+  /** 클라 예측용 — 호스트와 같은 규칙으로 이번 입력이 어떤 펀치가 될지 고른다 */
   predictComboKind(press) {
-    if (this.time - this.seqT > 0.6) this.inputSeq.length = 0;
-    this.seqT = this.time;
-    this.inputSeq.push(press);
-    if (this.inputSeq.length > 6) this.inputSeq.shift();
-    const side = press === 'J' ? 'L' : 'R';
-    const cb = matchCombo(this.inputSeq);
-    if (cb && this.stam >= cb.stam) { this.inputSeq.length = 0; return { side, type: 'special' }; }
-    const n = this.inputSeq.length;
-    const alt = n >= 2 && this.inputSeq[n - 1] !== this.inputSeq[n - 2];
-    return { side, type: alt ? 'hook' : 'straight' };
+    // J = 왼손 스트레이트, K = 오른손 훅 (콤비네이션 없음)
+    return press === 'J' ? { side: 'L', type: 'straight' } : { side: 'R', type: 'hook' };
   }
 
   /** 버튼을 누른 즉시 팔 동작을 그려 준다. 판정은 호스트가 하고, 서버 포즈가 오면 예측은 버린다 */
@@ -707,7 +670,7 @@ export class Fighter {
       if (f === this || f.ko || f.benched) continue;
       if (this.sameTeam(f)) continue;   // 팀전: 같은 편은 노리지 않는다
       const dd = f.pos.distanceToSquared(this.pos);
-      let w = f === this.target ? dd * 0.7 : dd;
+      let w = f === this.target ? dd * 0.55 : dd;   // 현재 타겟 유지 성향 강하게 (타겟이 자주 바뀌면 시야·조준이 흔들린다)
       if (this.brain) {
         // AI: 이미 다른 AI 가 노리는 상대는 덜 선호 (한 명에게 몰리지 않게), 사람은 약간 덜 선호
         const crowd = fighters.filter((o) => o !== this && o.brain && !o.ko && o.target === f).length;
@@ -912,25 +875,8 @@ export class Fighter {
       else {
         const press = jPress ? 'J' : kPress ? 'K' : null;
         if (press) {
-          // 0.6초 안에 이어 누른 것만 한 콤비네이션으로 본다
-          if (this.time - this.seqT > 0.6) this.inputSeq.length = 0;
-          this.seqT = this.time;
-          this.inputSeq.push(press);
-          if (this.inputSeq.length > 6) this.inputSeq.shift();
-
-          const side = press === 'J' ? 'L' : 'R';
-          const cb = matchCombo(this.inputSeq);
-          if (cb && this.stam >= cb.stam) {
-            this.inputSeq.length = 0;
-            this.stam = Math.max(0, this.stam - cb.stam);
-            cb.fire(this, side);
-            this.events.push({ type: 'comboArt', name: cb.name, cry: cb.cry });
-          } else {
-            // 좌우 교대로 누르는 동안엔 훅이 나간다 → '붕붕' 휘두르는 그림
-            const n = this.inputSeq.length;
-            const alt = n >= 2 && this.inputSeq[n - 1] !== this.inputSeq[n - 2];
-            this.startPunch(side, alt ? 'hook' : 'straight');
-          }
+          // J = 왼손 스트레이트, K = 오른손 훅 (콤비네이션 없음)
+          if (press === 'J') this.startPunch('L', 'straight'); else this.startPunch('R', 'hook');
         }
         else if (!this.punch && this.queue.length && this.block <= 0) {
           const q = this.queue.shift();

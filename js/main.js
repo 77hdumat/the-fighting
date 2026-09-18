@@ -2025,6 +2025,14 @@ class Game {
       this.hudAccum = 0; this.hud.update(rawDt, this.fighters, local); this.touch.update(local);
       const benchEl = document.getElementById('bench-banner');
       if (benchEl) benchEl.classList.toggle('hidden', !(local && local.benched && !local.ko && this.phase === 'fight'));
+      if (this.mode === 'host' && this.netLabel) {
+        // 방장 화면: 게스트별 경로·전송 주기·드롭률 (누가 렉의 원인인지 바로 보인다)
+        const el = document.getElementById('netinfo');
+        const gs = this.net.guestStats().filter(Boolean).map((g) => `${this.chatName(g.slot)} ${g.path === 'relay' ? '중계' : g.path === 'direct' ? '직결' : '?'} ${g.hz}Hz${g.drop > 0 ? ` 드롭${Math.round(g.drop * 100)}%` : ''}`);
+        if (el) el.textContent = `${this.netLabel}${gs.length ? ' · ' + gs.join(' · ') : ''}`;
+        this._pathT = (this._pathT || 0) + 1;
+        if (this._pathT % 150 === 1) this.net.probeGuestPaths();
+      }
       if (this.mode === 'client' && this.netLabel) {
         const el = document.getElementById('netinfo');
         const path = this.net.pathType ? (this.net.pathType === 'relay' ? ' · 중계(relay)' : ' · 직결') : '';

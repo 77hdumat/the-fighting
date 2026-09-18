@@ -67,9 +67,10 @@ export class CameraController {
     else {
       let dy = wantYaw - this.orbitYaw;
       while (dy > Math.PI) dy -= Math.PI * 2; while (dy < -Math.PI) dy += Math.PI * 2;
-      if (Math.abs(dy) > 0.14) {
-        const maxTurn = 1.75 * dt;
-        this.orbitYaw += Math.max(-maxTurn, Math.min(maxTurn, dy * Math.min(1, dt * 2.5)));
+      // 3~4인 난투에서 타겟이 자주 바뀌어도 시야가 휙휙 돌지 않게: 30° 이내는 무시, 초당 최대 70°
+      if (Math.abs(dy) > 0.5) {
+        const maxTurn = 1.2 * dt;
+        this.orbitYaw += Math.max(-maxTurn, Math.min(maxTurn, dy * Math.min(1, dt * 2.0)));
       }
     }
     const bx = Math.sin(this.orbitYaw), bz = Math.cos(this.orbitYaw);     // 부드러운 전방

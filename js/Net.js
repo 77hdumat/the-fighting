@@ -56,7 +56,10 @@ export class Net {
    */
   static fetchTurn() {
     if (Net._turnFetch) return Net._turnFetch;
-    const ep = typeof window !== 'undefined' && window.TURN_ENDPOINT;
+    // ?noturn=1 로 열면 TURN 없이(직결만) 붙는다 — 중계 경로가 지연의 원인인지 비교할 때 쓴다
+    const noturn = typeof location !== 'undefined' && /[?&]noturn/.test(location.search);
+    const ep = !noturn && typeof window !== 'undefined' && window.TURN_ENDPOINT;
+    if (noturn && typeof window !== 'undefined') window.TURN_SERVERS = [];
     Net._turnFetch = !ep ? Promise.resolve() : fetch(ep, { cache: 'no-store' }).then((r) => r.json()).then((j) => {
       const got = (j && j.iceServers) || [];
       const cur = Array.isArray(window.TURN_SERVERS) ? window.TURN_SERVERS : [];
@@ -251,15 +254,51 @@ export class Net {
    */
   broadcastDroppable(msg) {
     const ev = msg.ev || [];
+    const now = performance.now();
     for (const c of this.conns) {
       if (!c || !c.open) continue;
+      // 게스트별 적응 주기: 최근 1초에 혼잡 드롭이 10% 넘으면 보내는 주기를 절반으로(최대 1/4), 3초간 드롭 0 이면 다시 올린다.
+      // 무작위로 빠지는 것보다 일정한 간격으로 덜 보내는 편이 게스트 보간이 훨씬 매끄럽다
+      if (!c._stat) c._stat = { div: 1, sent: 0, drop: 0, t0: now, calm: 0, seq: 0, lastDrop: 0, lastSent: 0 };
+      const st = c._stat;
+      if (now - st.t0 > 1000) {
+        const tot = st.sent + st.drop;
+        st.lastDrop = tot ? st.drop / tot : 0; st.lastSent = st.sent;
+        if (tot && st.drop / tot > 0.1) { st.div = Math.min(4, st.div * 2); st.calm = 0; }
+        else if (st.drop === 0) { st.calm += 1; if (st.calm >= 3 && st.div > 1) { st.div = Math.max(1, st.div / 2); st.calm = 0; } }
+        st.sent = 0; st.drop = 0; st.t0 = now;
+      }
+      st.seq++;
+      if (st.div > 1 && st.seq % st.div !== 0) { if (ev.length) c._evq = (c._evq || []).concat(ev); continue; }
       const fast = c._fast && c._fast.readyState === 'open' ? c._fast : null;
       const dc = fast || c.dataChannel;
       const congested = dc && dc.bufferedAmount > Net.CONGESTED_BYTES;
-      if (congested) { if (ev.length) c._evq = (c._evq || []).concat(ev); c._dropped = (c._dropped || 0) + 1; continue; }
+      if (congested) { if (ev.length) c._evq = (c._evq || []).concat(ev); c._dropped = (c._dropped || 0) + 1; st.drop++; continue; }
       let out = msg;
       if (c._evq && c._evq.length) { out = Object.assign({}, msg, { ev: c._evq.concat(ev) }); c._evq = null; }
-      try { if (fast) fast.send(JSON.stringify(out)); else c.send(out); } catch (e) {}
+      try { if (fast) fast.send(JSON.stringify(out)); else c.send(out); st.sent++; } catch (e) {}
+    }
+  }
+
+  /** host: 게스트별 상태 요약 (HUD 용) */
+  guestStats() {
+    return this.conns.map((c, i) => {
+      if (!c || !c.open) return null;
+      const st = c._stat || {};
+      return { slot: i + 1, hz: st.lastSent || 0, drop: st.lastDrop || 0, div: st.div || 1, fast: !!(c._fast && c._fast.readyState === 'open'), path: c._path || '' };
+    });
+  }
+
+  /** host: 게스트별 연결 경로 확인 (5초마다 호출) */
+  async probeGuestPaths() {
+    for (const c of this.conns) {
+      if (!c || !c.open || !c.peerConnection || !c.peerConnection.getStats) continue;
+      try {
+        const stats = await c.peerConnection.getStats();
+        let pair = null;
+        stats.forEach((r) => { if (r.type === 'candidate-pair' && r.state === 'succeeded' && (r.nominated || !pair)) pair = r; });
+        if (pair) { const lc = stats.get(pair.localCandidateId), rc = stats.get(pair.remoteCandidateId); c._path = ((lc && lc.candidateType === 'relay') || (rc && rc.candidateType === 'relay')) ? 'relay' : 'direct'; }
+      } catch (e) {}
     }
   }
   /** client → host (신뢰) */
